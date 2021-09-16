@@ -8,7 +8,7 @@ The kernel supports the usual jupyter interactivity between cells but with some 
 * Check out the repository and use the install script: `sh install.sh`
 * The script creates a virtual environment in the users home directory, installs the kernel 
 modules in it and installs the kernel for Jupyter in the ordinary user environment 
-~/.share/jupyter/kernels
+~/.local/share/jupyter/kernels
 * Note that Python should be available on your machine
 * Installing more packages in the created virtual environment is on you
 
