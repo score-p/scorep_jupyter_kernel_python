@@ -4,7 +4,7 @@ import os
 import re
 import userpersistency
 
-PYTHON_EXECUTABLE= "/home/h9/s4122485/virtualenv_jupyterkernel_scorep_python/bin/python"
+PYTHON_EXECUTABLE= ""
 
 class ScoreP_Python_Kernel(Kernel):
     implementation = 'Python and ScoreP'
