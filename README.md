@@ -16,7 +16,7 @@ modules in it and installs the kernel for Jupyter in the ordinary user environme
 ## Dependencies
 In order to use the Score-P Python Kernel, Score-P has to be installed properly.
 
-The kernel is based on the Score-P Python binding. Fur further information see https://github.com/score-p/scorep_binding_python
+The kernel is based on the Score-P Python binding. For further information see https://github.com/score-p/scorep_binding_python
 When using the install script, the most recent pip version of the binding is installed.
 
 # Usage
