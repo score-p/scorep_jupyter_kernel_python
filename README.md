@@ -1,5 +1,5 @@
 # The Score-P Python Jupyter Kernel
-This is the Score-P Python Kernel that allows you to execute Jupyter Notebooks with Score-P.
+This is the Score-P Python Kernel that enables you to execute Jupyter Notebooks with Score-P.
 
 The kernel supports the usual jupyter interactivity between cells but with some limitations (see "General Limitations").
 
