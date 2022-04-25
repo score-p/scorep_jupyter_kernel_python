@@ -49,7 +49,6 @@ To inspect the collected performance data, use tools as Vampir (Trace) or Cube (
 
 The kernel is still under development. The following is on the agenda:
  
- - add support for decorators (currently they are not considered in persistency handling)
  - the output of the inner python process needs to be handled as a stream, currently you receive all the feedback at the end of the process at once
  - performance improvements (use json or file based database for persistency instead of pickle/shelve might improve runtime)
  

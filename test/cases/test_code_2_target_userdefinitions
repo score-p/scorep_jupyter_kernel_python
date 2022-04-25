@@ -23,20 +23,6 @@ class A():
         def write_definition(definition_new, self=None):
             self.definition = definition_new
 
-class B():
-    def foo(self):
-        print("do not overwrite foo of A")
-
-    class A_inner():
-        definitions = "do not overwrite inner class of A"
-
-        def write_definition(definition_new, self=None):
-            self.definition = definition_new
-
-
-def foo():
-    print("this is an independent foo method")
-
 def simple_decorator(func):
     def inner1(*args, **kwargs):
         func(*args, **kwargs)
@@ -50,3 +36,22 @@ def simple_decorated():
 async def sample_task():
     await asyncio.sleep(10)
     return 'task complete'
+
+import pandas
+
+class B():
+    def foo_new(self):
+        print("do not overwrite foo of A")
+
+    class A_inner_new():
+        definitions = "do not overwrite inner class of A"
+
+        def write_definition_new(definition_new, self=None):
+            self.definition = definition_new
+
+
+def foo():
+    print("this was added later")
+
+def bar():
+    print("a new function")
