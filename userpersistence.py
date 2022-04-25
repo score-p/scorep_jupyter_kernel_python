@@ -92,15 +92,14 @@ def get_user_variables_from_code(code):
     # note that local variables are filtered later by merging with globals()
     root = ast.parse(code)
     # variables = sorted({node.id for node in ast.walk(root) if isinstance(node, ast.Name)})
-    variables = []
+    variables = set()
     for node in ast.walk(root):
         # assignment nodes can include attributes, therefore go over all targets and check for attribute nodes
         if isinstance(node, ast.Assign) or isinstance(node, ast.AnnAssign):
             for el in ast.walk(node):
                 for target_node in ast.walk(el):
                     if isinstance(target_node, ast.Name):
-                        variables.append(target_node.id)
-                        break
+                        variables.add(target_node.id)
 
     return variables
 

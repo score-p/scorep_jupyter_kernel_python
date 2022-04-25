@@ -72,8 +72,8 @@ class TestUserpersistence(unittest.TestCase):
             test_userdefinitions = test_userdefinitions_file.read()
             test_userdefinitions_file.close()
 
-            self.assertTrue(os.path.isfile("tmp_userpersistence.py"))
-            test_userpersistence_file = open("tmp_userpersistence.py", "r")
+            self.assertTrue(os.path.isfile("tmpUserPers.py"))
+            test_userpersistence_file = open("tmpUserPers.py", "r")
             test_userpersistence = test_userpersistence_file.read()
             test_userpersistence_file.close()
             self.assertTrue(astunparse.unparse(ast.parse(test_userpersistence)) ==
@@ -95,8 +95,8 @@ class TestUserpersistence(unittest.TestCase):
 
             userpersistence.save_user_definitions(test_code, "tmpUserPers.py")
             userpersistence.save_user_definitions(test_code2, "tmpUserPers.py")
-            self.assertTrue(os.path.isfile("tmp_userpersistence.py"))
-            test_userpersistence_file = open("tmp_userpersistence.py", "r")
+            self.assertTrue(os.path.isfile("tmpUserPers.py"))
+            test_userpersistence_file = open("tmpUserPers.py", "r")
             test_userpersistence = test_userpersistence_file.read()
             test_userpersistence_file.close()
             self.assertTrue(astunparse.unparse(ast.parse(test_userpersistence)) ==

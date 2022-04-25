@@ -5,12 +5,9 @@ import numpy as np
 import warnings
 import os
 
-warnings.filterwarnings('ignore')
-
-os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
-os.environ = "PCI"
-
 class A():
+    my_desc = 'desc'
+
     def foo(self):
         print("test")
 
