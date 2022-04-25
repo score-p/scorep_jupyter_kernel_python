@@ -22,4 +22,4 @@ jupyter kernelspec install kernelspec/ --name=scorep-python3 --user
 
 rm kernelspec/ -r -f
 
-#cd test && python -m unittest userpersistence_test.py
+cd test && python -m unittest userpersistence_test.py
