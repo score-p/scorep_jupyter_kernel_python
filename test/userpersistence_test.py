@@ -54,6 +54,9 @@ class TestUserpersistence(unittest.TestCase):
         # the functionality to obtain the defined variables by code parsing is tested in
         # test_get_user_variables_from_code()
         variables_from_code = ['x', 'y', 'test_string', 'class_instance', 'test_list', 'df', 'np_array', 'window']
+        with open("tmpUserPers.py", "w") as f:
+            # create empty file to make things work
+            pass
         userpersistence.save_user_variables(globals(), variables_from_code, "tmpUserPers.py", ".tmpUserVars")
         loaded_variables = userpersistence.load_user_variables(".tmpUserVars")
         # now the loaded variables should also occur in globals()

@@ -115,7 +115,7 @@ class ScoreP_Python_Kernel(Kernel):
             output = completed_run.stdout
             if err:
                 # remove broken code again
-                userpersistence.remstore_user_definitions(self.tmpUserPers)
+                userpersistence.restore_user_definitions(self.tmpUserPers)
             if not silent:
                 if output:
                     stream_content_stdout = {'name': 'stdout', 'text': output.decode('utf8')}

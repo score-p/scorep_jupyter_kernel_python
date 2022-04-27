@@ -96,7 +96,7 @@ def get_user_variables_from_code(code):
     for node in ast.walk(root):
         # assignment nodes can include attributes, therefore go over all targets and check for attribute nodes
         if isinstance(node, ast.Assign) or isinstance(node, ast.AnnAssign):
-            for el in ast.walk(node):
+            for el in node.targets:
                 for target_node in ast.walk(el):
                     if isinstance(target_node, ast.Name):
                         variables.add(target_node.id)
@@ -108,6 +108,7 @@ def save_user_variables(globs, variables, tmp_user_pers_file, tmp_user_vars_file
     # remove ".py" to retrieve the module name
     tmp_user_pers_mod = str(tmp_user_pers_file[:-3])
     # dynamically load user defined classes to make them available for variable/object storing
+
     _tmp = __import__(tmp_user_pers_mod, globals(), locals(), ['*'], 0)
     for member in inspect.getmembers(_tmp):
         if not str(member[0]).startswith("__"):
