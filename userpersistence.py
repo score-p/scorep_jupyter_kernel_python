@@ -4,6 +4,7 @@ import shelve
 import astunparse
 import inspect
 import shutil
+import dill
 
 '''
 Note: general limitation
@@ -119,15 +120,17 @@ def save_user_variables(globs, variables, tmp_user_pers_file, tmp_user_vars_file
     user_variables = {**prior_variables, **user_variables}
     # TODO: use shared memory
     if bool(user_variables):
-        d = shelve.open(tmp_user_vars_file)
-        for el in user_variables.keys():
-            # if possible, exchange class of the object here with the class that is stored for persistence. This is
-            # valid since the classes should be the same and this does not affect the objects attribute dictionary
-            non_persistent_class = user_variables[el].__class__.__name__
-            if non_persistent_class in globals().keys():
-                user_variables[el].__class__ = globals()[non_persistent_class]
-            d[el] = user_variables[el]
-        d.close()
+        with open(tmp_user_vars_file, "wb") as dill_file:
+            # d = shelve.open(tmp_user_vars_file)
+            for el in user_variables.keys():
+                # if possible, exchange class of the object here with the class that is stored for persistence. This is
+                # valid since the classes should be the same and this does not affect the objects attribute dictionary
+                non_persistent_class = user_variables[el].__class__.__name__
+                if non_persistent_class in globals().keys():
+                    user_variables[el].__class__ = globals()[non_persistent_class]
+                #d[el] = user_variables[el]
+            dill.dump(user_variables, dill_file)
+            #d.close()
 
 
 def restore_user_definitions(tmp_user_pers_file):
@@ -140,11 +143,17 @@ def restore_user_definitions(tmp_user_pers_file):
 def load_user_variables(tmp_user_vars_file):
     user_variables = {}
     # TODO: use shared memory
+    '''
     d = shelve.open(tmp_user_vars_file)
     klist = list(d.keys())
     for key in klist:
         user_variables[key] = d[key]
     d.close()
+    '''
+    if os.path.isfile(tmp_user_vars_file):
+        with open(tmp_user_vars_file, "rb") as dill_file:
+            user_variables = dill.load(dill_file)
+
     return user_variables
 
 

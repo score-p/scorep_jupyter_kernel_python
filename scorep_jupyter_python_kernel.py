@@ -1,15 +1,33 @@
 import cubex
 from ipykernel.kernelbase import Kernel
+from ipykernel.ipkernel import IPythonKernel
 from subprocess import Popen, PIPE
 import os
 import userpersistence
-import subprocess
 import uuid
+from time import sleep
+from threading import Thread
+import signal
+import subprocess
+import sys
 
 PYTHON_EXECUTABLE = ""
 
 
-class ScoreP_Python_Kernel(Kernel):
+# Exception to throw when reading data from stdout/stderr of subprocess
+class MyTimeoutException(Exception):
+    pass
+
+
+def timeout_handler(signum, frame):
+    raise MyTimeoutException
+
+
+signal.signal(signal.SIGALRM, timeout_handler)
+signal_timeout = 0.1
+
+
+class ScorepPythonKernel(Kernel):
     implementation = 'Python and ScoreP'
     implementation_version = '1.0'
     language = 'python'
@@ -22,6 +40,7 @@ class ScoreP_Python_Kernel(Kernel):
     banner = "A python kernel with scorep binding"
 
     userEnv = {}
+    scorePEnv = {}
     scoreP_python_args = ""
     multicellmode = False
     init_multicell = False
@@ -36,18 +55,50 @@ class ScoreP_Python_Kernel(Kernel):
         self.tmpCodeFile = ".tmpCodeFile" + uid + ".py"
         self.tmpUserPers = "tmpUserPers" + uid + ".py"
         self.tmpUserVars = ".tmpUserVars" + uid
+        self.userEnv["PYTHONUNBUFFERED"] = "x"
+
+    def get_output_and_print(self, process2observe):
+        while True:
+            err = b''
+            output = b''
+            signal.setitimer(signal.ITIMER_REAL, signal_timeout)
+            try:
+                while True:
+                    err += process2observe.stderr.readline(1)
+            except MyTimeoutException:
+                pass
+
+            signal.setitimer(signal.ITIMER_REAL, signal_timeout)
+            try:
+                while True:
+                    output += process2observe.stdout.readline(1)
+            except MyTimeoutException:
+                pass
+            if process2observe.poll() is not None and output == b'' and err == b'':
+                break
+            if output:
+                # ignore errors in encoding here, since that is not our responsibility (but the one of the user's code)
+                stream_content_stdout = {'name': 'stdout',
+                                         'text': output.decode(sys.getdefaultencoding(), errors='ignore')}
+                self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
+            if err:
+                stream_content_stderr = {'name': 'stderr',
+                                         'text': err.decode(sys.getdefaultencoding(), errors='ignore')}
+                self.send_response(self.iopub_socket, 'stream', stream_content_stderr)
 
     def do_execute(self, code, silent, store_history=True, user_expressions=None,
                    allow_stdin=False):
 
         if code.startswith('%%scorep_env'):
             # set scorep environment variables
-            scoreP_vars = code.split('\n')
+            scorep_vars = code.split('\n')
             # iterate from first line since this is scoreP_env indicator
-            for var in scoreP_vars[1:]:
-                keyVal = var.split('=')
-                self.userEnv[keyVal[0]] = keyVal[1]
-            stream_content_stdout = {'name': 'stdout', 'text': 'set user environment sucessfully: ' + str(self.userEnv)}
+            for var in scorep_vars[1:]:
+                key_val = var.split('=')
+                self.scorePEnv[key_val[0]] = key_val[1]
+            stream_content_stdout = {'name': 'stdout',
+                                     'text': 'set score-p environment sucessfully: ' + str(self.scorePEnv)}
+            self.userEnv.update(self.scorePEnv)
             self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
         elif code.startswith('%%scorep_python_binding_arguments'):
             # set scorep python bindings arguments
@@ -106,23 +157,12 @@ class ScoreP_Python_Kernel(Kernel):
 
             userpersistence.save_user_definitions(code, self.tmpUserPers)
 
-            completed_run = subprocess.run(
-                [PYTHON_EXECUTABLE, "-m", "scorep", self.scoreP_python_args, self.tmpCodeFile],
-                stdout=PIPE, stderr=PIPE,
+            user_code_process = subprocess.Popen(
+                [PYTHON_EXECUTABLE, "-m", "scorep", self.scoreP_python_args, self.tmpCodeFile], stdout=PIPE,
+                stderr=PIPE,
                 env=os.environ.update(self.userEnv))
-
-            err = completed_run.stderr
-            output = completed_run.stdout
-            if err:
-                # remove broken code again
-                userpersistence.restore_user_definitions(self.tmpUserPers)
             if not silent:
-                if output:
-                    stream_content_stdout = {'name': 'stdout', 'text': output.decode('utf8')}
-                    self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
-                if err:
-                    stream_content_stderr = {'name': 'stderr', 'text': err.decode('utf8')}
-                    self.send_response(self.iopub_socket, 'stream', stream_content_stderr)
+                self.get_output_and_print(user_code_process)
 
         else:
             execute_with_scorep = code.startswith('%%execute_with_scorep')
@@ -164,7 +204,7 @@ class ScoreP_Python_Kernel(Kernel):
                 # in multi cell mode we call this mechanism in "finalize"
                 user_variables = userpersistence.get_user_variables_from_code(code)
                 cell_code.write("\nuserpersistence.save_user_variables(globals(), " + str(user_variables) + ", '" +
-                                 self.tmpUserPers + "', '" + self.tmpUserVars + "')")
+                                self.tmpUserPers + "', '" + self.tmpUserVars + "')")
 
             cell_code.close()
             userpersistence.save_user_definitions(code, self.tmpUserPers)
@@ -172,32 +212,22 @@ class ScoreP_Python_Kernel(Kernel):
                 # if we are in multi cell mode, do not execute here (wait for "finalize")
                 stream_content_stdout = {'name': 'stdout',
                                          'text': 'marked the cell for multi-cell mode. This cell will be executed at '
-                                                 'position: ' + str(
-                                             self.multicellmode_cellcount)}
+                                                 'position: ' + str(self.multicellmode_cellcount)}
                 self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
             else:
                 # execute cell with or without scorep
                 if execute_with_scorep:
-                    completed_run = subprocess.run([PYTHON_EXECUTABLE, "-m", "scorep", self.scoreP_python_args,
-                                                    self.tmpCodeFile], stdout=PIPE, stderr=PIPE,
-                                                   env=os.environ.update(self.userEnv))
+                    user_code_process = subprocess.Popen(
+                        [PYTHON_EXECUTABLE, "-m", "scorep", self.scoreP_python_args, self.tmpCodeFile], stdout=PIPE,
+                        stderr=PIPE,
+                        env=os.environ.update(self.userEnv))
 
                 else:
-                    completed_run = subprocess.run([PYTHON_EXECUTABLE, self.tmpCodeFile], stdout=PIPE, stderr=PIPE,
-                                                   env=os.environ.update(self.userEnv))
+                    user_code_process = subprocess.Popen([PYTHON_EXECUTABLE, self.tmpCodeFile], stdout=PIPE,
+                                                         stderr=PIPE, env=os.environ.update(self.userEnv))
 
-                err = completed_run.stderr
-                output = completed_run.stdout
-                if err:
-                    # remove broken code again
-                    userpersistence.restore_user_definitions(self.tmpUserPers)
                 if not silent:
-                    if output:
-                        stream_content_stdout = {'name': 'stdout', 'text': output.decode('utf8')}
-                        self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
-                    if err:
-                        stream_content_stderr = {'name': 'stderr', 'text': err.decode('utf8')}
-                        self.send_response(self.iopub_socket, 'stream', stream_content_stderr)
+                    self.get_output_and_print(user_code_process)
 
         return {'status': 'ok',
                 # The base class increments the execution count
@@ -221,6 +251,7 @@ class ScoreP_Python_Kernel(Kernel):
     def do_apply(self, content, bufs, msg_id, reply_metadata):
         pass
 
+    '''
     def manage_profiling_commands(self, code):
         if code.startswith('%%profile_runtime'):
             prof = cubex.open('profile.cubex')
@@ -232,9 +263,10 @@ class ScoreP_Python_Kernel(Kernel):
             stream_content_stdout = {'name': 'stdout', 'text': 'calls'}
 
         self.send_response(self.iopub_socket, 'display_data', stream_content_stdout)
+    '''
 
 
 if __name__ == '__main__':
     from ipykernel.kernelapp import IPKernelApp
 
-    IPKernelApp.launch_instance(kernel_class=ScoreP_Python_Kernel)
+    IPKernelApp.launch_instance(kernel_class=ScorepPythonKernel)
