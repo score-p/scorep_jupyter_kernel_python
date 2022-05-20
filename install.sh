@@ -3,9 +3,9 @@
 VIRTUAL_ENV_DIR=$HOME/virtualenv_jupyterkernel_scorep_python
 
 virtualenv --system-site-packages $VIRTUAL_ENV_DIR
-source $VIRTUAL_ENV_DIR/bin/activate
+. $VIRTUAL_ENV_DIR/bin/activate
 
-pip install scorep ipykernel pandas numpy torch tqdm cubex astunparse uuid scipy
+pip install scorep ipykernel pandas numpy torch tqdm cubex astunparse uuid scipy dill
 
 FULL_PATH_VIRTUAL_ENV_DIR_PYTHON="\""`which python`"\""
 FULL_PATH_VIRTUAL_ENV_DIR_SITE_PACKAGES=`python -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())"`
