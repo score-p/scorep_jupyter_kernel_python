@@ -108,6 +108,7 @@ def get_user_variables_from_code(code):
 def save_user_variables(globs, variables, tmp_user_pers_file, tmp_user_vars_file):
     # remove ".py" to retrieve the module name
     tmp_user_pers_mod = str(tmp_user_pers_file[:-3])
+    tmp_user_pers_mod = tmp_user_pers_mod.split("/")[1]
     # dynamically load user defined classes to make them available for variable/object storing
 
     _tmp = __import__(tmp_user_pers_mod, globals(), locals(), ['*'], 0)

@@ -48,13 +48,18 @@ class ScorepPythonKernel(Kernel):
     tmpCodeFile = ""
     tmpUserPers = ""
     tmpUserVars = ""
+    tmpDir = ""
 
     def __init__(self, **kwargs):
         Kernel.__init__(self, **kwargs)
         uid = str(uuid.uuid4())
-        self.tmpCodeFile = ".tmpCodeFile" + uid + ".py"
-        self.tmpUserPers = "tmpUserPers" + uid + ".py"
-        self.tmpUserVars = ".tmpUserVars" + uid
+        self.tmpDir = "tmp" + uid + "/"
+        os.mkdir(self.tmpDir)
+        sys.path.insert(0, self.tmpDir)
+
+        self.tmpCodeFile = self.tmpDir + ".tmpCodeFile" + uid + ".py"
+        self.tmpUserPers = self.tmpDir + "tmpUserPers" + uid + ".py"
+        self.tmpUserVars = self.tmpDir + ".tmpUserVars" + uid
         self.userEnv["PYTHONUNBUFFERED"] = "x"
 
     def get_output_and_print(self, process2observe):
@@ -237,9 +242,9 @@ class ScorepPythonKernel(Kernel):
                 }
 
     def do_shutdown(self, restart):
-        if os.path.exists(self.tmpCodeFile):
-            os.remove(self.tmpCodeFile)
-        userpersistence.tidy_up(self.tmpUserPers, self.tmpUserVars)
+        if os.path.exists(self.tmpDir):
+            os.remove(self.tmpDir)
+        #userpersistence.tidy_up(self.tmpUserPers, self.tmpUserVars)
 
         return {'status': 'ok',
                 'restart': restart
