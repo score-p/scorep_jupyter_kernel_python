@@ -10,6 +10,7 @@ from threading import Thread
 import signal
 import subprocess
 import sys
+import shutil
 
 PYTHON_EXECUTABLE = ""
 
@@ -41,7 +42,7 @@ class ScorepPythonKernel(Kernel):
 
     userEnv = {}
     scorePEnv = {}
-    scoreP_python_args = ""
+    scoreP_python_args = False
     multicellmode = False
     init_multicell = False
     multicellmode_cellcount = 0
@@ -222,10 +223,13 @@ class ScorepPythonKernel(Kernel):
             else:
                 # execute cell with or without scorep
                 if execute_with_scorep:
-                    user_code_process = subprocess.Popen(
-                        [PYTHON_EXECUTABLE, "-m", "scorep", self.scoreP_python_args, self.tmpCodeFile], stdout=PIPE,
-                        stderr=PIPE,
-                        env=os.environ.update(self.userEnv))
+                    if self.scoreP_python_args:
+                        user_code_process = subprocess.Popen(
+                            [PYTHON_EXECUTABLE, "-m", "scorep", self.scoreP_python_args, self.tmpCodeFile], stdout=PIPE,
+                            stderr=PIPE, env=os.environ.update(self.userEnv))
+                    else:
+                        user_code_process = subprocess.Popen(
+                            [PYTHON_EXECUTABLE, "-m", "scorep", self.tmpCodeFile], stdout=PIPE, stderr=PIPE, env=os.environ.update(self.userEnv))
 
                 else:
                     user_code_process = subprocess.Popen([PYTHON_EXECUTABLE, self.tmpCodeFile], stdout=PIPE,
@@ -243,8 +247,8 @@ class ScorepPythonKernel(Kernel):
 
     def do_shutdown(self, restart):
         if os.path.exists(self.tmpDir):
-            os.remove(self.tmpDir)
-        #userpersistence.tidy_up(self.tmpUserPers, self.tmpUserVars)
+            shutil.rmtree(self.tmpDir)
+        # userpersistence.tidy_up(self.tmpUserPers, self.tmpUserVars)
 
         return {'status': 'ok',
                 'restart': restart
