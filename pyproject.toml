@@ -1,8 +1,22 @@
 [build-system]
 requires = [
-  "setuptools>=42",
+  "setuptools>=61",
   "wheel",
-  "ipykernel",
-  "cubex"
 ]
-build-backend = "setuptools.build_meta"
+build-backend = "setuptools.build_meta:__legacy__"
+
+[project]
+name='scorep-jupyter'
+version='0.1.0'
+authors=[
+  {name='Elias Werner',email='elias.werner@tu-dresden.de'},
+]
+
+dependencies = [
+  "ipykernel",
+  "jupyter-client",
+  "astunparse",
+  "scorep",
+  "uuid",
+  "dill"
+]
