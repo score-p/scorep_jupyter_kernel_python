@@ -1,19 +1,15 @@
-import cubex
 from ipykernel.kernelbase import Kernel
-from ipykernel.ipkernel import IPythonKernel
-from subprocess import Popen, PIPE
+from subprocess import PIPE
 import os
-import scorep_jupyter.userpersistence
+import src.scorep_jupyter.userpersistence
 import uuid
-from time import sleep
-from threading import Thread
 import signal
 import subprocess
 import sys
 import shutil
 
 PYTHON_EXECUTABLE = sys.executable
-userpersistence_token = "scorep_jupyter.userpersistence"
+userpersistence_token = "src.scorep_jupyter.userpersistence"
 
 
 # Exception to throw when reading data from stdout/stderr of subprocess
@@ -104,7 +100,7 @@ class ScorepPythonKernel(Kernel):
                 key_val = var.split('=')
                 self.scorePEnv[key_val[0]] = key_val[1]
             stream_content_stdout = {'name': 'stdout',
-                                     'text': 'set score-p environment sucessfully: ' + str(self.scorePEnv)}
+                                     'text': 'set score-p environment successfully: ' + str(self.scorePEnv)}
             self.userEnv.update(self.scorePEnv)
             self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
         elif code.startswith('%%scorep_python_binding_arguments'):
@@ -146,7 +142,7 @@ class ScorepPythonKernel(Kernel):
             # read the defined code to save it
             code = cell_code_file.read()
             cell_code_file.close()
-            user_variables = scorep_jupyter.userpersistence.get_user_variables_from_code(code)
+            user_variables = src.scorep_jupyter.userpersistence.get_user_variables_from_code(code)
             # add ordinary userpersistence handling (as in normal mode)
             cell_code_file = open(self.tmpCodeFile, "w")
             cell_code_file.write("import " + userpersistence_token + "\n")
@@ -164,7 +160,7 @@ class ScorepPythonKernel(Kernel):
                 self.tmpUserPers + "', '" + self.tmpUserVars + "')")
             cell_code_file.close()
 
-            scorep_jupyter.userpersistence.save_user_definitions(code, self.tmpUserPers)
+            src.scorep_jupyter.userpersistence.save_user_definitions(code, self.tmpUserPers)
 
             user_code_process = subprocess.Popen(
                 [PYTHON_EXECUTABLE, "-m", "scorep", self.scoreP_python_args, self.tmpCodeFile], stdout=PIPE,
@@ -212,13 +208,13 @@ class ScorepPythonKernel(Kernel):
 
             if not self.multicellmode:
                 # in multi cell mode we call this mechanism in "finalize"
-                user_variables = scorep_jupyter.userpersistence.get_user_variables_from_code(code)
+                user_variables = src.scorep_jupyter.userpersistence.get_user_variables_from_code(code)
                 cell_code.write(
                     "\n" + userpersistence_token + ".save_user_variables(globals(), " + str(user_variables) + ", '" +
                     self.tmpUserPers + "', '" + self.tmpUserVars + "')")
 
             cell_code.close()
-            scorep_jupyter.userpersistence.save_user_definitions(code, self.tmpUserPers)
+            src.scorep_jupyter.userpersistence.save_user_definitions(code, self.tmpUserPers)
             if self.multicellmode:
                 # if we are in multi cell mode, do not execute here (wait for "finalize")
                 stream_content_stdout = {'name': 'stdout',
