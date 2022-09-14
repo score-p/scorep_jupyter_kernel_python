@@ -1,7 +1,7 @@
 from ipykernel.kernelbase import Kernel
 from subprocess import PIPE
 import os
-import src.scorep_jupyter.userpersistence
+import src.scorep_jupyter.userpersistence as userpersistence
 import uuid
 import signal
 import subprocess
@@ -142,7 +142,7 @@ class ScorepPythonKernel(Kernel):
             # read the defined code to save it
             code = cell_code_file.read()
             cell_code_file.close()
-            user_variables = src.scorep_jupyter.userpersistence.get_user_variables_from_code(code)
+            user_variables = userpersistence.get_user_variables_from_code(code)
             # add ordinary userpersistence handling (as in normal mode)
             cell_code_file = open(self.tmpCodeFile, "w")
             cell_code_file.write("import " + userpersistence_token + "\n")
@@ -160,7 +160,7 @@ class ScorepPythonKernel(Kernel):
                 self.tmpUserPers + "', '" + self.tmpUserVars + "')")
             cell_code_file.close()
 
-            src.scorep_jupyter.userpersistence.save_user_definitions(code, self.tmpUserPers)
+            userpersistence.save_user_definitions(code, self.tmpUserPers)
 
             user_code_process = subprocess.Popen(
                 [PYTHON_EXECUTABLE, "-m", "scorep", self.scoreP_python_args, self.tmpCodeFile], stdout=PIPE,
@@ -208,13 +208,13 @@ class ScorepPythonKernel(Kernel):
 
             if not self.multicellmode:
                 # in multi cell mode we call this mechanism in "finalize"
-                user_variables = src.scorep_jupyter.userpersistence.get_user_variables_from_code(code)
+                user_variables = userpersistence.get_user_variables_from_code(code)
                 cell_code.write(
                     "\n" + userpersistence_token + ".save_user_variables(globals(), " + str(user_variables) + ", '" +
                     self.tmpUserPers + "', '" + self.tmpUserVars + "')")
 
             cell_code.close()
-            src.scorep_jupyter.userpersistence.save_user_definitions(code, self.tmpUserPers)
+            userpersistence.save_user_definitions(code, self.tmpUserPers)
             if self.multicellmode:
                 # if we are in multi cell mode, do not execute here (wait for "finalize")
                 stream_content_stdout = {'name': 'stdout',
