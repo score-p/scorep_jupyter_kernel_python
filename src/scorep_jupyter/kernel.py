@@ -1,18 +1,15 @@
-import cubex
 from ipykernel.kernelbase import Kernel
-from ipykernel.ipkernel import IPythonKernel
-from subprocess import Popen, PIPE
+from subprocess import PIPE
 import os
-import userpersistence
+import src.scorep_jupyter.userpersistence as userpersistence
 import uuid
-from time import sleep
-from threading import Thread
 import signal
 import subprocess
 import sys
 import shutil
 
-PYTHON_EXECUTABLE = ""
+PYTHON_EXECUTABLE = sys.executable
+userpersistence_token = "src.scorep_jupyter.userpersistence"
 
 
 # Exception to throw when reading data from stdout/stderr of subprocess
@@ -103,7 +100,7 @@ class ScorepPythonKernel(Kernel):
                 key_val = var.split('=')
                 self.scorePEnv[key_val[0]] = key_val[1]
             stream_content_stdout = {'name': 'stdout',
-                                     'text': 'set score-p environment sucessfully: ' + str(self.scorePEnv)}
+                                     'text': 'set score-p environment successfully: ' + str(self.scorePEnv)}
             self.userEnv.update(self.scorePEnv)
             self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
         elif code.startswith('%%scorep_python_binding_arguments'):
@@ -148,17 +145,19 @@ class ScorepPythonKernel(Kernel):
             user_variables = userpersistence.get_user_variables_from_code(code)
             # add ordinary userpersistence handling (as in normal mode)
             cell_code_file = open(self.tmpCodeFile, "w")
-            cell_code_file.write("import userpersistence\n")
+            cell_code_file.write("import " + userpersistence_token + "\n")
             # cell_code_file.write("from tmp_userpersistence import *\n")
             if os.path.isfile(self.tmpUserPers):
                 with open(self.tmpUserPers, "r") as f:
                     prev_userpersistence = f.read()
                     cell_code_file.write(prev_userpersistence + "\n")
-            cell_code_file.write("globals().update(userpersistence.load_user_variables('" + self.tmpUserVars + "'))\n")
+            cell_code_file.write(
+                "globals().update(" + userpersistence_token + ".load_user_variables('" + self.tmpUserVars + "'))\n")
             cell_code_file.write(code)
 
-            cell_code_file.write("\nuserpersistence.save_user_variables(globals(), " + str(user_variables) + ", '" +
-                                 self.tmpUserPers + "', '" + self.tmpUserVars + "')")
+            cell_code_file.write(
+                "\ns" + userpersistence_token + ".save_user_variables(globals(), " + str(user_variables) + ", '" +
+                self.tmpUserPers + "', '" + self.tmpUserVars + "')")
             cell_code_file.close()
 
             userpersistence.save_user_definitions(code, self.tmpUserPers)
@@ -186,7 +185,7 @@ class ScorepPythonKernel(Kernel):
             # import variables defined so far
             if not self.multicellmode:
                 # all cells that are not executed in multi cell mode have to import them
-                cell_code.write("import userpersistence\n")
+                cell_code.write("import "+ userpersistence_token +"\n")
                 # prior imports can be loaded before runtime. we have to load them this way because they can not be
                 # pickled
 
@@ -195,7 +194,8 @@ class ScorepPythonKernel(Kernel):
                     with open(self.tmpUserPers, "r") as f:
                         prev_userpersistence = f.read()
                         cell_code.write(prev_userpersistence + "\n")
-                cell_code.write("globals().update(userpersistence.load_user_variables('" + self.tmpUserVars + "'))\n")
+                cell_code.write(
+                    "globals().update(" + userpersistence_token + ".load_user_variables('" + self.tmpUserVars + "'))\n")
 
             # add original cell code
             cell_code.write("\n" + code)
@@ -209,8 +209,9 @@ class ScorepPythonKernel(Kernel):
             if not self.multicellmode:
                 # in multi cell mode we call this mechanism in "finalize"
                 user_variables = userpersistence.get_user_variables_from_code(code)
-                cell_code.write("\nuserpersistence.save_user_variables(globals(), " + str(user_variables) + ", '" +
-                                self.tmpUserPers + "', '" + self.tmpUserVars + "')")
+                cell_code.write(
+                    "\n" + userpersistence_token + ".save_user_variables(globals(), " + str(user_variables) + ", '" +
+                    self.tmpUserPers + "', '" + self.tmpUserVars + "')")
 
             cell_code.close()
             userpersistence.save_user_definitions(code, self.tmpUserPers)
@@ -229,7 +230,8 @@ class ScorepPythonKernel(Kernel):
                             stderr=PIPE, env=os.environ.update(self.userEnv))
                     else:
                         user_code_process = subprocess.Popen(
-                            [PYTHON_EXECUTABLE, "-m", "scorep", self.tmpCodeFile], stdout=PIPE, stderr=PIPE, env=os.environ.update(self.userEnv))
+                            [PYTHON_EXECUTABLE, "-m", "scorep", self.tmpCodeFile], stdout=PIPE, stderr=PIPE,
+                            env=os.environ.update(self.userEnv))
 
                 else:
                     user_code_process = subprocess.Popen([PYTHON_EXECUTABLE, self.tmpCodeFile], stdout=PIPE,

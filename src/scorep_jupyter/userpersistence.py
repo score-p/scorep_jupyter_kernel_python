@@ -1,6 +1,5 @@
 import os
 import ast
-import shelve
 import astunparse
 import inspect
 import shutil
