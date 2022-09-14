@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta:__legacy__"
 
 [project]
 name='scorep-jupyter'
-version='0.1.0'
+version='0.0.1'
 authors=[
   {name='Elias Werner',email='elias.werner@tu-dresden.de'},
 ]
