@@ -1,7 +1,7 @@
 from ipykernel.kernelbase import Kernel
 from subprocess import PIPE
 import os
-import src.scorep_jupyter.userpersistence as userpersistence
+import scorep_jupyter.userpersistence as userpersistence
 import uuid
 import signal
 import subprocess
@@ -9,7 +9,7 @@ import sys
 import shutil
 
 PYTHON_EXECUTABLE = sys.executable
-userpersistence_token = "src.scorep_jupyter.userpersistence"
+userpersistence_token = "scorep_jupyter.userpersistence"
 
 
 # Exception to throw when reading data from stdout/stderr of subprocess

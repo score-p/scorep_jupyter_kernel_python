@@ -11,12 +11,18 @@ version='0.0.1'
 authors=[
   {name='Elias Werner',email='elias.werner@tu-dresden.de'},
 ]
+description='A'
+license={ file="LICENSE" }
+requires-python = ">=3.8"
+classifiers=[
+"Programming Language :: Python :: 3",
+]
 
 dependencies = [
   "ipykernel",
   "jupyter-client",
   "astunparse",
-  "scorep",
+  "scorep==4.0.2",
   "uuid",
   "dill"
 ]
