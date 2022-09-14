@@ -1,0 +1,79 @@
+Copyright (c) 2022, Technische Universitaet Dresden, Germany, all rights reserved.
+Author: Elias Werner
+
+Copyright 2017-2020, Technische Universitaet Dresden, Germany, all rights reserved.
+Author: Andreas Gocht
+
+portions copyright 2001, Autonomous Zones Industries, Inc., all rights...
+err...  reserved and offered to the public under the terms of the
+Python 2.2 license.
+Author: Zooko O'Whielacronx
+http://zooko.com/
+mailto:zooko@zooko.com
+
+Copyright 2000, Mojam Media, Inc., all rights reserved.
+Author: Skip Montanaro
+
+Copyright 1999, Bioreason, Inc., all rights reserved.
+Author: Andrew Dalke
+
+Copyright 1995-1997, Automatrix, Inc., all rights reserved.
+Author: Skip Montanaro
+
+Copyright 1991-1995, Stichting Mathematisch Centrum, all rights reserved.
+
+Permission to use, copy, modify, and distribute this Python software and
+its associated documentation for any purpose without fee is hereby
+granted, provided that the above copyright notice appears in all copies,
+and that both that copyright notice and this permission notice appear in
+supporting documentation, and that the name of neither Automatrix,
+Bioreason, Mojam Media or TU Dresden be used in advertising or publicity
+pertaining to distribution of the software without specific, written
+prior permission.
+
+Copyright (c) 2014, Simon Percivall
+All rights reserved.
+
+Copyright (c) 2008-Present, IPython Development Team
+Copyright (c) 2001-2007, Fernando Perez <fernando.perez@colorado.edu>
+Copyright (c) 2001, Janko Hauser <jhauser@zscout.de>
+Copyright (c) 2001, Nathaniel Gray <n8gray@caltech.edu>
+
+Copyright (c) 2001-2015, IPython Development Team
+Copyright (c) 2015-, Jupyter Development Team 
+All rights reserved.
+
+Copyright (c) 2004-2016 California Institute of Technology.
+Copyright (c) 2016-2022 The Uncertainty Quantification Foundation.
+All rights reserved.
+
+This software is available subject to the conditions and terms laid
+out below. By downloading and using this software you are agreeing
+to the following conditions.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met::
+
+    - Redistribution of source code must retain the above copyright
+      notice, this list of conditions and the following disclaimer.
+
+    - Redistribution in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in the
+      documentations and/or other materials provided with the distribution.
+
+    - Neither the names of the copyright holders nor the names of any of
+      the contributors may be used to endorse or promote products derived
+      from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
