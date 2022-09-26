@@ -58,7 +58,6 @@ class ScorepPythonKernel(Kernel):
 
         #logging.basicConfig(filename="kernel_log.log", level=logging.DEBUG)
 
-        self.tmpUserPers = self.tmpDir + "tmpUserPers" + uid + ".py"
         self.tmpUserVars = self.tmpDir + ".tmpUserVars" + uid
         self.userEnv["PYTHONUNBUFFERED"] = "x"
 
@@ -139,24 +138,20 @@ class ScorepPythonKernel(Kernel):
 
         user_variables = userpersistence.get_user_variables_from_code(codeWithUserVars)
         # all cells that are not executed in multi cell mode have to import them
-        codeStr += "import " + userpersistence_token + "\n"
-        # prior imports can be loaded before runtime. we have to load them this way because they can not be
-        # pickled
+        codeStr += "from " + userpersistence_token + " import * \n"
+        # prior imports can be loaded before runtime. we have to load them this way because they can not be pickled
 
         # user variables can be pickled and should be loaded at runtime
-        if os.path.isfile(self.tmpUserPers):
-            with open(self.tmpUserPers, "r") as f:
-                prev_userpersistence = f.read()
-                codeStr += prev_userpersistence + "\n"
+        codeStr += self.tmpUserPers + "\n"
         codeStr += "globals().update(" + userpersistence_token + ".load_user_variables('" + self.tmpUserVars + "'))\n"
 
         if not self.multicellmode:
             codeStr += "\n" + codeWithUserVars
 
-        codeStr += "\n" + userpersistence_token + ".save_user_variables(globals(), " + str(user_variables) + ", '" + \
-                   self.tmpUserPers + "', '" + self.tmpUserVars + "')"
+        codeStr += "\n" + userpersistence_token + ".save_user_variables(globals(), " + str(user_variables) + \
+                   ", '" + self.tmpUserVars + "')"
 
-        userpersistence.save_user_definitions(codeWithUserVars, self.tmpUserPers)
+        self.tmpUserPers = userpersistence.save_user_definitions(codeWithUserVars)
         return codeStr
 
     def finalize_multicellmode(self, silent):
