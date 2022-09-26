@@ -4,7 +4,7 @@ import astunparse
 import inspect
 import shutil
 import dill
-
+import sys
 '''
 Note: general limitation
 changes in modules can not be persisted since pickling/shelving modules is not allowed
@@ -48,7 +48,6 @@ def save_user_definitions(code, tmp_user_pers_file):
               and isinstance(node.value.func, ast.Attribute)):
             # attributes can also be set via function calls
             attributes.append(node)
-
     code_curr.extend(attributes)
     code_curr.sort(key=lambda node: node.lineno)
     '''
@@ -105,15 +104,17 @@ def get_user_variables_from_code(code):
 
 
 def save_user_variables(globs, variables, tmp_user_pers_file, tmp_user_vars_file):
-    # remove ".py" to retrieve the module name
-    tmp_user_pers_mod = str(tmp_user_pers_file[:-3])
-    tmp_user_pers_mod = tmp_user_pers_mod.split("/")[1]
-    # dynamically load user defined classes to make them available for variable/object storing
 
-    _tmp = __import__(tmp_user_pers_mod, globals(), locals(), ['*'], 0)
-    for member in inspect.getmembers(_tmp):
-        if not str(member[0]).startswith("__"):
-            globals()[member[0]] = member[1]
+    if os.path.isfile(tmp_user_pers_file):
+        # remove ".py" to retrieve the module name
+        tmp_user_pers_mod = str(tmp_user_pers_file[:-3])
+        tmp_user_pers_mod = tmp_user_pers_mod.split("/")[1]
+        # dynamically load user defined classes to make them available for variable/object storing
+
+        _tmp = __import__(tmp_user_pers_mod, globals(), locals(), ['*'], 0)
+        for member in inspect.getmembers(_tmp):
+            if not str(member[0]).startswith("__"):
+                globals()[member[0]] = member[1]
 
     prior_variables = load_user_variables(tmp_user_vars_file)
     user_variables = {k: v for k, v in globs.items() if str(k) in variables}
