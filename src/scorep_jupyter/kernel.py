@@ -45,49 +45,70 @@ class ScorepPythonKernel(Kernel):
     init_multicell = False
     multicellmode_cellcount = 0
     tmpUserPers = ""
-    tmpUserVars = ""
     tmpDir = ""
     tmpCodeString = ""
+    varsKeyWord = ""
 
     def __init__(self, **kwargs):
         Kernel.__init__(self, **kwargs)
         uid = str(uuid.uuid4())
-        self.tmpDir = "tmp" + uid + "/"
-        os.mkdir(self.tmpDir)
+        logging.basicConfig(filename="kernel_log.log", level=logging.DEBUG)
+        # initiate a pipe for communication
+        self.persistencePipe = "PersPipe" + uid
+
         sys.path.append(os.path.realpath(self.tmpDir))
 
-        #logging.basicConfig(filename="kernel_log.log", level=logging.DEBUG)
-
-        self.tmpUserVars = self.tmpDir + ".tmpUserVars" + uid
         self.userEnv["PYTHONUNBUFFERED"] = "x"
-
+        self.varsKeyWord = "WAIT" + self.persistencePipe
         # needed for subprocesses
         self.userEnv["PYTHONPATH"] = ":".join(sys.path)
 
     def get_output_and_print(self, process2observe):
+        process_finished = False
         while True:
             err = b''
             output = b''
             signal.setitimer(signal.ITIMER_REAL, signal_timeout)
             try:
                 while True:
-                    err += process2observe.stderr.readline(1)
+                    err += process2observe.stderr.read(1)
             except MyTimeoutException:
                 pass
 
             signal.setitimer(signal.ITIMER_REAL, signal_timeout)
             try:
                 while True:
-                    output += process2observe.stdout.readline(1)
+                    if signal.getitimer(signal.ITIMER_REAL)[0] > 0.01:
+                        output += process2observe.stdout.read(1)
             except MyTimeoutException:
                 pass
-            if process2observe.poll() is not None and output == b'' and err == b'':
+            if (process2observe.poll() is not None and output == b'' and err == b'') or process_finished:
                 break
             if output:
-                # ignore errors in encoding here, since that is not our responsibility (but the one of the user's code)
-                stream_content_stdout = {'name': 'stdout',
-                                         'text': output.decode(sys.getdefaultencoding(), errors='ignore')}
-                self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
+                logging.info("print output")
+
+                if bytes(self.varsKeyWord, encoding='utf-8').startswith(output):
+                    logging.info("found potential keyword")
+                    # here we have to read further input to decide whether it is the keyword or not
+                    output += process2observe.stdout.read(len(self.varsKeyWord) - len(output))
+
+                idx = output.find(bytes(self.varsKeyWord, encoding='utf-8'))
+                if idx != -1:
+                    # keyword found
+                    # now child waits for new process to connect
+                    # the parent can report to the frontend that the child has finished, so break the loop
+                    logging.info("breaking")
+                    process_finished = True
+
+                if idx != 0:
+                    # keyword not found (idx==-1) or keyword found after some regular output (idx > 0)
+                    output = output[:idx]
+                    logging.info(output)
+                    # ignore errors in encoding here, since that is not our responsibility (but the one of the user's
+                    # code)
+                    stream_content_stdout = {'name': 'stdout',
+                                             'text': output.decode(sys.getdefaultencoding(), errors='ignore')}
+                    self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
             if err:
                 stream_content_stderr = {'name': 'stderr',
                                          'text': err.decode(sys.getdefaultencoding(), errors='ignore')}
@@ -112,9 +133,6 @@ class ScorepPythonKernel(Kernel):
                                  'text': 'use the following score-p python binding arguments: ' + str(
                                      self.scoreP_python_args)}
         self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
-        # elif code.startswith('%%profile'):
-        # start with internal profiling mode
-        # self.manage_profiling_commands(code)
 
     def enable_multicellmode(self):
         # start to mark the cells for multi cell mode
@@ -140,18 +158,18 @@ class ScorepPythonKernel(Kernel):
         # all cells that are not executed in multi cell mode have to import them
         codeStr += "from " + userpersistence_token + " import * \n"
         # prior imports can be loaded before runtime. we have to load them this way because they can not be pickled
-
         # user variables can be pickled and should be loaded at runtime
         codeStr += self.tmpUserPers + "\n"
-        codeStr += "globals().update(" + userpersistence_token + ".load_user_variables('" + self.tmpUserVars + "'))\n"
+        codeStr += "prior = load_user_variables('" + self.persistencePipe + "')\n"
+        codeStr += "globals().update(prior)\n"
 
         if not self.multicellmode:
             codeStr += "\n" + codeWithUserVars
 
-        codeStr += "\n" + userpersistence_token + ".save_user_variables(globals(), " + str(user_variables) + \
-                   ", '" + self.tmpUserVars + "')"
-
-        self.tmpUserPers = userpersistence.save_user_definitions(codeWithUserVars)
+        codeStr += "\nsave_user_variables(globals(), " + str(
+            user_variables) + ", '" + self.persistencePipe + "', prior) "
+        # logging.info(str(codeStr))
+        self.tmpUserPers = userpersistence.save_user_definitions(codeWithUserVars, self.tmpUserPers)
         return codeStr
 
     def finalize_multicellmode(self, silent):
@@ -170,7 +188,7 @@ class ScorepPythonKernel(Kernel):
     def execute_code(self, execute_with_scorep, silent):
         # execute cell with or without scorep
 
-        #logging.info(str(self.tmpCodeString))
+        # logging.info(str(self.tmpCodeString))
         if execute_with_scorep:
             if self.scoreP_python_args:
                 user_code_process = subprocess.Popen(
@@ -180,10 +198,9 @@ class ScorepPythonKernel(Kernel):
                 user_code_process = subprocess.Popen(
                     [PYTHON_EXECUTABLE, "-m", "scorep", '-c', self.tmpCodeString], stdout=PIPE, stderr=PIPE,
                     env=os.environ.update(self.userEnv))
-
         else:
             user_code_process = subprocess.Popen([PYTHON_EXECUTABLE, '-c', self.tmpCodeString], stdout=PIPE,
-                                                 stderr=PIPE, env=os.environ.update(self.userEnv))
+                                                 stderr=PIPE, stdin=PIPE, env=os.environ.update(self.userEnv))
 
         if not silent:
             self.get_output_and_print(user_code_process)
@@ -238,7 +255,6 @@ class ScorepPythonKernel(Kernel):
     def do_shutdown(self, restart):
         if os.path.exists(self.tmpDir):
             shutil.rmtree(self.tmpDir)
-
         return {'status': 'ok',
                 'restart': restart
                 }
