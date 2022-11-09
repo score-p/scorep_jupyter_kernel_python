@@ -18,7 +18,7 @@ The kernel will then be installed in your active python environment.
 ## Usage
 
 ### Configuring Score-P in Jupyter
-You can set up your Score-P environment by executing a cell that starts with the `%%scorep_env magic command`.
+You can set up your Score-P environment by executing a cell that starts with the `%%scorep_env` magic command.
 
 You can set the Score-P Python binding arguments by executing a cell that starts with `%%scorep_python_binding_arguments`.
 
@@ -46,7 +46,6 @@ To inspect the collected performance data, use tools as Vampir (Trace) or Cube (
 The kernel is still under development. The following is on the agenda:
  
  - add tensorflow backend for serialization to support tf
- - performance improvements (use shared memory for persistence handling)
  
 PRs are welcome.
 

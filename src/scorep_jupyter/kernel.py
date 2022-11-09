@@ -6,7 +6,6 @@ import uuid
 import signal
 import subprocess
 import sys
-import shutil
 
 PYTHON_EXECUTABLE = sys.executable
 userpersistence_token = "scorep_jupyter.userpersistence"
@@ -43,131 +42,190 @@ class ScorepPythonKernel(Kernel):
     multicellmode = False
     init_multicell = False
     multicellmode_cellcount = 0
-    tmpCodeFile = ""
     tmpUserPers = ""
-    tmpUserVars = ""
     tmpDir = ""
+    tmpCodeString = ""
+    varsKeyWord = ""
 
     def __init__(self, **kwargs):
         Kernel.__init__(self, **kwargs)
         uid = str(uuid.uuid4())
-        self.tmpDir = "tmp" + uid + "/"
-        os.mkdir(self.tmpDir)
-        sys.path.insert(0, self.tmpDir)
+        #logging.basicConfig(filename="kernel_log.log", level=logging.DEBUG)
+        # initiate a pipe for communication
+        self.persistencePipe = "PersPipe" + uid
+        self.codePipe = "CodePipe" + uid + ".py"
 
-        self.tmpCodeFile = self.tmpDir + ".tmpCodeFile" + uid + ".py"
-        self.tmpUserPers = self.tmpDir + "tmpUserPers" + uid + ".py"
-        self.tmpUserVars = self.tmpDir + ".tmpUserVars" + uid
+        sys.path.append(os.path.realpath(self.tmpDir))
+
         self.userEnv["PYTHONUNBUFFERED"] = "x"
+        self.varsKeyWord = "WAIT" + self.persistencePipe
+        # needed for subprocesses
+        self.userEnv["PYTHONPATH"] = ":".join(sys.path)
 
-    def get_output_and_print(self, process2observe):
+    def get_output_and_print(self, process2observe, execute_with_scorep):
+        process_finished = False
         while True:
             err = b''
             output = b''
             signal.setitimer(signal.ITIMER_REAL, signal_timeout)
             try:
                 while True:
-                    err += process2observe.stderr.readline(1)
+                    if signal.getitimer(signal.ITIMER_REAL)[0] > 0.01:
+                        err += process2observe.stderr.read(1)
             except MyTimeoutException:
                 pass
 
             signal.setitimer(signal.ITIMER_REAL, signal_timeout)
             try:
                 while True:
-                    output += process2observe.stdout.readline(1)
+                    if signal.getitimer(signal.ITIMER_REAL)[0] > 0.01:
+                        output += process2observe.stdout.read(1)
             except MyTimeoutException:
                 pass
-            if process2observe.poll() is not None and output == b'' and err == b'':
+            if (process2observe.poll() is not None and output == b'' and err == b'') or process_finished:
+                if os.path.exists(self.codePipe):
+                    os.remove(self.codePipe)
                 break
             if output:
-                # ignore errors in encoding here, since that is not our responsibility (but the one of the user's code)
-                stream_content_stdout = {'name': 'stdout',
-                                         'text': output.decode(sys.getdefaultencoding(), errors='ignore')}
-                self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
+                if bytes(self.varsKeyWord, encoding='utf-8').startswith(output):
+                    # here we have to read further input to decide whether it is the keyword or not
+                    output += process2observe.stdout.read(len(self.varsKeyWord) - len(output))
+
+                idx = output.find(bytes(self.varsKeyWord, encoding='utf-8'))
+                if idx != -1:
+                    # keyword found
+                    # now child waits for new process to connect
+                    # the parent can report to the frontend that the child has finished, so break the loop
+                    process_finished = True
+
+                    # if it was a score-p cell, then we can not wait till the next cell starts
+                    # create a dummy subprocess for the persistence handling
+                    if execute_with_scorep:
+                        # in the future we can use this dummy process for better variable handling
+                        # (e.g. processes require only the data they are working with)
+                        self.tmpCodeString = self.prepare_code("", "")
+                        self.execute_code(False, True)
+
+                if idx != 0:
+                    # keyword not found (idx==-1) or keyword found after some regular output (idx > 0)
+                    output = output[:idx]
+                    # ignore errors in encoding here, since that is not our responsibility (but the one of the user's
+                    # code)
+                    stream_content_stdout = {'name': 'stdout',
+                                             'text': output.decode(sys.getdefaultencoding(), errors='ignore')}
+                    self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
             if err:
                 stream_content_stderr = {'name': 'stderr',
                                          'text': err.decode(sys.getdefaultencoding(), errors='ignore')}
                 self.send_response(self.iopub_socket, 'stream', stream_content_stderr)
 
+    def set_scorep_env(self, code):
+        # set scorep environment variables
+        scorep_vars = code.split('\n')
+        # iterate from first line since this is scoreP_env indicator
+        for var in scorep_vars[1:]:
+            key_val = var.split('=')
+            self.scorePEnv[key_val[0]] = key_val[1]
+        stream_content_stdout = {'name': 'stdout',
+                                 'text': 'set score-p environment successfully: ' + str(self.scorePEnv)}
+        self.userEnv.update(self.scorePEnv)
+        self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
+
+    def set_scorep_pythonargs(self, code):
+        # set scorep python bindings arguments
+        self.scoreP_python_args = ' '.join(code.split('\n')[1:])
+        stream_content_stdout = {'name': 'stdout',
+                                 'text': 'use the following score-p python binding arguments: ' + str(
+                                     self.scoreP_python_args)}
+        self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
+
+    def enable_multicellmode(self):
+        # start to mark the cells for multi cell mode
+        self.tmpCodeString = ""
+        self.multicellmode = True
+        self.multicellmode_cellcount = 0
+        self.init_multicell = True
+        stream_content_stdout = {'name': 'stdout',
+                                 'text': 'started multi-cell mode. The following cells will be marked.'}
+        self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
+
+    def abort_multicellmode(self):
+        # abort the multi cell mode
+        self.multicellmode = False
+        self.init_multicell = False
+        self.multicellmode_cellcount = 0
+        stream_content_stdout = {'name': 'stdout', 'text': 'aborted multi-cell mode.'}
+        self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
+
+    def prepare_code(self, codeStr, codeWithUserVars):
+
+        user_variables = userpersistence.get_user_variables_from_code(codeWithUserVars)
+        # all cells that are not executed in multi cell mode have to import them
+        codeStr += "from " + userpersistence_token + " import * \n"
+        # prior imports can be loaded before runtime. we have to load them this way because they can not be pickled
+        # user variables can be pickled and should be loaded at runtime
+        codeStr += self.tmpUserPers + "\n"
+        codeStr += "prior = load_user_variables('" + self.persistencePipe + "')\n"
+        codeStr += "globals().update(prior)\n"
+
+        if not self.multicellmode:
+            codeStr += "\n" + codeWithUserVars
+        codeStr += "\nsave_user_variables(globals(), " + str(
+            user_variables) + ", '" + self.persistencePipe + "', prior) "
+        self.tmpUserPers = userpersistence.save_user_definitions(codeWithUserVars, self.tmpUserPers)
+        return codeStr
+
+    def finalize_multicellmode(self, silent):
+        # finish multi cell mode and execute the code of the marked cells
+        stream_content_stdout = {'name': 'stdout', 'text': 'finalizing multi-cell mode and execute cells.'}
+        self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
+
+        self.tmpCodeString = self.prepare_code(self.tmpCodeString, self.tmpCodeString)
+
+        self.multicellmode = False
+        self.init_multicell = False
+        self.multicellmode_cellcount = 0
+
+        self.execute_code(execute_with_scorep=True, silent=silent)
+
+    def execute_code(self, execute_with_scorep, silent):
+        # execute cell with or without scorep
+        if execute_with_scorep:
+            # create a file with the code (-c not working with scorep python)
+            file = open(self.codePipe, 'w')
+            file.write(self.tmpCodeString)
+            file.close()
+
+            if self.scoreP_python_args:
+                user_code_process = subprocess.Popen(
+                    [PYTHON_EXECUTABLE, "-m", "scorep", self.scoreP_python_args, self.codePipe], stdout=PIPE,
+                    stderr=PIPE, env=os.environ.update(self.userEnv))
+            else:
+                user_code_process = subprocess.Popen(
+                    [PYTHON_EXECUTABLE, "-m", "scorep", self.codePipe], stdout=PIPE, stderr=PIPE,
+                    env=os.environ.update(self.userEnv))
+
+        else:
+            user_code_process = subprocess.Popen([PYTHON_EXECUTABLE, '-c', self.tmpCodeString], stdout=PIPE,
+                                                 stderr=PIPE, env=os.environ.update(self.userEnv))
+
+        if not silent:
+            self.get_output_and_print(user_code_process, execute_with_scorep)
+
+    # overwrite the default do_execute() function of the ipykernel
     def do_execute(self, code, silent, store_history=True, user_expressions=None,
                    allow_stdin=False):
 
         if code.startswith('%%scorep_env'):
-            # set scorep environment variables
-            scorep_vars = code.split('\n')
-            # iterate from first line since this is scoreP_env indicator
-            for var in scorep_vars[1:]:
-                key_val = var.split('=')
-                self.scorePEnv[key_val[0]] = key_val[1]
-            stream_content_stdout = {'name': 'stdout',
-                                     'text': 'set score-p environment successfully: ' + str(self.scorePEnv)}
-            self.userEnv.update(self.scorePEnv)
-            self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
+            self.set_scorep_env(code)
         elif code.startswith('%%scorep_python_binding_arguments'):
-            # set scorep python bindings arguments
-            self.scoreP_python_args = ' '.join(code.split('\n')[1:])
-            stream_content_stdout = {'name': 'stdout',
-                                     'text': 'use the following scorep python binding arguments: ' + str(
-                                         self.scoreP_python_args)}
-            self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
-        # elif code.startswith('%%profile'):
-        # start with internal profiling mode
-        # self.manage_profiling_commands(code)
+            self.set_scorep_pythonargs(code)
         elif code.startswith('%%enable_multicellmode'):
-            # start to mark the cells for multi cell mode
-            if os.path.exists(self.tmpCodeFile):
-                # ensure to start with a clean file in multi cell mode
-                os.remove(self.tmpCodeFile)
-            self.multicellmode = True
-            self.multicellmode_cellcount = 0
-            self.init_multicell = True
-            stream_content_stdout = {'name': 'stdout',
-                                     'text': 'started multi-cell mode. The following cells will be marked.'}
-            self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
+            self.enable_multicellmode()
         elif code.startswith('%%abort_multicellmode'):
-            # abort the multi cell mode
-            self.multicellmode = False
-            self.init_multicell = False
-            self.multicellmode_cellcount = 0
-            stream_content_stdout = {'name': 'stdout', 'text': 'aborted multi-cell mode.'}
-            self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
+            self.abort_multicellmode()
         elif code.startswith('%%finalize_multicellmode'):
-            # finish multi cell mode and execute the code of the marked cells
-            stream_content_stdout = {'name': 'stdout', 'text': 'finalizing multi-cell mode and execute cells.'}
-            self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
-            self.multicellmode = False
-            self.init_multicell = False
-            self.multicellmode_cellcount = 0
-            cell_code_file = open(self.tmpCodeFile, "r")
-            # read the defined code to save it
-            code = cell_code_file.read()
-            cell_code_file.close()
-            user_variables = userpersistence.get_user_variables_from_code(code)
-            # add ordinary userpersistence handling (as in normal mode)
-            cell_code_file = open(self.tmpCodeFile, "w")
-            cell_code_file.write("import " + userpersistence_token + "\n")
-            # cell_code_file.write("from tmp_userpersistence import *\n")
-            if os.path.isfile(self.tmpUserPers):
-                with open(self.tmpUserPers, "r") as f:
-                    prev_userpersistence = f.read()
-                    cell_code_file.write(prev_userpersistence + "\n")
-            cell_code_file.write(
-                "globals().update(" + userpersistence_token + ".load_user_variables('" + self.tmpUserVars + "'))\n")
-            cell_code_file.write(code)
-
-            cell_code_file.write(
-                "\ns" + userpersistence_token + ".save_user_variables(globals(), " + str(user_variables) + ", '" +
-                self.tmpUserPers + "', '" + self.tmpUserVars + "')")
-            cell_code_file.close()
-
-            userpersistence.save_user_definitions(code, self.tmpUserPers)
-
-            user_code_process = subprocess.Popen(
-                [PYTHON_EXECUTABLE, "-m", "scorep", self.scoreP_python_args, self.tmpCodeFile], stdout=PIPE,
-                stderr=PIPE,
-                env=os.environ.update(self.userEnv))
-            if not silent:
-                self.get_output_and_print(user_code_process)
+            self.finalize_multicellmode(silent)
 
         else:
             execute_with_scorep = code.startswith('%%execute_with_scorep')
@@ -177,68 +235,22 @@ class ScorepPythonKernel(Kernel):
             if self.multicellmode:
                 # in multi cell mode, just append the code because we execute multiple cells as one
                 self.multicellmode_cellcount += 1
-                cell_code = open(self.tmpCodeFile, "a")
+                self.tmpCodeString += "\n" + code
+                stream_content_stdout = {'name': 'stdout',
+                                         'text': 'marked the cell for multi-cell mode. This cell will be executed at '
+                                                 'position: ' + str(self.multicellmode_cellcount)}
+                self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
             else:
-                # if we do not use scorep or multi cell mode, just remove the content and write to the file
-                cell_code = open(self.tmpCodeFile, "w")
-
-            # import variables defined so far
-            if not self.multicellmode:
-                # all cells that are not executed in multi cell mode have to import them
-                cell_code.write("import "+ userpersistence_token +"\n")
-                # prior imports can be loaded before runtime. we have to load them this way because they can not be
-                # pickled
-
-                # user variables can be pickled and should be loaded at runtime
-                if os.path.isfile(self.tmpUserPers):
-                    with open(self.tmpUserPers, "r") as f:
-                        prev_userpersistence = f.read()
-                        cell_code.write(prev_userpersistence + "\n")
-                cell_code.write(
-                    "globals().update(" + userpersistence_token + ".load_user_variables('" + self.tmpUserVars + "'))\n")
+                self.tmpCodeString = self.prepare_code("", code)
+                self.execute_code(execute_with_scorep, silent)
 
             # add original cell code
-            cell_code.write("\n" + code)
 
             # for persistence reasons, we have to store user defined variables after the execution of the cell.
             # therefore we use shelve/pickle for object serialization and object persistence imports, user defined
             # classes and methods are handled by storing them in code files and prepending them to the execution cell
             # code However, if the user defines some network connections, filereaders etc. this might fail due to
             # pickle limitations
-
-            if not self.multicellmode:
-                # in multi cell mode we call this mechanism in "finalize"
-                user_variables = userpersistence.get_user_variables_from_code(code)
-                cell_code.write(
-                    "\n" + userpersistence_token + ".save_user_variables(globals(), " + str(user_variables) + ", '" +
-                    self.tmpUserPers + "', '" + self.tmpUserVars + "')")
-
-            cell_code.close()
-            userpersistence.save_user_definitions(code, self.tmpUserPers)
-            if self.multicellmode:
-                # if we are in multi cell mode, do not execute here (wait for "finalize")
-                stream_content_stdout = {'name': 'stdout',
-                                         'text': 'marked the cell for multi-cell mode. This cell will be executed at '
-                                                 'position: ' + str(self.multicellmode_cellcount)}
-                self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
-            else:
-                # execute cell with or without scorep
-                if execute_with_scorep:
-                    if self.scoreP_python_args:
-                        user_code_process = subprocess.Popen(
-                            [PYTHON_EXECUTABLE, "-m", "scorep", self.scoreP_python_args, self.tmpCodeFile], stdout=PIPE,
-                            stderr=PIPE, env=os.environ.update(self.userEnv))
-                    else:
-                        user_code_process = subprocess.Popen(
-                            [PYTHON_EXECUTABLE, "-m", "scorep", self.tmpCodeFile], stdout=PIPE, stderr=PIPE,
-                            env=os.environ.update(self.userEnv))
-
-                else:
-                    user_code_process = subprocess.Popen([PYTHON_EXECUTABLE, self.tmpCodeFile], stdout=PIPE,
-                                                         stderr=PIPE, env=os.environ.update(self.userEnv))
-
-                if not silent:
-                    self.get_output_and_print(user_code_process)
 
         return {'status': 'ok',
                 # The base class increments the execution count
@@ -248,10 +260,9 @@ class ScorepPythonKernel(Kernel):
                 }
 
     def do_shutdown(self, restart):
-        if os.path.exists(self.tmpDir):
-            shutil.rmtree(self.tmpDir)
-        # userpersistence.tidy_up(self.tmpUserPers, self.tmpUserVars)
-
+        userpersistence.tidy_up(self.persistencePipe)
+        if os.path.exists(self.codePipe):
+            os.remove(self.codePipe)
         return {'status': 'ok',
                 'restart': restart
                 }
