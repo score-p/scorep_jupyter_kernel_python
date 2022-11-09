@@ -3,13 +3,11 @@ import ast
 import astunparse
 import dill
 import sys
-import logging
 
 
 '''
 Note: general limitation
 changes in modules can not be persisted since pickling/shelving modules is not allowed
-this might be fixed by using shared memory
 '''
 comm_pipe = "_comm"
 val_pipe = "_val"
@@ -73,8 +71,6 @@ def get_user_variables_from_code(code):
 
 
 def save_user_variables(globs, variables, basepipeName, prior_variables):
-    logging.basicConfig(filename="userpers_log.log", level=logging.DEBUG)
-
     user_variables = {k: v for k, v in globs.items() if str(k) in variables}
     user_variables = {**prior_variables, **user_variables}
 
@@ -100,15 +96,10 @@ def save_user_variables(globs, variables, basepipeName, prior_variables):
 
 
 def load_user_variables(basepipeName):
-    # logging.basicConfig(filename="userpers_log.log", level=logging.DEBUG)
     content = {}
 
     if os.path.exists(basepipeName + comm_pipe) and os.path.exists(basepipeName + val_pipe):
         # pipes exist, we should ask for the vars
-        fd = os.open(basepipeName + comm_pipe, os.O_RDWR)
-        os.write(fd, b'REC\n')
-        os.close(fd)
-
         with open(basepipeName + comm_pipe, "wb") as file:
             file.write(b'REC\n')
 
@@ -125,13 +116,14 @@ def load_user_variables(basepipeName):
 
         content = dill.loads(line)
         os.unlink(basepipeName + val_pipe)
-
     return content
 
 
-def tidy_up(tmp_user_vars_file):
+def tidy_up(basepipeName):
     try:
-        if os.path.isfile(tmp_user_vars_file):
-            os.remove(tmp_user_vars_file)
+        if os.path.exists(basepipeName + val_pipe):
+            os.unlink(basepipeName + val_pipe)
+        if os.path.exists(basepipeName + comm_pipe):
+            os.unlink(basepipeName + comm_pipe)
     except:
         print("error tidy up")

@@ -6,8 +6,6 @@ import uuid
 import signal
 import subprocess
 import sys
-import shutil
-import logging
 
 PYTHON_EXECUTABLE = sys.executable
 userpersistence_token = "scorep_jupyter.userpersistence"
@@ -52,9 +50,10 @@ class ScorepPythonKernel(Kernel):
     def __init__(self, **kwargs):
         Kernel.__init__(self, **kwargs)
         uid = str(uuid.uuid4())
-        logging.basicConfig(filename="kernel_log.log", level=logging.DEBUG)
+        #logging.basicConfig(filename="kernel_log.log", level=logging.DEBUG)
         # initiate a pipe for communication
         self.persistencePipe = "PersPipe" + uid
+        self.codePipe = "CodePipe" + uid + ".py"
 
         sys.path.append(os.path.realpath(self.tmpDir))
 
@@ -63,7 +62,7 @@ class ScorepPythonKernel(Kernel):
         # needed for subprocesses
         self.userEnv["PYTHONPATH"] = ":".join(sys.path)
 
-    def get_output_and_print(self, process2observe):
+    def get_output_and_print(self, process2observe, execute_with_scorep):
         process_finished = False
         while True:
             err = b''
@@ -71,7 +70,8 @@ class ScorepPythonKernel(Kernel):
             signal.setitimer(signal.ITIMER_REAL, signal_timeout)
             try:
                 while True:
-                    err += process2observe.stderr.read(1)
+                    if signal.getitimer(signal.ITIMER_REAL)[0] > 0.01:
+                        err += process2observe.stderr.read(1)
             except MyTimeoutException:
                 pass
 
@@ -83,12 +83,11 @@ class ScorepPythonKernel(Kernel):
             except MyTimeoutException:
                 pass
             if (process2observe.poll() is not None and output == b'' and err == b'') or process_finished:
+                if os.path.exists(self.codePipe):
+                    os.remove(self.codePipe)
                 break
             if output:
-                logging.info("print output")
-
                 if bytes(self.varsKeyWord, encoding='utf-8').startswith(output):
-                    logging.info("found potential keyword")
                     # here we have to read further input to decide whether it is the keyword or not
                     output += process2observe.stdout.read(len(self.varsKeyWord) - len(output))
 
@@ -97,13 +96,19 @@ class ScorepPythonKernel(Kernel):
                     # keyword found
                     # now child waits for new process to connect
                     # the parent can report to the frontend that the child has finished, so break the loop
-                    logging.info("breaking")
                     process_finished = True
+
+                    # if it was a score-p cell, then we can not wait till the next cell starts
+                    # create a dummy subprocess for the persistence handling
+                    if execute_with_scorep:
+                        # in the future we can use this dummy process for better variable handling
+                        # (e.g. processes require only the data they are working with)
+                        self.tmpCodeString = self.prepare_code("", "")
+                        self.execute_code(False, True)
 
                 if idx != 0:
                     # keyword not found (idx==-1) or keyword found after some regular output (idx > 0)
                     output = output[:idx]
-                    logging.info(output)
                     # ignore errors in encoding here, since that is not our responsibility (but the one of the user's
                     # code)
                     stream_content_stdout = {'name': 'stdout',
@@ -165,10 +170,8 @@ class ScorepPythonKernel(Kernel):
 
         if not self.multicellmode:
             codeStr += "\n" + codeWithUserVars
-
         codeStr += "\nsave_user_variables(globals(), " + str(
             user_variables) + ", '" + self.persistencePipe + "', prior) "
-        # logging.info(str(codeStr))
         self.tmpUserPers = userpersistence.save_user_definitions(codeWithUserVars, self.tmpUserPers)
         return codeStr
 
@@ -187,23 +190,27 @@ class ScorepPythonKernel(Kernel):
 
     def execute_code(self, execute_with_scorep, silent):
         # execute cell with or without scorep
-
-        # logging.info(str(self.tmpCodeString))
         if execute_with_scorep:
+            # create a file with the code (-c not working with scorep python)
+            file = open(self.codePipe, 'w')
+            file.write(self.tmpCodeString)
+            file.close()
+
             if self.scoreP_python_args:
                 user_code_process = subprocess.Popen(
-                    [PYTHON_EXECUTABLE, "-m", "scorep", self.scoreP_python_args, '-c', self.tmpCodeString], stdout=PIPE,
+                    [PYTHON_EXECUTABLE, "-m", "scorep", self.scoreP_python_args, self.codePipe], stdout=PIPE,
                     stderr=PIPE, env=os.environ.update(self.userEnv))
             else:
                 user_code_process = subprocess.Popen(
-                    [PYTHON_EXECUTABLE, "-m", "scorep", '-c', self.tmpCodeString], stdout=PIPE, stderr=PIPE,
+                    [PYTHON_EXECUTABLE, "-m", "scorep", self.codePipe], stdout=PIPE, stderr=PIPE,
                     env=os.environ.update(self.userEnv))
+
         else:
             user_code_process = subprocess.Popen([PYTHON_EXECUTABLE, '-c', self.tmpCodeString], stdout=PIPE,
-                                                 stderr=PIPE, stdin=PIPE, env=os.environ.update(self.userEnv))
+                                                 stderr=PIPE, env=os.environ.update(self.userEnv))
 
         if not silent:
-            self.get_output_and_print(user_code_process)
+            self.get_output_and_print(user_code_process, execute_with_scorep)
 
     # overwrite the default do_execute() function of the ipykernel
     def do_execute(self, code, silent, store_history=True, user_expressions=None,
@@ -253,8 +260,9 @@ class ScorepPythonKernel(Kernel):
                 }
 
     def do_shutdown(self, restart):
-        if os.path.exists(self.tmpDir):
-            shutil.rmtree(self.tmpDir)
+        userpersistence.tidy_up(self.persistencePipe)
+        if os.path.exists(self.codePipe):
+            os.remove(self.codePipe)
         return {'status': 'ok',
                 'restart': restart
                 }
