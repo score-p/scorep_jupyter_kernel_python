@@ -3,7 +3,7 @@ import ast
 import astunparse
 import dill
 import sys
-
+import time
 
 '''
 Note: general limitation
@@ -70,6 +70,21 @@ def get_user_variables_from_code(code):
     return variables
 
 
+def check_rec_del(basepipeName, t):
+    while True:
+        with open(basepipeName + comm_pipe, "rb") as file:
+            line = file.readline()
+
+        if line == b"REC\n":
+            with open(basepipeName + val_pipe, "wb") as file:
+                file.write(t + b"0000000")
+        elif line == b"DEL\n":
+            os.unlink(basepipeName + comm_pipe)
+            os.unlink(basepipeName + val_pipe)
+            break
+        time.sleep(1)
+
+
 def save_user_variables(globs, variables, basepipeName, prior_variables):
     user_variables = {k: v for k, v in globs.items() if str(k) in variables}
     user_variables = {**prior_variables, **user_variables}
@@ -82,17 +97,24 @@ def save_user_variables(globs, variables, basepipeName, prior_variables):
             user_variables[el].__class__ = globals()[non_persistent_class]
 
     if user_variables:
+
+        if os.path.exists(basepipeName + comm_pipe) and os.path.exists(basepipeName + val_pipe):
+            with open(basepipeName + comm_pipe, "wb") as file:
+                file.write(b'DEL\n')
+
         t = dill.dumps(user_variables)
+
+        # wait until both pipes are deleted from previous cell/process
+        while True:
+            if not (os.path.exists(basepipeName + comm_pipe) and os.path.exists(basepipeName + val_pipe)):
+                break
+            time.sleep(1)
+
         os.mkfifo(basepipeName + comm_pipe)
         os.mkfifo(basepipeName + val_pipe)
         sys.stdout.write("WAIT" + basepipeName)
-        with open(basepipeName + comm_pipe, "rb") as file:
-            line = file.readline()
 
-        os.unlink(basepipeName + comm_pipe)
-        if line == b"REC\n":
-            with open(basepipeName + val_pipe, "wb") as file:
-                file.write(t + b"0000000")
+        check_rec_del(basepipeName, t)
 
 
 def load_user_variables(basepipeName):
@@ -115,7 +137,6 @@ def load_user_variables(basepipeName):
                     line += tmp
 
         content = dill.loads(line)
-        os.unlink(basepipeName + val_pipe)
     return content
 
 
