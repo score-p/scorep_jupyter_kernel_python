@@ -161,7 +161,7 @@ class ScorepPythonKernel(Kernel):
 
         user_variables = userpersistence.get_user_variables_from_code(codeWithUserVars)
         # all cells that are not executed in multi cell mode have to import them
-        codeStr += "from " + userpersistence_token + " import * \n"
+        codeStr += "\nfrom " + userpersistence_token + " import * \n"
         # prior imports can be loaded before runtime. we have to load them this way because they can not be pickled
         # user variables can be pickled and should be loaded at runtime
         codeStr += self.tmpUserPers + "\n"
@@ -177,7 +177,7 @@ class ScorepPythonKernel(Kernel):
 
     def finalize_multicellmode(self, silent):
         # finish multi cell mode and execute the code of the marked cells
-        stream_content_stdout = {'name': 'stdout', 'text': 'finalizing multi-cell mode and execute cells.'}
+        stream_content_stdout = {'name': 'stdout', 'text': 'finalizing multi-cell mode and execute cells.\n'}
         self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
 
         self.tmpCodeString = self.prepare_code(self.tmpCodeString, self.tmpCodeString)
