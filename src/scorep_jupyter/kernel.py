@@ -103,7 +103,7 @@ class ScorepPythonKernel(Kernel):
                     if execute_with_scorep:
                         # in the future we can use this dummy process for better variable handling
                         # (e.g. processes require only the data they are working with)
-                        self.tmpCodeString = self.prepare_code("", "")
+                        self.tmpCodeString = self.prepare_code("")
                         self.execute_code(False, True)
 
                 if idx != 0:
@@ -157,19 +157,18 @@ class ScorepPythonKernel(Kernel):
         stream_content_stdout = {'name': 'stdout', 'text': 'aborted multi-cell mode.'}
         self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
 
-    def prepare_code(self, codeStr, codeWithUserVars):
+    def prepare_code(self, codeWithUserVars):
 
         user_variables = userpersistence.get_user_variables_from_code(codeWithUserVars)
         # all cells that are not executed in multi cell mode have to import them
-        codeStr += "\nfrom " + userpersistence_token + " import * \n"
+        codeStr = "from " + userpersistence_token + " import * \n"
         # prior imports can be loaded before runtime. we have to load them this way because they can not be pickled
         # user variables can be pickled and should be loaded at runtime
         codeStr += self.tmpUserPers + "\n"
         codeStr += "prior = load_user_variables('" + self.persistencePipe + "')\n"
         codeStr += "globals().update(prior)\n"
 
-        if not self.multicellmode:
-            codeStr += "\n" + codeWithUserVars
+        codeStr += "\n" + codeWithUserVars
         codeStr += "\nsave_user_variables(globals(), " + str(
             user_variables) + ", '" + self.persistencePipe + "', prior) "
         self.tmpUserPers = userpersistence.save_user_definitions(codeWithUserVars, self.tmpUserPers)
@@ -180,7 +179,7 @@ class ScorepPythonKernel(Kernel):
         stream_content_stdout = {'name': 'stdout', 'text': 'finalizing multi-cell mode and execute cells.\n'}
         self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
 
-        self.tmpCodeString = self.prepare_code(self.tmpCodeString, self.tmpCodeString)
+        self.tmpCodeString = self.prepare_code(self.tmpCodeString)
 
         self.multicellmode = False
         self.init_multicell = False
@@ -241,7 +240,7 @@ class ScorepPythonKernel(Kernel):
                                                  'position: ' + str(self.multicellmode_cellcount)}
                 self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
             else:
-                self.tmpCodeString = self.prepare_code("", code)
+                self.tmpCodeString = self.prepare_code(code)
                 self.execute_code(execute_with_scorep, silent)
 
             # add original cell code
