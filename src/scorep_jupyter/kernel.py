@@ -41,6 +41,7 @@ class ScorepPythonKernel(Kernel):
     scoreP_python_args = False
     multicellmode = False
     init_multicell = False
+    writemode = False
     multicellmode_cellcount = 0
     tmpUserPers = ""
     tmpDir = ""
@@ -61,6 +62,22 @@ class ScorepPythonKernel(Kernel):
         self.varsKeyWord = "WAIT" + self.persistencePipe
         # needed for subprocesses
         self.userEnv["PYTHONPATH"] = ":".join(sys.path)
+
+    def cell_output(self, string, stream='stdout'):
+        stream_content = {'name': stream,
+                          'text': string}
+        self.send_response(self.iopub_socket, 'stream', stream_content)
+    
+    def kernel_debug(self, code):
+        stdout_string = 'Debug results:\n'
+        if self.scorePEnv:
+            stdout_string += 'Score-P environment: ' + str(self.scorePEnv) + '\n'
+        if self.scoreP_python_args:
+            stdout_string += 'Python Binding arguments: ' + str(self.scoreP_python_args) + '\n'
+        if self.tmpUserPers:
+            stdout_string += 'User persistence (modules): ' + self.tmpUserPers + '\n'
+        #TODO: load_user_variables(self.PersPipe)
+        self.cell_output(stdout_string)
 
     def get_output_and_print(self, process2observe, execute_with_scorep):
         process_finished = False
@@ -111,13 +128,9 @@ class ScorepPythonKernel(Kernel):
                     output = output[:idx]
                     # ignore errors in encoding here, since that is not our responsibility (but the one of the user's
                     # code)
-                    stream_content_stdout = {'name': 'stdout',
-                                             'text': output.decode(sys.getdefaultencoding(), errors='ignore')}
-                    self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
+                    self.cell_output(output.decode(sys.getdefaultencoding(), errors='ignore'))
             if err:
-                stream_content_stderr = {'name': 'stderr',
-                                         'text': err.decode(sys.getdefaultencoding(), errors='ignore')}
-                self.send_response(self.iopub_socket, 'stream', stream_content_stderr)
+                self.cell_output(err.decode(sys.getdefaultencoding(), errors='ignore'), 'stderr')
 
     def set_scorep_env(self, code):
         # set scorep environment variables
@@ -126,18 +139,14 @@ class ScorepPythonKernel(Kernel):
         for var in scorep_vars[1:]:
             key_val = var.split('=')
             self.scorePEnv[key_val[0]] = key_val[1]
-        stream_content_stdout = {'name': 'stdout',
-                                 'text': 'set score-p environment successfully: ' + str(self.scorePEnv)}
         self.userEnv.update(self.scorePEnv)
-        self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
+        self.cell_output('set score-p environment successfully: ' + str(self.scorePEnv))
 
     def set_scorep_pythonargs(self, code):
         # set scorep python bindings arguments
         self.scoreP_python_args = ' '.join(code.split('\n')[1:])
-        stream_content_stdout = {'name': 'stdout',
-                                 'text': 'use the following score-p python binding arguments: ' + str(
-                                     self.scoreP_python_args)}
-        self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
+        self.cell_output('Use the following score-p python binding arguments: ' + str(
+                                     self.scoreP_python_args))
 
     def enable_multicellmode(self):
         # start to mark the cells for multi cell mode
@@ -145,17 +154,14 @@ class ScorepPythonKernel(Kernel):
         self.multicellmode = True
         self.multicellmode_cellcount = 0
         self.init_multicell = True
-        stream_content_stdout = {'name': 'stdout',
-                                 'text': 'started multi-cell mode. The following cells will be marked.'}
-        self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
+        self.cell_output('started multi-cell mode. The following cells will be marked.')
 
     def abort_multicellmode(self):
         # abort the multi cell mode
         self.multicellmode = False
         self.init_multicell = False
         self.multicellmode_cellcount = 0
-        stream_content_stdout = {'name': 'stdout', 'text': 'aborted multi-cell mode.'}
-        self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
+        self.cell_output('aborted multi-cell mode.')
 
     def prepare_code(self, codeWithUserVars):
 
@@ -176,8 +182,7 @@ class ScorepPythonKernel(Kernel):
 
     def finalize_multicellmode(self, silent):
         # finish multi cell mode and execute the code of the marked cells
-        stream_content_stdout = {'name': 'stdout', 'text': 'finalizing multi-cell mode and execute cells.\n'}
-        self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
+        self.cell_output('finalizing multi-cell mode and execute cells.\n')
 
         self.tmpCodeString = self.prepare_code(self.tmpCodeString)
 
@@ -186,6 +191,21 @@ class ScorepPythonKernel(Kernel):
         self.multicellmode_cellcount = 0
 
         self.execute_code(execute_with_scorep=True, silent=silent)
+
+    def start_writefile(self, code):
+        self.writemode = True
+        self.bash_script = open('run_script.sh', 'w+')
+        self.bash_script.write('#!/bin/bash\n')
+        self.python_script = open('script.py', 'w')
+        self.cell_output('Started writing python script.')
+
+    def end_writefile(self, code):
+        #TODO: check for os path existence - gets stuck?
+        self.writemode = False
+        self.bash_script.write(PYTHON_EXECUTABLE + ' -m scorep ' + self.scoreP_python_args + ' script.py')
+        self.bash_script.close()
+        self.python_script.close()
+        self.cell_output('Finished writing python scipt, files closed.')
 
     def execute_code(self, execute_with_scorep, silent):
         # execute cell with or without scorep
@@ -215,10 +235,32 @@ class ScorepPythonKernel(Kernel):
     def do_execute(self, code, silent, store_history=True, user_expressions=None,
                    allow_stdin=False):
 
-        if code.startswith('%%scorep_env'):
+        if code.startswith('%%start_writefile'):
+            self.start_writefile(code)
+        elif code.startswith('%%end_writefile'):
+            self.end_writefile(code)
+        elif self.writemode:
+            if code.startswith('%%scorep_env'):
+                code = code.split('\n')[1:]
+                for line in code:
+                    self.bash_script.write('export ' + line + '\n')
+                self.cell_output('Environment variables recorded.')
+            elif code.startswith('%%scorep_python_binding_arguments'):
+                self.scoreP_python_args = ' '.join(code.split('\n')[1:])
+                self.cell_output('Score-P bindings arguments recorded.')
+            else:
+                #cut all magic commands
+                code = code.split('\n')
+                code = ''.join([line + '\n' for line in code if not line.startswith('%%')])
+                self.python_script.write(code)
+                self.cell_output('Python commands recorded.')
+
+        elif code.startswith('%%scorep_env'):
             self.set_scorep_env(code)
         elif code.startswith('%%scorep_python_binding_arguments'):
             self.set_scorep_pythonargs(code)
+        elif code.startswith('%%kernel_debug'):
+            self.kernel_debug(code)
         elif code.startswith('%%enable_multicellmode'):
             self.enable_multicellmode()
         elif code.startswith('%%abort_multicellmode'):
@@ -235,10 +277,8 @@ class ScorepPythonKernel(Kernel):
                 # in multi cell mode, just append the code because we execute multiple cells as one
                 self.multicellmode_cellcount += 1
                 self.tmpCodeString += "\n" + code
-                stream_content_stdout = {'name': 'stdout',
-                                         'text': 'marked the cell for multi-cell mode. This cell will be executed at '
-                                                 'position: ' + str(self.multicellmode_cellcount)}
-                self.send_response(self.iopub_socket, 'stream', stream_content_stdout)
+                self.cell_output('marked the cell for multi-cell mode. This cell will be executed at '
+                                                 'position: ' + str(self.multicellmode_cellcount))
             else:
                 self.tmpCodeString = self.prepare_code(code)
                 self.execute_code(execute_with_scorep, silent)
