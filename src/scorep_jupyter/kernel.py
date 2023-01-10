@@ -42,6 +42,7 @@ class ScorepPythonKernel(Kernel):
     multicellmode = False
     init_multicell = False
     writemode = False
+    writemode_filename = 'jupyter_to_script'
     multicellmode_cellcount = 0
     tmpUserPers = ""
     tmpDir = ""
@@ -192,20 +193,23 @@ class ScorepPythonKernel(Kernel):
 
         self.execute_code(execute_with_scorep=True, silent=silent)
 
-    def start_writefile(self, code):
+    def start_writefile(self):
+        #TODO: check for os path existence
         self.writemode = True
-        self.bash_script = open('run_script.sh', 'w+')
+        bash_script_filename = './' + self.writemode_filename + '_run.sh'
+        python_script_filename = './' + self.writemode_filename + '.py'
+        self.bash_script = open(bash_script_filename, 'w+')
         self.bash_script.write('#!/bin/bash\n')
-        self.python_script = open('script.py', 'w')
-        self.cell_output('Started writing python script.')
+        self.python_script = open(python_script_filename, 'w+')
+        self.cell_output('Started converting to Python script. See files:\n' + bash_script_filename + '\n' + python_script_filename + '\n')
 
-    def end_writefile(self, code):
-        #TODO: check for os path existence - gets stuck?
+    def end_writefile(self):
+        #TODO: check for os path existence
         self.writemode = False
         self.bash_script.write(PYTHON_EXECUTABLE + ' -m scorep ' + self.scoreP_python_args + ' script.py')
         self.bash_script.close()
         self.python_script.close()
-        self.cell_output('Finished writing python scipt, files closed.')
+        self.cell_output('Finished converting to Python script, files closed.')
 
     def execute_code(self, execute_with_scorep, silent):
         # execute cell with or without scorep
@@ -236,9 +240,16 @@ class ScorepPythonKernel(Kernel):
                    allow_stdin=False):
 
         if code.startswith('%%start_writefile'):
-            self.start_writefile(code)
+            #get file name
+            writefile_cmd = code.split('\n')[0].split(' ')
+            if len(writefile_cmd) > 1:
+                if writefile_cmd[1].endswith('.py'):
+                    self.writemode_filename = writefile_cmd[1][:-3]
+                else:
+                    self.writemode_filename = writefile_cmd[1]
+            self.start_writefile()
         elif code.startswith('%%end_writefile'):
-            self.end_writefile(code)
+            self.end_writefile()
         elif self.writemode:
             if code.startswith('%%scorep_env'):
                 code = code.split('\n')[1:]
