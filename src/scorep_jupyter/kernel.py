@@ -234,8 +234,19 @@ class ScorepPythonKernel(Kernel):
         self.python_script_filename = os.path.realpath(
             '') + '/' + self.writemode_filename + '.py'
         self.bash_script = open(self.bash_script_filename, 'w+')
+        self.bash_script.write('# This bash script is generated automatically to run\n' +
+                               '# Jupyter Notebook -> Python script convertation by Score-P kernel\n' +
+                               '# ' + self.python_script_filename + '\n')
         self.bash_script.write('#!/bin/bash\n')
         self.python_script = open(self.python_script_filename, 'w+')
+        self.python_script.write('# This is the automatic Jupyter Notebook -> Python script convertation by Score-P kernel.\n' +
+                                 '# Code corresponding to the cells not marked for Score-P instrumentation\n' +
+                                 '# is framed "with scorep.instrumenter.disable()".\n' +
+                                 '# The script can be run with proper settings with bash script\n' +
+                                 '# ' + self.bash_script_filename + '\n')
+        # import scorep by default, convertation might add scorep commands
+        # not present in original notebook (e.g. cells without instrumentation)
+        self.python_script.write('import scorep\n')
         self.cell_output('Started converting to Python script. See files:\n' +
                          self.bash_script_filename + '\n' + self.python_script_filename + '\n')
 
@@ -305,16 +316,15 @@ class ScorepPythonKernel(Kernel):
                     self.bash_script.write('export ' + line + '\n')
                 self.cell_output('Environment variables recorded.')
             elif code.startswith('%%scorep_python_binding_arguments'):
-                code = code.split('\n')[1:]
-                # remove noinstrumenter argument - only needed in the notebook
-                if '--noinstrumenter' in code:
-                    code.remove('--noinstrumenter')
-                self.scoreP_python_args = ''.join(code)
+                self.scoreP_python_args = ''.join(code.split('\n')[1:])
                 self.cell_output('Score-P bindings arguments recorded.')
             elif code.startswith('%%enable_multicellmode'):
                 self.writemode_multicell = True
             elif code.startswith('%%finalize_multicellmode'):
                 self.writemode_multicell = False
+            elif code.startswith('%%abort_multicellmode'):
+                self.cell_output(
+                    'Multicell abort command is ignored in write mode, check if the output file is recorded as expected.')
             elif code.startswith('%%execute_with_scorep') or self.writemode_multicell:
                 # cut all magic commands
                 code = code.split('\n')
