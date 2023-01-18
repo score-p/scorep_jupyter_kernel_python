@@ -42,6 +42,8 @@ class ScorepPythonKernel(Kernel):
     multicellmode = False
     init_multicell = False
     writemode = False
+    writemode_filename = 'jupyter_to_script'
+    writemode_multicell = False
     multicellmode_cellcount = 0
     tmpUserPers = ""
     tmpDir = ""
@@ -51,7 +53,7 @@ class ScorepPythonKernel(Kernel):
     def __init__(self, **kwargs):
         Kernel.__init__(self, **kwargs)
         uid = str(uuid.uuid4())
-        #logging.basicConfig(filename="kernel_log.log", level=logging.DEBUG)
+        # logging.basicConfig(filename="kernel_log.log", level=logging.DEBUG)
         # initiate a pipe for communication
         self.persistencePipe = "PersPipe" + uid
         self.codePipe = "CodePipe" + uid + ".py"
@@ -64,19 +66,28 @@ class ScorepPythonKernel(Kernel):
         self.userEnv["PYTHONPATH"] = ":".join(sys.path)
 
     def cell_output(self, string, stream='stdout'):
+        """
+        Display stdout/stderr of the cell execution in the cell output.
+        """
         stream_content = {'name': stream,
                           'text': string}
         self.send_response(self.iopub_socket, 'stream', stream_content)
-    
+
     def kernel_debug(self, code):
-        stdout_string = 'Debug results:\n'
+        """
+        Display current kernel state for debugging purposes.
+        """
+        stdout_string = 'Kernel current state:\n'
         if self.scorePEnv:
-            stdout_string += 'Score-P environment: ' + str(self.scorePEnv) + '\n'
+            stdout_string += 'Score-P environment: ' + \
+                str(self.scorePEnv) + '\n'
         if self.scoreP_python_args:
-            stdout_string += 'Python Binding arguments: ' + str(self.scoreP_python_args) + '\n'
+            stdout_string += 'Score-P Python bindings arguments: ' + \
+                str(self.scoreP_python_args) + '\n'
         if self.tmpUserPers:
-            stdout_string += 'User persistence (modules): ' + self.tmpUserPers + '\n'
-        #TODO: load_user_variables(self.PersPipe)
+            stdout_string += 'User persistence (modules): ' + \
+                self.tmpUserPers + '\n'
+        # TODO: print globals()
         self.cell_output(stdout_string)
 
     def get_output_and_print(self, process2observe, execute_with_scorep):
@@ -106,7 +117,8 @@ class ScorepPythonKernel(Kernel):
             if output:
                 if bytes(self.varsKeyWord, encoding='utf-8').startswith(output):
                     # here we have to read further input to decide whether it is the keyword or not
-                    output += process2observe.stdout.read(len(self.varsKeyWord) - len(output))
+                    output += process2observe.stdout.read(
+                        len(self.varsKeyWord) - len(output))
 
                 idx = output.find(bytes(self.varsKeyWord, encoding='utf-8'))
                 if idx != -1:
@@ -128,61 +140,79 @@ class ScorepPythonKernel(Kernel):
                     output = output[:idx]
                     # ignore errors in encoding here, since that is not our responsibility (but the one of the user's
                     # code)
-                    self.cell_output(output.decode(sys.getdefaultencoding(), errors='ignore'))
+                    self.cell_output(output.decode(
+                        sys.getdefaultencoding(), errors='ignore'))
             if err:
-                self.cell_output(err.decode(sys.getdefaultencoding(), errors='ignore'), 'stderr')
+                self.cell_output(err.decode(
+                    sys.getdefaultencoding(), errors='ignore'), 'stderr')
 
     def set_scorep_env(self, code):
-        # set scorep environment variables
+        """
+        Read and record Score-P environment variables from the cell.
+        """
         scorep_vars = code.split('\n')
         # iterate from first line since this is scoreP_env indicator
         for var in scorep_vars[1:]:
             key_val = var.split('=')
             self.scorePEnv[key_val[0]] = key_val[1]
         self.userEnv.update(self.scorePEnv)
-        self.cell_output('set score-p environment successfully: ' + str(self.scorePEnv))
+        self.cell_output(
+            'Score-P environment set successfully: ' + str(self.scorePEnv))
 
     def set_scorep_pythonargs(self, code):
-        # set scorep python bindings arguments
-        self.scoreP_python_args = ' '.join(code.split('\n')[1:])
-        self.cell_output('Use the following score-p python binding arguments: ' + str(
-                                     self.scoreP_python_args))
+        """
+        Read and record Score-P Python bindings arguments from the cell.
+        """
+        self.scoreP_python_args = ''.join(code.split('\n')[1:])
+        self.cell_output(
+            'Score-P Python bindings arguments set successfully: ' + str(self.scoreP_python_args))
 
     def enable_multicellmode(self):
-        # start to mark the cells for multi cell mode
+        """
+        Start aggregating cells for multicell mode (executed only after %%finalize_multicellmode).
+        """
         self.tmpCodeString = ""
         self.multicellmode = True
         self.multicellmode_cellcount = 0
         self.init_multicell = True
-        self.cell_output('started multi-cell mode. The following cells will be marked.')
+        self.cell_output(
+            'Started multicell mode. The following cells will be marked.')
 
     def abort_multicellmode(self):
-        # abort the multi cell mode
+        """
+        Abort the multicell mode without executing aggregated cells.
+        """
         self.multicellmode = False
         self.init_multicell = False
         self.multicellmode_cellcount = 0
-        self.cell_output('aborted multi-cell mode.')
+        self.cell_output('Aborted multicell mode.')
 
     def prepare_code(self, codeWithUserVars):
 
-        user_variables = userpersistence.get_user_variables_from_code(codeWithUserVars)
+        user_variables = userpersistence.get_user_variables_from_code(
+            codeWithUserVars)
         # all cells that are not executed in multi cell mode have to import them
         codeStr = "from " + userpersistence_token + " import * \n"
         # prior imports can be loaded before runtime. we have to load them this way because they can not be pickled
         # user variables can be pickled and should be loaded at runtime
         codeStr += self.tmpUserPers + "\n"
-        codeStr += "prior = load_user_variables('" + self.persistencePipe + "')\n"
+        codeStr += "prior = load_user_variables('" + \
+            self.persistencePipe + "')\n"
         codeStr += "globals().update(prior)\n"
 
         codeStr += "\n" + codeWithUserVars
         codeStr += "\nsave_user_variables(globals(), " + str(
             user_variables) + ", '" + self.persistencePipe + "', prior) "
-        self.tmpUserPers = userpersistence.save_user_definitions(codeWithUserVars, self.tmpUserPers)
+        self.tmpUserPers = userpersistence.save_user_definitions(
+            codeWithUserVars, self.tmpUserPers)
         return codeStr
 
     def finalize_multicellmode(self, silent):
-        # finish multi cell mode and execute the code of the marked cells
-        self.cell_output('finalizing multi-cell mode and execute cells.\n')
+        """
+        Finish aggregating cells for multicell mode and execute them.
+        """
+        self.cell_output(
+            'Finalizing multicell mode and executing the cells.\n')
 
         self.tmpCodeString = self.prepare_code(self.tmpCodeString)
 
@@ -192,22 +222,51 @@ class ScorepPythonKernel(Kernel):
 
         self.execute_code(execute_with_scorep=True, silent=silent)
 
-    def start_writefile(self, code):
+    def start_writefile(self):
+        """
+        Start recording the notebook as a Python script. Custom file name
+        can be defined as an argument of the magic command.
+        """
+        # TODO: check for os path existence
         self.writemode = True
-        self.bash_script = open('run_script.sh', 'w+')
+        self.bash_script_filename = os.path.realpath(
+            '') + '/' + self.writemode_filename + '_run.sh'
+        self.python_script_filename = os.path.realpath(
+            '') + '/' + self.writemode_filename + '.py'
+        self.bash_script = open(self.bash_script_filename, 'w+')
+        self.bash_script.write('# This bash script is generated automatically to run\n' +
+                               '# Jupyter Notebook -> Python script convertation by Score-P kernel\n' +
+                               '# ' + self.python_script_filename + '\n')
         self.bash_script.write('#!/bin/bash\n')
-        self.python_script = open('script.py', 'w')
-        self.cell_output('Started writing python script.')
+        self.python_script = open(self.python_script_filename, 'w+')
+        self.python_script.write('# This is the automatic Jupyter Notebook -> Python script convertation by Score-P kernel.\n' +
+                                 '# Code corresponding to the cells not marked for Score-P instrumentation\n' +
+                                 '# is framed "with scorep.instrumenter.disable()".\n' +
+                                 '# The script can be run with proper settings with bash script\n' +
+                                 '# ' + self.bash_script_filename + '\n')
+        # import scorep by default, convertation might add scorep commands
+        # not present in original notebook (e.g. cells without instrumentation)
+        self.python_script.write('import scorep\n')
+        self.cell_output('Started converting to Python script. See files:\n' +
+                         self.bash_script_filename + '\n' + self.python_script_filename + '\n')
 
-    def end_writefile(self, code):
-        #TODO: check for os path existence - gets stuck?
+    def end_writefile(self):
+        """
+        Finish recording the notebook as a Python script.
+        """
+        # TODO: check for os path existence
         self.writemode = False
-        self.bash_script.write(PYTHON_EXECUTABLE + ' -m scorep ' + self.scoreP_python_args + ' script.py')
+        self.bash_script.write(PYTHON_EXECUTABLE + ' -m scorep ' +
+                               self.scoreP_python_args + ' ' + self.python_script_filename)
         self.bash_script.close()
         self.python_script.close()
-        self.cell_output('Finished writing python scipt, files closed.')
+        self.cell_output('Finished converting to Python script, files closed.')
 
     def execute_code(self, execute_with_scorep, silent):
+        """
+        Execute the cell as a subprocess with the saved persistence context,
+        either with a Score-P Python bindings or not.
+        """
         # execute cell with or without scorep
         if execute_with_scorep:
             # create a file with the code (-c not working with scorep python)
@@ -231,14 +290,25 @@ class ScorepPythonKernel(Kernel):
         if not silent:
             self.get_output_and_print(user_code_process, execute_with_scorep)
 
-    # overwrite the default do_execute() function of the ipykernel
     def do_execute(self, code, silent, store_history=True, user_expressions=None,
                    allow_stdin=False):
-
+        """
+        Override of do_execute() method of ipykernel. Depending on the magic commands,
+        cell is either written to Python script, executed with Score-P or contains
+        Score-P environment variables/Score-P Python bindings arguments which are saved.
+        """
+        # cell recording
         if code.startswith('%%start_writefile'):
-            self.start_writefile(code)
+            # get file name from arguments of magic command
+            writefile_cmd = code.split('\n')[0].split(' ')
+            if len(writefile_cmd) > 1:
+                if writefile_cmd[1].endswith('.py'):
+                    self.writemode_filename = writefile_cmd[1][:-3]
+                else:
+                    self.writemode_filename = writefile_cmd[1]
+            self.start_writefile()
         elif code.startswith('%%end_writefile'):
-            self.end_writefile(code)
+            self.end_writefile()
         elif self.writemode:
             if code.startswith('%%scorep_env'):
                 code = code.split('\n')[1:]
@@ -246,15 +316,34 @@ class ScorepPythonKernel(Kernel):
                     self.bash_script.write('export ' + line + '\n')
                 self.cell_output('Environment variables recorded.')
             elif code.startswith('%%scorep_python_binding_arguments'):
-                self.scoreP_python_args = ' '.join(code.split('\n')[1:])
+                self.scoreP_python_args = ''.join(code.split('\n')[1:])
                 self.cell_output('Score-P bindings arguments recorded.')
-            else:
-                #cut all magic commands
+            elif code.startswith('%%enable_multicellmode'):
+                self.writemode_multicell = True
+            elif code.startswith('%%finalize_multicellmode'):
+                self.writemode_multicell = False
+            elif code.startswith('%%abort_multicellmode'):
+                self.cell_output(
+                    'Multicell abort command is ignored in write mode, check if the output file is recorded as expected.')
+            elif code.startswith('%%execute_with_scorep') or self.writemode_multicell:
+                # cut all magic commands
                 code = code.split('\n')
-                code = ''.join([line + '\n' for line in code if not line.startswith('%%')])
-                self.python_script.write(code)
-                self.cell_output('Python commands recorded.')
+                code = ''.join(
+                    [line + '\n' for line in code if not line.startswith('%%')])
+                self.python_script.write(code + '\n')
+                self.cell_output(
+                    'Python commands with instrumentation recorded.')
+            elif not self.writemode_multicell:
+                # cut all magic commands
+                code = code.split('\n')
+                code = ''.join(
+                    ['    ' + line + '\n' for line in code if not line.startswith('%%')])
+                self.python_script.write(
+                    'with scorep.instrumenter.disable():\n' + code + '\n')
+                self.cell_output(
+                    'Python commands without instrumentation recorded.')
 
+        # cell execution
         elif code.startswith('%%scorep_env'):
             self.set_scorep_env(code)
         elif code.startswith('%%scorep_python_binding_arguments'):
@@ -277,8 +366,8 @@ class ScorepPythonKernel(Kernel):
                 # in multi cell mode, just append the code because we execute multiple cells as one
                 self.multicellmode_cellcount += 1
                 self.tmpCodeString += "\n" + code
-                self.cell_output('marked the cell for multi-cell mode. This cell will be executed at '
-                                                 'position: ' + str(self.multicellmode_cellcount))
+                self.cell_output(
+                    'Cell marked for multicell mode. It will be executed at position: ' + str(self.multicellmode_cellcount))
             else:
                 self.tmpCodeString = self.prepare_code(code)
                 self.execute_code(execute_with_scorep, silent)
@@ -299,6 +388,10 @@ class ScorepPythonKernel(Kernel):
                 }
 
     def do_shutdown(self, restart):
+        """
+        Override of do_shutdown() method of ipykernel. Cleans up
+        persistence and code pipes before the exit.
+        """
         userpersistence.tidy_up(self.persistencePipe)
         if os.path.exists(self.codePipe):
             os.remove(self.codePipe)
@@ -307,9 +400,15 @@ class ScorepPythonKernel(Kernel):
                 }
 
     def do_clear(self):
+        """
+        Override of do_clear() method of ipykernel.
+        """
         pass
 
     def do_apply(self, content, bufs, msg_id, reply_metadata):
+        """
+        Override of do_apply() method of ipykernel.
+        """
         pass
 
     '''
@@ -322,7 +421,6 @@ class ScorepPythonKernel(Kernel):
             stream_content_stdout = {'name': 'stdout', 'text': 'memory'}
         elif code.startswith('%%profile_functioncalls'):
             stream_content_stdout = {'name': 'stdout', 'text': 'calls'}
-
         self.send_response(self.iopub_socket, 'display_data', stream_content_stdout)
     '''
 

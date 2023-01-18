@@ -37,6 +37,20 @@ There is no "unmark" command available but you can abort the multicellmode by th
 
 The `%%enable_multicellmode`, `%%finalize_multicellmode` and `%%abort_multicellmode` commands should be run in an exclusive cell. Additional code in the cell will be ignored.
 
+### Write mode
+
+Analogous to [%%writefile](https://ipython.readthedocs.io/en/stable/interactive/magics.html#cellmagic-writefile) command in IPykernel, you can convert a set of cells to the Python script which is to be executed with Score-P Python bindings (with settings and environment described in auxillary bash script).
+
+Running a cell with `%%start_writefile` magic command will begin the write mode, `%%end_writefile` will subsequently end it.  Running other cells in the write mode will add their contents to the Python script or its environment instead of executing them. Specifically:
+
+- Recording a cell containing `%%scorep_env` or `%%scorep_python_binding_arguments` will add the environment variables/Score-P Python bindings to the bash script.
+- Code of a cell which is not to be executed with Score-P (not inside the multicell mode and without `%%execute_with_scorep`) will be framed with `with scorep.instrumenter.disable()` in the Python script to prevent instrumentation.
+- Other cells will be recorded without any changes, except for dropping all magic commands.
+
+Note that `%%abort_multicellmode` will be ignored in the write mode and will not unmark previous cells from instrumentation.
+
+By default, the Python script will be called `jupyter_to_script.py`. You can also specify the name by providing it as an argument to the start magic command, e.g. `%%start_writefile myscript.py`.
+
 ## Presentation of Performance Data
 
 To inspect the collected performance data, use tools as Vampir (Trace) or Cube (Profile).
