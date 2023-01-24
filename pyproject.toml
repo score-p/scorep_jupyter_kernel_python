@@ -23,7 +23,6 @@ dependencies = [
   "jupyter-client",
   "astunparse",
   "scorep==4.0.2",
-  "uuid",
   "dill"
 ]
 
