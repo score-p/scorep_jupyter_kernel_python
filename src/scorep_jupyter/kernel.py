@@ -38,7 +38,7 @@ class ScorepPythonKernel(Kernel):
 
     userEnv = {}
     scorePEnv = {}
-    scoreP_python_args = False
+    scoreP_python_args = ""
     multicellmode = False
     init_multicell = False
     writemode = False
