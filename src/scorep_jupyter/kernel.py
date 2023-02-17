@@ -38,7 +38,7 @@ class ScorepPythonKernel(Kernel):
 
     userEnv = {}
     scorePEnv = {}
-    scoreP_python_args = False
+    scoreP_python_args = ""
     multicellmode = False
     init_multicell = False
     writemode = False
@@ -126,7 +126,8 @@ class ScorepPythonKernel(Kernel):
                     # now child waits for new process to connect
                     # the parent can report to the frontend that the child has finished, so break the loop
                     process_finished = True
-
+                    self.tmpUserPers = userpersistence.save_user_definitions(
+                        self.tmpCodeString, self.tmpUserPers)
                     # if it was a score-p cell, then we can not wait till the next cell starts
                     # create a dummy subprocess for the persistence handling
                     if execute_with_scorep:
@@ -203,8 +204,6 @@ class ScorepPythonKernel(Kernel):
         codeStr += "\n" + codeWithUserVars
         codeStr += "\nsave_user_variables(globals(), " + str(
             user_variables) + ", '" + self.persistencePipe + "', prior) "
-        self.tmpUserPers = userpersistence.save_user_definitions(
-            codeWithUserVars, self.tmpUserPers)
         return codeStr
 
     def finalize_multicellmode(self, silent):
