@@ -26,6 +26,13 @@ class ScorepPythonKernel(IPythonKernel):
     user_persistence = ""
     scorep_binding_args = []
     scorep_env = []
+    # TODO: can't decrease self.shell.execution_count, must use custom execution counter
+    # "out" counter is still broken
+    custom_execution_count = 0
+
+    multicellmode = False
+    multicellmode_cellcount = 0
+    scorep_code = ""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -45,6 +52,12 @@ class ScorepPythonKernel(IPythonKernel):
         self.scorep_env += code.split('\n')[1:]
         self.cell_output(
             'Score-P environment set successfully: ' + str(self.scorep_env))
+        self.custom_execution_count += 1
+        return {'status': 'ok',
+                'execution_count': self.custom_execution_count,
+                'payload': [],
+                'user_expressions': {},
+                }
 
     def set_scorep_pythonargs(self, code):
         """
@@ -53,12 +66,54 @@ class ScorepPythonKernel(IPythonKernel):
         self.scorep_binding_args += code.split('\n')[1:]
         self.cell_output(
             'Score-P Python binding arguments set successfully: ' + str(self.scorep_binding_args))
+        self.custom_execution_count += 1
+        return {'status': 'ok',
+                'execution_count': self.custom_execution_count,
+                'payload': [],
+                'user_expressions': {},
+                }
+
+    def enable_multicellmode(self):
+        # TODO: scorep setup cells are not affected
+        self.multicellmode = True
+        self.cell_output(
+            'Multicell mode enabled. The following cells will be marked for instrumented execution.')
+        self.custom_execution_count += 1
+        return {'status': 'ok',
+                'execution_count': self.custom_execution_count,
+                'payload': [],
+                'user_expressions': {},
+                }
+
+    def abort_multicellmode(self):
+        self.multicellmode = False
+        self.code_to_instrument = ""
+        self.cell_output('Multicell mode aborted.')
+        self.custom_execution_count += 1
+        return {'status': 'ok',
+                'execution_count': self.custom_execution_count,
+                'payload': [],
+                'user_expressions': {},
+                }
+
+    def append_multicellmode(self, code):
+        self.code_to_instrument += ("\n" + code)
+        self.multicellmode_cellcount += 1
+        self.cell_output(
+            f'Cell marked for multicell mode. It will be executed at position {self.multicellmode_cellcount}')
+        self.custom_execution_count += 1
+        return {'status': 'ok',
+                'execution_count': self.custom_execution_count,
+                'payload': [],
+                'user_expressions': {},
+                }
 
     def save_definitions(self, code):
         """
         Extract imported modules and definitions of classes and functions from the code block.
         """
-        # can't use in kernel as import from userpersistence - self-reference error during dill dump of notebook
+        # can't use in kernel as import from userpersistence:
+        # self-reference error during dill dump of notebook
         root = ast.parse(code)
         definitions = []
         for top_node in ast.iter_child_nodes(root):
@@ -104,67 +159,106 @@ class ScorepPythonKernel(IPythonKernel):
         execute cell with Score-P Python binding.
         """
         # TODO: fix cell id counter
-        if code.startswith('%%scorep_env'):
-            self.set_scorep_env(code)
-            reply_status = {'status': 'ok',
-                            # The base class increments the execution count
-                            'execution_count': self.execution_count,
-                            'payload': [],
-                            'user_expressions': {},
-                            }
-        elif code.startswith('%%scorep_python_binding_arguments'):
-            self.set_scorep_pythonargs(code)
-            reply_status = {'status': 'ok',
-                            # The base class increments the execution count
-                            'execution_count': self.execution_count,
-                            'payload': [],
-                            'user_expressions': {},
-                            }
-        elif code.startswith('%%execute_with_scorep'):
-            code = code.split("\n", 1)[1]
+        # TODO: can't be a separate method due to super() calls
+        if code.startswith('%%finalize_multicellmode') or code.startswith('%%execute_with_scorep'):
+            # Execute the code (previously) gathered at self.code_to_instrument
+            if code.startswith('%%finalize_multicellmode') and not self.multicellmode:
+                self.cell_output(
+                    "Error: Multicell mode disabled. Run a cell with %%enable_multicellmode command first.")
+                self.custom_execution_count += 1
+                return {'status': 'ok',
+                        'execution_count': self.custom_execution_count,
+                        'payload': [],
+                        'user_expressions': {},
+                        }
+            if code.startswith('%%execute_with_scorep'):
+                self.code_to_instrument = code.split("\n", 1)[1]
 
             # ghost cell - dump current jupyter session
             dump_jupyter = "import dill\n" + \
-                          f"dill.dump_session('{jupyter_dump}')"
-            await super().do_execute(dump_jupyter, silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
+                f"dill.dump_session('{jupyter_dump}')"
+            reply_status_dump = await super().do_execute(dump_jupyter, silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
 
-            # prepare code for scorep instrumented execution
-            user_variables = self.get_user_variables(code)
-            
+            if reply_status_dump['status'] != 'ok':
+                self.custom_execution_count += 1
+                reply_status_dump['execution_count'] = self.custom_execution_count
+                return reply_status_dump
+
+            # prepare code for the scorep binding instrumented execution
+            user_variables = self.get_user_variables(self.code_to_instrument)
+
             scorep_code = "import scorep\n" + \
                           "with scorep.instrumenter.disable():\n" + \
-                         f"    from {userpersistence_token} import * \n" + \
+                f"    from {userpersistence_token} import * \n" + \
                           "    import dill\n" + \
-                         f"    globals().update(dill.load_module_asdict('{jupyter_dump}'))\n" + \
-                          code + "\n" + \
+                f"    globals().update(dill.load_module_asdict('{jupyter_dump}'))\n" + \
+                          self.code_to_instrument + "\n" + \
                           "with scorep.instrumenter.disable():\n" + \
-                         f"   save_user_variables(globals(), {str(user_variables)}, '{subprocess_dump}')"
+                f"   save_user_variables(globals(), {str(user_variables)}, '{subprocess_dump}')"
 
             scorep_script_file = open(scorep_script_name, 'w+')
             scorep_script_file.write(scorep_code)
             scorep_script_file.close()
 
             script_run = "%%bash\n" + \
-                        f"{' '.join(self.scorep_env)} {PYTHON_EXECUTABLE} -m scorep {' '.join(self.scorep_binding_args)} {scorep_script_name}"
-            await super().do_execute(script_run, silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
+                f"{' '.join(self.scorep_env)} {PYTHON_EXECUTABLE} -m scorep {' '.join(self.scorep_binding_args)} {scorep_script_name}"
+            reply_status_exec = await super().do_execute(script_run, silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
+
+            if reply_status_exec['status'] != 'ok':
+                self.custom_execution_count += 1
+                reply_status_exec['execution_count'] = self.custom_execution_count
+                return reply_status_exec
 
             # ghost cell - load subprocess persistence back to jupyter session
-            load_jupyter = self.save_definitions(code) + "\n" + \
-                          f"vars_load = open('{subprocess_dump}', 'rb')\n" + \
-                           "globals().update(dill.load(vars_load))\n" + \
-                           "vars_load.close()"
-            await super().do_execute(load_jupyter, silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
+            load_jupyter = self.save_definitions(self.code_to_instrument) + "\n" + \
+                f"vars_load = open('{subprocess_dump}', 'rb')\n" + \
+                "globals().update(dill.load(vars_load))\n" + \
+                "vars_load.close()"
+            reply_status_load = await super().do_execute(load_jupyter, silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
 
-            reply_status = {'status': 'ok',
-                            # The base class increments the execution count
-                            'execution_count': self.execution_count,
-                            'payload': [],
-                            'user_expressions': {},
-                            }
+            if reply_status_load['status'] != 'ok':
+                self.custom_execution_count += 1
+                reply_status_load['execution_count'] = self.custom_execution_count
+                return reply_status_load
+
+            self.code_to_instrument = ""
+            if code.startswith('%%finalize_multicellmode'):
+                self.multicellmode_cellcount = 0
+                self.multicellmode = False
+
+            self.cell_output(
+                f"Instrumentation results can be found in {os.getcwd()}/{max([d for d in os.listdir('.') if os.path.isdir(d)], key=os.path.getmtime)}")
+
+            self.custom_execution_count += 1
+            return {'status': 'ok',
+                    'execution_count': self.custom_execution_count,
+                    'payload': [],
+                    'user_expressions': {},
+                    }
+        elif code.startswith('%%abort_multicellmode'):
+            if not self.multicellmode:
+                self.cell_output(
+                    "Error: Multicell mode disabled. Run a cell with %%enable_multicellmode command first.")
+                self.custom_execution_count += 1
+                return {'status': 'ok',
+                        'execution_count': self.custom_execution_count,
+                        'payload': [],
+                        'user_expressions': {},
+                        }
+            return self.abort_multicellmode()
+        elif code.startswith('%%enable_multicellmode'):
+            return self.enable_multicellmode()
+        elif code.startswith('%%scorep_env'):
+            return self.set_scorep_env(code)
+        elif code.startswith('%%scorep_python_binding_arguments'):
+            return self.set_scorep_pythonargs(code)
+        elif self.multicellmode:
+            return self.append_multicellmode(code)
         else:
             reply_status = await super().do_execute(code, silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
-
-        return reply_status
+            self.custom_execution_count += 1
+            reply_status['execution_count'] = self.custom_execution_count
+            return reply_status
 
     def do_shutdown(self, restart):
         """
@@ -174,7 +268,7 @@ class ScorepPythonKernel(IPythonKernel):
         for aux_file in [scorep_script_name, jupyter_dump, subprocess_dump]:
             if os.path.exists(aux_file):
                 os.remove(aux_file)
-        super().do_shutdown(restart)
+        return super().do_shutdown(restart)
 
 
 if __name__ == '__main__':
