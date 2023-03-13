@@ -66,6 +66,7 @@ class ScorepPythonKernel(IPythonKernel):
             'Score-P environment set successfully: ' + str(self.scorep_env))
         
         self.custom_execution_count += 1
+        self.shell.execution_count += 1
         return {'status': 'ok',
                 'execution_count': self.custom_execution_count,
                 'payload': [],
@@ -81,6 +82,7 @@ class ScorepPythonKernel(IPythonKernel):
             'Score-P Python binding arguments set successfully: ' + str(self.scorep_binding_args))
         
         self.custom_execution_count += 1
+        self.shell.execution_count += 1
         return {'status': 'ok',
                 'execution_count': self.custom_execution_count,
                 'payload': [],
@@ -94,6 +96,7 @@ class ScorepPythonKernel(IPythonKernel):
             'Multicell mode enabled. The following cells will be marked for instrumented execution.')
         
         self.custom_execution_count += 1
+        self.shell.execution_count += 1
         return {'status': 'ok',
                 'execution_count': self.custom_execution_count,
                 'payload': [],
@@ -106,6 +109,7 @@ class ScorepPythonKernel(IPythonKernel):
         self.cell_output('Multicell mode aborted.')
         
         self.custom_execution_count += 1
+        self.shell.execution_count += 1
         return {'status': 'ok',
                 'execution_count': self.custom_execution_count,
                 'payload': [],
@@ -119,6 +123,7 @@ class ScorepPythonKernel(IPythonKernel):
             f'Cell marked for multicell mode. It will be executed at position {self.multicellmode_cellcount}')
         
         self.custom_execution_count += 1
+        self.shell.execution_count += 1
         return {'status': 'ok',
                 'execution_count': self.custom_execution_count,
                 'payload': [],
@@ -155,6 +160,7 @@ class ScorepPythonKernel(IPythonKernel):
                          self.bash_script_filename + '\n' + self.python_script_filename + '\n')
 
         self.custom_execution_count += 1
+        self.shell.execution_count += 1
         return {'status': 'ok',
                 'execution_count': self.custom_execution_count,
                 'payload': [],
@@ -175,6 +181,7 @@ class ScorepPythonKernel(IPythonKernel):
         self.cell_output('Finished converting to Python script, files closed.')
 
         self.custom_execution_count += 1
+        self.shell.execution_count += 1
         return {'status': 'ok',
                 'execution_count': self.custom_execution_count,
                 'payload': [],
@@ -217,6 +224,7 @@ class ScorepPythonKernel(IPythonKernel):
                 'Python commands without instrumentation recorded.')
 
         self.custom_execution_count += 1
+        self.shell.execution_count += 1
         return {'status': 'ok',
                 'execution_count': self.custom_execution_count,
                 'payload': [],
@@ -271,10 +279,12 @@ class ScorepPythonKernel(IPythonKernel):
         # ghost cell - dump current jupyter session
         dump_jupyter = "import dill\n" + \
                       f"dill.dump_session('{jupyter_dump}')"
-        reply_status_dump = await super().do_execute(dump_jupyter, silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
+        reply_status_dump = await super().do_execute(dump_jupyter, silent, store_history=False,
+                                                     user_expressions=user_expressions, allow_stdin=allow_stdin, cell_id=cell_id)
 
         if reply_status_dump['status'] != 'ok':
             self.custom_execution_count += 1
+            self.shell.execution_count += 1
             reply_status_dump['execution_count'] = self.custom_execution_count
             return reply_status_dump
 
@@ -296,11 +306,13 @@ class ScorepPythonKernel(IPythonKernel):
 
         script_run = "%%bash\n" + \
                     f"{' '.join(self.scorep_env)} {PYTHON_EXECUTABLE} -m scorep {' '.join(self.scorep_binding_args)} {scorep_script_name}"
-        reply_status_exec = await super().do_execute(script_run, silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
+        reply_status_exec = await super().do_execute(script_run, silent, store_history,
+                                                     user_expressions, allow_stdin, cell_id=cell_id)
 
         if reply_status_exec['status'] != 'ok':
             self.custom_execution_count += 1
-            reply_status_exec['execution_count'] = self.custom_execution_count
+            self.shell.execution_count += 1
+            reply_status_exec['execution_count'] = self.custom_execution_counts
             return reply_status_exec
 
         # ghost cell - load subprocess persistence back to jupyter session
@@ -308,15 +320,25 @@ class ScorepPythonKernel(IPythonKernel):
                       f"vars_load = open('{subprocess_dump}', 'rb')\n" + \
                        "globals().update(dill.load(vars_load))\n" + \
                        "vars_load.close()"
-        reply_status_load = await super().do_execute(load_jupyter, silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
+        reply_status_load = await super().do_execute(load_jupyter, silent, store_history=False,
+                                                     user_expressions=user_expressions, allow_stdin=allow_stdin, cell_id=cell_id)
 
         if reply_status_load['status'] != 'ok':
             self.custom_execution_count += 1
             reply_status_load['execution_count'] = self.custom_execution_count
             return reply_status_load
 
+        folder_arg = next((arg for arg in self.scorep_binding_args if "SCOREP_EXPERIMENT_DIRECTORY" in arg), None)
+        if folder_arg:
+            scorep_folder = folder_arg.split('=')[-1]
+        else:
+            scorep_folder = max([d for d in os.listdir('.') if os.path.isdir(d) and 'scorep' in d], key=os.path.getmtime)
         self.cell_output(
-            f"Instrumentation results can be found in {os.getcwd()}/{max([d for d in os.listdir('.') if os.path.isdir(d)], key=os.path.getmtime)}")
+            f"Instrumentation results can be found in {os.getcwd()}/{scorep_folder}")
+
+        for aux_file in [scorep_script_name, jupyter_dump, subprocess_dump]:
+            if os.path.exists(aux_file):
+                os.remove(aux_file)
 
         self.custom_execution_count += 1
         return {'status': 'ok',
@@ -352,6 +374,7 @@ class ScorepPythonKernel(IPythonKernel):
                 self.cell_output(
                     "Error: Multicell mode disabled. Run a cell with %%enable_multicellmode command first.")
                 self.custom_execution_count += 1
+                self.shell.execution_count += 1
                 return {'status': 'ok',
                         'execution_count': self.custom_execution_count,
                         'payload': [],
@@ -369,6 +392,7 @@ class ScorepPythonKernel(IPythonKernel):
                 self.cell_output(
                     "Error: Multicell mode disabled. Run a cell with %%enable_multicellmode command first.")
                 self.custom_execution_count += 1
+                self.shell.execution_count += 1
                 return {'status': 'ok',
                         'execution_count': self.custom_execution_count,
                         'payload': [],
@@ -391,17 +415,6 @@ class ScorepPythonKernel(IPythonKernel):
             self.custom_execution_count += 1
             reply_status['execution_count'] = self.custom_execution_count
             return reply_status
-
-    def do_shutdown(self, restart):
-        """
-        Override of do_shutdown() method of IPythonKernel. Clean up
-        persistence and variables dumps before the exit.
-        """
-        for aux_file in [scorep_script_name, jupyter_dump, subprocess_dump]:
-            if os.path.exists(aux_file):
-                os.remove(aux_file)
-        return super().do_shutdown(restart)
-
 
 if __name__ == '__main__':
     from ipykernel.kernelapp import IPKernelApp
