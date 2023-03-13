@@ -10,6 +10,7 @@ scorep_script_name = "scorep_script.py"
 jupyter_dump = "jupyter_dump.pkl"
 subprocess_dump = "subprocess_dump.pkl"
 
+
 class ScorepPythonKernel(IPythonKernel):
     implementation = 'Python and Score-P'
     implementation_version = '1.0'
@@ -25,9 +26,6 @@ class ScorepPythonKernel(IPythonKernel):
     user_persistence = ""
     scorep_binding_args = []
     scorep_env = []
-    # TODO: can't decrease self.shell.execution_count, must use custom execution counter
-    # "out" counter is still broken
-    custom_execution_count = 0
 
     multicellmode = False
     multicellmode_cellcount = 0
@@ -49,13 +47,20 @@ class ScorepPythonKernel(IPythonKernel):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    # TODO: find out how output is printed in IPythonKernel
     def cell_output(self, string, stream='stdout'):
         """
         Display string as cell output.
         """
         stream_content = {'name': stream, 'text': string}
         self.send_response(self.iopub_socket, 'stream', stream_content)
+
+    def standard_reply(self):
+        self.shell.execution_count += 1
+        return {'status': 'ok',
+                'execution_count': self.shell.execution_count - 1,
+                'payload': [],
+                'user_expressions': {},
+                }
 
     def set_scorep_env(self, code):
         """
@@ -64,14 +69,7 @@ class ScorepPythonKernel(IPythonKernel):
         self.scorep_env += code.split('\n')[1:]
         self.cell_output(
             'Score-P environment set successfully: ' + str(self.scorep_env))
-        
-        self.custom_execution_count += 1
-        self.shell.execution_count += 1
-        return {'status': 'ok',
-                'execution_count': self.custom_execution_count,
-                'payload': [],
-                'user_expressions': {},
-                }
+        return self.standard_reply()
 
     def set_scorep_pythonargs(self, code):
         """
@@ -80,55 +78,27 @@ class ScorepPythonKernel(IPythonKernel):
         self.scorep_binding_args += code.split('\n')[1:]
         self.cell_output(
             'Score-P Python binding arguments set successfully: ' + str(self.scorep_binding_args))
-        
-        self.custom_execution_count += 1
-        self.shell.execution_count += 1
-        return {'status': 'ok',
-                'execution_count': self.custom_execution_count,
-                'payload': [],
-                'user_expressions': {},
-                }
+        return self.standard_reply()
 
     def enable_multicellmode(self):
         # TODO: scorep setup cells are not affected
         self.multicellmode = True
         self.cell_output(
             'Multicell mode enabled. The following cells will be marked for instrumented execution.')
-        
-        self.custom_execution_count += 1
-        self.shell.execution_count += 1
-        return {'status': 'ok',
-                'execution_count': self.custom_execution_count,
-                'payload': [],
-                'user_expressions': {},
-                }
+        return self.standard_reply()
 
     def abort_multicellmode(self):
         self.multicellmode = False
         self.multicell_code = ""
         self.cell_output('Multicell mode aborted.')
-        
-        self.custom_execution_count += 1
-        self.shell.execution_count += 1
-        return {'status': 'ok',
-                'execution_count': self.custom_execution_count,
-                'payload': [],
-                'user_expressions': {},
-                }
+        return self.standard_reply()
 
     def append_multicellmode(self, code):
         self.multicell_code += ("\n" + code)
         self.multicellmode_cellcount += 1
         self.cell_output(
             f'Cell marked for multicell mode. It will be executed at position {self.multicellmode_cellcount}')
-        
-        self.custom_execution_count += 1
-        self.shell.execution_count += 1
-        return {'status': 'ok',
-                'execution_count': self.custom_execution_count,
-                'payload': [],
-                'user_expressions': {},
-                }
+        return self.standard_reply()
 
     def start_writefile(self):
         """
@@ -158,14 +128,7 @@ class ScorepPythonKernel(IPythonKernel):
 
         self.cell_output('Started converting to Python script. See files:\n' +
                          self.bash_script_filename + '\n' + self.python_script_filename + '\n')
-
-        self.custom_execution_count += 1
-        self.shell.execution_count += 1
-        return {'status': 'ok',
-                'execution_count': self.custom_execution_count,
-                'payload': [],
-                'user_expressions': {},
-                }
+        return self.standard_reply()
 
     def end_writefile(self):
         """
@@ -179,14 +142,7 @@ class ScorepPythonKernel(IPythonKernel):
         self.bash_script.close()
         self.python_script.close()
         self.cell_output('Finished converting to Python script, files closed.')
-
-        self.custom_execution_count += 1
-        self.shell.execution_count += 1
-        return {'status': 'ok',
-                'execution_count': self.custom_execution_count,
-                'payload': [],
-                'user_expressions': {},
-                }
+        return self.standard_reply()
 
     def append_writefile(self, code):
         if code.startswith('%%scorep_env'):
@@ -195,7 +151,7 @@ class ScorepPythonKernel(IPythonKernel):
         elif code.startswith('%%scorep_python_binding_arguments'):
             self.writemode_scorep_binding_args += code.split('\n')[1:]
             self.cell_output('Score-P bindings arguments recorded.')
-        
+
         elif code.startswith('%%enable_multicellmode'):
             self.writemode_multicell = True
         elif code.startswith('%%finalize_multicellmode'):
@@ -203,7 +159,7 @@ class ScorepPythonKernel(IPythonKernel):
         elif code.startswith('%%abort_multicellmode'):
             self.cell_output(
                 'Multicell abort command is ignored in write mode, check if the output file is recorded as expected.')
-        
+
         elif code.startswith('%%execute_with_scorep') or self.writemode_multicell:
             # cut all magic commands
             code = code.split('\n')
@@ -212,7 +168,7 @@ class ScorepPythonKernel(IPythonKernel):
             self.python_script.write(code + '\n')
             self.cell_output(
                 'Python commands with instrumentation recorded.')
-        
+
         elif not self.writemode_multicell:
             # cut all magic commands
             code = code.split('\n')
@@ -222,14 +178,7 @@ class ScorepPythonKernel(IPythonKernel):
                 'with scorep.instrumenter.disable():\n' + code + '\n')
             self.cell_output(
                 'Python commands without instrumentation recorded.')
-
-        self.custom_execution_count += 1
-        self.shell.execution_count += 1
-        return {'status': 'ok',
-                'execution_count': self.custom_execution_count,
-                'payload': [],
-                'user_expressions': {},
-                }
+        return self.standard_reply()
 
     def save_definitions(self, code):
         """
@@ -275,7 +224,7 @@ class ScorepPythonKernel(IPythonKernel):
         return variables
 
     async def scorep_execute(self, code, silent, store_history=True, user_expressions=None,
-                         allow_stdin=False, *, cell_id=None):
+                             allow_stdin=False, *, cell_id=None):
         # ghost cell - dump current jupyter session
         dump_jupyter = "import dill\n" + \
                       f"dill.dump_session('{jupyter_dump}')"
@@ -283,9 +232,8 @@ class ScorepPythonKernel(IPythonKernel):
                                                      user_expressions=user_expressions, allow_stdin=allow_stdin, cell_id=cell_id)
 
         if reply_status_dump['status'] != 'ok':
-            self.custom_execution_count += 1
             self.shell.execution_count += 1
-            reply_status_dump['execution_count'] = self.custom_execution_count
+            reply_status_dump['execution_count'] = self.shell.execution_count - 1
             return reply_status_dump
 
         # prepare code for the scorep binding instrumented execution
@@ -305,14 +253,11 @@ class ScorepPythonKernel(IPythonKernel):
         scorep_script_file.close()
 
         script_run = "%%bash\n" + \
-                    f"{' '.join(self.scorep_env)} {PYTHON_EXECUTABLE} -m scorep {' '.join(self.scorep_binding_args)} {scorep_script_name}"
-        reply_status_exec = await super().do_execute(script_run, silent, store_history,
-                                                     user_expressions, allow_stdin, cell_id=cell_id)
+            f"{' '.join(self.scorep_env)} {PYTHON_EXECUTABLE} -m scorep {' '.join(self.scorep_binding_args)} {scorep_script_name}"
+        reply_status_exec = await super().do_execute(script_run, silent, store_history=False,
+                                                     user_expressions=user_expressions, allow_stdin=allow_stdin, cell_id=cell_id)
 
         if reply_status_exec['status'] != 'ok':
-            self.custom_execution_count += 1
-            self.shell.execution_count += 1
-            reply_status_exec['execution_count'] = self.custom_execution_counts
             return reply_status_exec
 
         # ghost cell - load subprocess persistence back to jupyter session
@@ -324,15 +269,17 @@ class ScorepPythonKernel(IPythonKernel):
                                                      user_expressions=user_expressions, allow_stdin=allow_stdin, cell_id=cell_id)
 
         if reply_status_load['status'] != 'ok':
-            self.custom_execution_count += 1
-            reply_status_load['execution_count'] = self.custom_execution_count
+            self.shell.execution_count += 1
+            reply_status_load['execution_count'] = self.shell.execution_count - 1
             return reply_status_load
 
-        folder_arg = next((arg for arg in self.scorep_binding_args if "SCOREP_EXPERIMENT_DIRECTORY" in arg), None)
+        folder_arg = next(
+            (arg for arg in self.scorep_binding_args if "SCOREP_EXPERIMENT_DIRECTORY" in arg), None)
         if folder_arg:
             scorep_folder = folder_arg.split('=')[-1]
         else:
-            scorep_folder = max([d for d in os.listdir('.') if os.path.isdir(d) and 'scorep' in d], key=os.path.getmtime)
+            scorep_folder = max([d for d in os.listdir('.') if os.path.isdir(
+                d) and 'scorep' in d], key=os.path.getmtime)
         self.cell_output(
             f"Instrumentation results can be found in {os.getcwd()}/{scorep_folder}")
 
@@ -340,21 +287,15 @@ class ScorepPythonKernel(IPythonKernel):
             if os.path.exists(aux_file):
                 os.remove(aux_file)
 
-        self.custom_execution_count += 1
-        return {'status': 'ok',
-                'execution_count': self.custom_execution_count,
-                'payload': [],
-                'user_expressions': {},
-                }
+        return self.standard_reply()
 
-    async def do_execute(self, code, silent, store_history=True, user_expressions=None,
+    async def do_execute(self, code, silent, store_history=False, user_expressions=None,
                          allow_stdin=False, *, cell_id=None):
         """
         Override of do_execute() method of IPythonKernel. If no custom magic commands specified,
         execute cell with super().do_execute(), else save Score-P environment/binding arguments/
         execute cell with Score-P Python binding.
         """
-        # TODO: fix cell id counter
         if code.startswith('%%start_writefile'):
             # get file name from arguments of magic command
             writefile_cmd = code.split('\n')[0].split(' ')
@@ -373,35 +314,23 @@ class ScorepPythonKernel(IPythonKernel):
             if not self.multicellmode:
                 self.cell_output(
                     "Error: Multicell mode disabled. Run a cell with %%enable_multicellmode command first.")
-                self.custom_execution_count += 1
-                self.shell.execution_count += 1
-                return {'status': 'ok',
-                        'execution_count': self.custom_execution_count,
-                        'payload': [],
-                        'user_expressions': {},
-                        }
-            
-            reply_status =  await self.scorep_execute(self.multicell_code, silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
+                return self.standard_reply()
+
+            reply_status = await self.scorep_execute(self.multicell_code, silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
             self.multicell_code = ""
             self.multicellmode_cellcount = 0
             self.multicellmode = False
             return reply_status
-        
+
         elif code.startswith('%%abort_multicellmode'):
             if not self.multicellmode:
                 self.cell_output(
                     "Error: Multicell mode disabled. Run a cell with %%enable_multicellmode command first.")
-                self.custom_execution_count += 1
-                self.shell.execution_count += 1
-                return {'status': 'ok',
-                        'execution_count': self.custom_execution_count,
-                        'payload': [],
-                        'user_expressions': {},
-                        }
+                return self.standard_reply()
             return self.abort_multicellmode()
         elif code.startswith('%%enable_multicellmode'):
             return self.enable_multicellmode()
-        
+
         elif code.startswith('%%scorep_env'):
             return self.set_scorep_env(code)
         elif code.startswith('%%scorep_python_binding_arguments'):
@@ -411,10 +340,8 @@ class ScorepPythonKernel(IPythonKernel):
         elif code.startswith('%%execute_with_scorep'):
             return await self.scorep_execute(code.split("\n", 1)[1], silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
         else:
-            reply_status = await super().do_execute(code, silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
-            self.custom_execution_count += 1
-            reply_status['execution_count'] = self.custom_execution_count
-            return reply_status
+            return await super().do_execute(code, silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
+
 
 if __name__ == '__main__':
     from ipykernel.kernelapp import IPKernelApp
