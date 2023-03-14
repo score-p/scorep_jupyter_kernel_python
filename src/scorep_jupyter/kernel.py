@@ -3,6 +3,9 @@ import sys
 import os
 import ast
 import astunparse
+import subprocess
+import time
+import threading
 
 PYTHON_EXECUTABLE = sys.executable
 userpersistence_token = "scorep_jupyter.userpersistence"
@@ -23,29 +26,31 @@ class ScorepPythonKernel(IPythonKernel):
     }
     banner = "Jupyter kernel with Score-P Python binding."
 
-    user_persistence = ""
-    scorep_binding_args = []
-    scorep_env = []
-
-    multicellmode = False
-    multicellmode_cellcount = 0
-    multicell_code = ""
-
-    writemode = False
-    writemode_filename = 'jupyter_to_script'
-    writemode_multicell = False
-
-    writemode_scorep_binding_args = []
-    writemode_scorep_env = []
-
-    # TODO: reset variables after each finalize writefile?
-    bash_script_filename = ""
-    python_script_filename = ""
-    bash_script = None
-    python_script = None
-
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+
+        self.scorep_binding_args = []
+        self.scorep_env = {}
+        self.system_env = os.environ.copy()
+
+        self.multicellmode = False
+        self.multicellmode_cellcount = 0
+        self.multicell_code = ""
+
+        self.writemode = False
+        self.writemode_filename = 'jupyter_to_script'
+        self.writemode_multicell = False
+        self.writemode_scorep_binding_args = []
+        self.writemode_scorep_env = []
+        # TODO: reset variables after each finalize writefile?
+        self.bash_script_filename = ""
+        self.python_script_filename = ""
+        self.bash_script = None
+        self.python_script = None
+
+        # subprocess observation
+        self.mutex = threading.Lock()
+        self.system_env.update({'PYTHONUNBUFFERED': 'x'})
 
     def cell_output(self, string, stream='stdout'):
         """
@@ -66,7 +71,9 @@ class ScorepPythonKernel(IPythonKernel):
         """
         Read and record Score-P environment variables from the cell.
         """
-        self.scorep_env += code.split('\n')[1:]
+        for scorep_param in code.split('\n')[1:]:
+            key, val = scorep_param.split('=')
+            self.scorep_env[key] = val
         self.cell_output(
             'Score-P environment set successfully: ' + str(self.scorep_env))
         return self.standard_reply()
@@ -158,7 +165,8 @@ class ScorepPythonKernel(IPythonKernel):
             self.writemode_multicell = False
         elif code.startswith('%%abort_multicellmode'):
             self.cell_output(
-                'Multicell abort command is ignored in write mode, check if the output file is recorded as expected.')
+                'Warning: Multicell abort command is ignored in write mode, check if the output file is recorded as expected.',
+                'stderr')
 
         elif code.startswith('%%execute_with_scorep') or self.writemode_multicell:
             # cut all magic commands
@@ -227,13 +235,15 @@ class ScorepPythonKernel(IPythonKernel):
                              allow_stdin=False, *, cell_id=None):
         # ghost cell - dump current jupyter session
         dump_jupyter = "import dill\n" + \
-                      f"dill.dump_session('{jupyter_dump}')"
+            f"dill.dump_session('{jupyter_dump}')"
         reply_status_dump = await super().do_execute(dump_jupyter, silent, store_history=False,
                                                      user_expressions=user_expressions, allow_stdin=allow_stdin, cell_id=cell_id)
 
         if reply_status_dump['status'] != 'ok':
             self.shell.execution_count += 1
             reply_status_dump['execution_count'] = self.shell.execution_count - 1
+            self.cell_output("KernelError: Failed to pickle notebook's persistence and variables.",
+                             'stderr')
             return reply_status_dump
 
         # prepare code for the scorep binding instrumented execution
@@ -241,36 +251,57 @@ class ScorepPythonKernel(IPythonKernel):
 
         scorep_code = "import scorep\n" + \
                       "with scorep.instrumenter.disable():\n" + \
-                     f"    from {userpersistence_token} import * \n" + \
+            f"    from {userpersistence_token} import * \n" + \
                       "    import dill\n" + \
-                     f"    globals().update(dill.load_module_asdict('{jupyter_dump}'))\n" + \
+            f"    globals().update(dill.load_module_asdict('{jupyter_dump}'))\n" + \
                       code + "\n" + \
                       "with scorep.instrumenter.disable():\n" + \
-                     f"   save_user_variables(globals(), {str(user_variables)}, '{subprocess_dump}')"
+            f"   save_user_variables(globals(), {str(user_variables)}, '{subprocess_dump}')"
 
         scorep_script_file = open(scorep_script_name, 'w+')
         scorep_script_file.write(scorep_code)
         scorep_script_file.close()
 
-        script_run = "%%bash\n" + \
-            f"{' '.join(self.scorep_env)} {PYTHON_EXECUTABLE} -m scorep {' '.join(self.scorep_binding_args)} {scorep_script_name}"
-        reply_status_exec = await super().do_execute(script_run, silent, store_history=False,
-                                                     user_expressions=user_expressions, allow_stdin=allow_stdin, cell_id=cell_id)
+        # TODO: add scorep binding args
+        cmd = [PYTHON_EXECUTABLE, "-m", "scorep"] + self.scorep_binding_args + [scorep_script_name]
+        proc_env = self.system_env.copy()
+        proc_env.update(self.scorep_env)
 
-        if reply_status_exec['status'] != 'ok':
-            return reply_status_exec
+        # observe the process with threads, print warnings/output without interference
+        def read_output(stream, stream_name):
+            for line in iter(stream.readline, ''):
+                with self.mutex:
+                    self.cell_output(line, stream_name)
+
+        proc = subprocess.Popen(cmd, bufsize=1, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                universal_newlines=True, env=proc_env)
+        stdout_thread = threading.Thread(target=read_output, args=(proc.stdout, 'stdout'))
+        stdout_thread.start()
+        stderr_thread = threading.Thread(target=read_output, args=(proc.stderr, 'stderr'))
+        stderr_thread.start()
+        proc.wait()
+        stdout_thread.join()
+        stderr_thread.join()
+
+        if proc.returncode:
+            self.cell_output(
+                'KernelError: Cell execution failed, cell persistence and variables are not recorded.',
+                'stderr')
+            return self.standard_reply()
 
         # ghost cell - load subprocess persistence back to jupyter session
         load_jupyter = self.save_definitions(code) + "\n" + \
-                      f"vars_load = open('{subprocess_dump}', 'rb')\n" + \
-                       "globals().update(dill.load(vars_load))\n" + \
-                       "vars_load.close()"
+            f"vars_load = open('{subprocess_dump}', 'rb')\n" + \
+            "globals().update(dill.load(vars_load))\n" + \
+            "vars_load.close()"
         reply_status_load = await super().do_execute(load_jupyter, silent, store_history=False,
                                                      user_expressions=user_expressions, allow_stdin=allow_stdin, cell_id=cell_id)
 
         if reply_status_load['status'] != 'ok':
             self.shell.execution_count += 1
             reply_status_load['execution_count'] = self.shell.execution_count - 1
+            self.cell_output("KernelError: Failed to load cell's persistence and variables to the notebook.",
+                             'stderr')
             return reply_status_load
 
         folder_arg = next(
@@ -313,10 +344,14 @@ class ScorepPythonKernel(IPythonKernel):
         elif code.startswith('%%finalize_multicellmode'):
             if not self.multicellmode:
                 self.cell_output(
-                    "Error: Multicell mode disabled. Run a cell with %%enable_multicellmode command first.")
+                    "KernelError: Multicell mode disabled. Run a cell with %%enable_multicellmode command first.",
+                    'stderr')
                 return self.standard_reply()
 
-            reply_status = await self.scorep_execute(self.multicell_code, silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
+            try:
+                reply_status = await self.scorep_execute(self.multicell_code, silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
+            except:
+                return self.standard_reply()
             self.multicell_code = ""
             self.multicellmode_cellcount = 0
             self.multicellmode = False
@@ -325,7 +360,8 @@ class ScorepPythonKernel(IPythonKernel):
         elif code.startswith('%%abort_multicellmode'):
             if not self.multicellmode:
                 self.cell_output(
-                    "Error: Multicell mode disabled. Run a cell with %%enable_multicellmode command first.")
+                    "KernelError: Multicell mode disabled. Run a cell with %%enable_multicellmode command first.",
+                    'stderr')
                 return self.standard_reply()
             return self.abort_multicellmode()
         elif code.startswith('%%enable_multicellmode'):
