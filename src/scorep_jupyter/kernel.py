@@ -304,15 +304,12 @@ class ScorepPythonKernel(IPythonKernel):
                              'stderr')
             return reply_status_load
 
-        folder_arg = next(
-            (arg for arg in self.scorep_binding_args if "SCOREP_EXPERIMENT_DIRECTORY" in arg), None)
-        if folder_arg:
-            scorep_folder = folder_arg.split('=')[-1]
+        if 'SCOREP_EXPERIMENT_DIRECTORY' in self.scorep_env:
+            scorep_folder = self.scorep_env['SCOREP_EXPERIMENT_DIRECTORY']
         else:
-            scorep_folder = max([d for d in os.listdir('.') if os.path.isdir(
-                d) and 'scorep' in d], key=os.path.getmtime)
-        self.cell_output(
-            f"Instrumentation results can be found in {os.getcwd()}/{scorep_folder}")
+            scorep_folder = max([d for d in os.listdir('.') if os.path.isdir(d) and 'scorep' in d],
+                                key=os.path.getmtime)
+        self.cell_output(f"Instrumentation results can be found in {os.getcwd()}/{scorep_folder}")
 
         for aux_file in [scorep_script_name, jupyter_dump, subprocess_dump]:
             if os.path.exists(aux_file):
