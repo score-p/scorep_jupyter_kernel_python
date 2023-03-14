@@ -4,7 +4,6 @@ import os
 import ast
 import astunparse
 import subprocess
-import time
 import threading
 
 PYTHON_EXECUTABLE = sys.executable
@@ -233,6 +232,11 @@ class ScorepPythonKernel(IPythonKernel):
 
     async def scorep_execute(self, code, silent, store_history=True, user_expressions=None,
                              allow_stdin=False, *, cell_id=None):
+        def aux_files_cleanup():
+            for aux_file in [scorep_script_name, jupyter_dump, subprocess_dump]:
+                if os.path.exists(aux_file):
+                    os.remove(aux_file)
+
         # ghost cell - dump current jupyter session
         dump_jupyter = "import dill\n" + \
             f"dill.dump_session('{jupyter_dump}')"
@@ -242,6 +246,7 @@ class ScorepPythonKernel(IPythonKernel):
         if reply_status_dump['status'] != 'ok':
             self.shell.execution_count += 1
             reply_status_dump['execution_count'] = self.shell.execution_count - 1
+            aux_files_cleanup()
             self.cell_output("KernelError: Failed to pickle notebook's persistence and variables.",
                              'stderr')
             return reply_status_dump
@@ -284,15 +289,20 @@ class ScorepPythonKernel(IPythonKernel):
         stderr_thread.join()
 
         if proc.returncode:
+            aux_files_cleanup()
             self.cell_output(
                 'KernelError: Cell execution failed, cell persistence and variables are not recorded.',
                 'stderr')
             return self.standard_reply()
 
         # ghost cell - load subprocess persistence back to jupyter session
+        # if no new variables presented in the cell code - skip loading
         load_jupyter = self.save_definitions(code) + "\n" + \
             f"vars_load = open('{subprocess_dump}', 'rb')\n" + \
-            "globals().update(dill.load(vars_load))\n" + \
+            "try:\n" + \
+            "    globals().update(dill.load(vars_load))\n" + \
+            "except:\n" + \
+            "    pass\n" + \
             "vars_load.close()"
         reply_status_load = await super().do_execute(load_jupyter, silent, store_history=False,
                                                      user_expressions=user_expressions, allow_stdin=allow_stdin, cell_id=cell_id)
@@ -300,21 +310,18 @@ class ScorepPythonKernel(IPythonKernel):
         if reply_status_load['status'] != 'ok':
             self.shell.execution_count += 1
             reply_status_load['execution_count'] = self.shell.execution_count - 1
+            aux_files_cleanup()
             self.cell_output("KernelError: Failed to load cell's persistence and variables to the notebook.",
                              'stderr')
             return reply_status_load
 
+        aux_files_cleanup()
         if 'SCOREP_EXPERIMENT_DIRECTORY' in self.scorep_env:
             scorep_folder = self.scorep_env['SCOREP_EXPERIMENT_DIRECTORY']
         else:
             scorep_folder = max([d for d in os.listdir('.') if os.path.isdir(d) and 'scorep' in d],
                                 key=os.path.getmtime)
         self.cell_output(f"Instrumentation results can be found in {os.getcwd()}/{scorep_folder}")
-
-        for aux_file in [scorep_script_name, jupyter_dump, subprocess_dump]:
-            if os.path.exists(aux_file):
-                os.remove(aux_file)
-
         return self.standard_reply()
 
     async def do_execute(self, code, silent, store_history=False, user_expressions=None,

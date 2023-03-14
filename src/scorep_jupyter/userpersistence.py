@@ -9,7 +9,7 @@ def save_user_variables(globs, variables, filename):
         if non_persistent_class in globals().keys():
             user_variables[el].__class__ = globals()[non_persistent_class]
 
+    vars_dump = open(filename, 'wb+')
     if user_variables:
-        vars_dump = open(filename, 'wb+')
         dill.dump(user_variables, vars_dump)
-        vars_dump.close()
+    vars_dump.close()
