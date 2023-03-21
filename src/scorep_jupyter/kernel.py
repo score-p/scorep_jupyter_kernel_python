@@ -311,12 +311,12 @@ class ScorepPythonKernel(IPythonKernel):
         # ghost cell - load subprocess persistence back to jupyter session
         # if no new variables presented in the cell code - skip loading
         load_jupyter = self.save_definitions(code) + "\n" + \
-                     f"vars_load = open('{subprocess_dump}', 'rb')\n" + \
-                      "try:\n" + \
+                     f"try:\n" + \
+                      "    vars_load = open('{subprocess_dump}', 'rb')\n" + \
                       "    globals().update(dill.load(vars_load))\n" + \
+                      "    vars_load.close()\n" + \
                       "except:\n" + \
-                      "    pass\n" + \
-                      "vars_load.close()"
+                      "    pass\n"
         reply_status_load = await super().do_execute(load_jupyter, silent, store_history=False,
                                                      user_expressions=user_expressions, allow_stdin=allow_stdin, cell_id=cell_id)
 
