@@ -7,10 +7,8 @@ import subprocess
 import re
 
 PYTHON_EXECUTABLE = sys.executable
-
 READ_CHUNK_SIZE = 8
 endline_pattern = re.compile(r'(.*?[\r\n]|.+$)')
-
 userpersistence_token = "scorep_jupyter.userpersistence"
 scorep_script_name = "scorep_script.py"
 jupyter_dump = "jupyter_dump.pkl"
@@ -70,11 +68,6 @@ class ScorepPythonKernel(IPythonKernel):
                 'payload': [],
                 'user_expressions': {},
                 }
-
-    def aux_files_cleanup(self):
-        for aux_file in [scorep_script_name, jupyter_dump, subprocess_dump]:
-            if os.path.exists(aux_file):
-                os.remove(aux_file)
 
     def set_scorep_env(self, code):
         """
@@ -242,6 +235,11 @@ class ScorepPythonKernel(IPythonKernel):
 
     async def scorep_execute(self, code, silent, store_history=True, user_expressions=None,
                              allow_stdin=False, *, cell_id=None):
+        def aux_files_cleanup():
+            for aux_file in [scorep_script_name, jupyter_dump, subprocess_dump]:
+                if os.path.exists(aux_file):
+                    os.remove(aux_file)
+
         # ghost cell - dump current jupyter session
         dump_jupyter = "import dill\n" + \
             f"dill.dump_session('{jupyter_dump}')"
@@ -251,7 +249,7 @@ class ScorepPythonKernel(IPythonKernel):
         if reply_status_dump['status'] != 'ok':
             self.shell.execution_count += 1
             reply_status_dump['execution_count'] = self.shell.execution_count - 1
-            self.aux_files_cleanup()
+            aux_files_cleanup()
             self.cell_output("KernelError: Failed to pickle notebook's persistence and variables.",
                              'stderr')
             return reply_status_dump
@@ -259,12 +257,12 @@ class ScorepPythonKernel(IPythonKernel):
         # prepare code for the scorep binding instrumented execution
         scorep_code = "import scorep\n" + \
                       "with scorep.instrumenter.disable():\n" + \
-                     f"    from {userpersistence_token} import * \n" + \
+            f"    from {userpersistence_token} import * \n" + \
                       "    import dill\n" + \
-                     f"    globals().update(dill.load_module_asdict('{jupyter_dump}'))\n" + \
+            f"    globals().update(dill.load_module_asdict('{jupyter_dump}'))\n" + \
                       code + "\n" + \
                       "with scorep.instrumenter.disable():\n" + \
-                     f"   save_user_variables(globals(), {str(self.user_variables)}, '{subprocess_dump}')"
+            f"   save_user_variables(globals(), {str(self.user_variables)}, '{subprocess_dump}')"
 
         scorep_script_file = open(scorep_script_name, 'w+')
         scorep_script_file.write(scorep_code)
@@ -282,7 +280,7 @@ class ScorepPythonKernel(IPythonKernel):
         proc = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=proc_env)
 
-        # self.cell_output('\0') # dummy output to be replaced
+        self.cell_output('\0')  # dummy output to be replaced
         while True:
             chunk = b'' + proc.stdout.read(READ_CHUNK_SIZE)
             if not chunk:
@@ -297,12 +295,13 @@ class ScorepPythonKernel(IPythonKernel):
                 else:
                     incomplete_line = ""
                 for line in lines:
+                    # self.cell_output(str(len(line)) + '\n')
                     self.cell_output(line)
 
         proc.wait()
 
         if proc.returncode:
-            self.aux_files_cleanup()
+            aux_files_cleanup()
             self.cell_output(
                 'KernelError: Cell execution failed, cell persistence and variables are not recorded.',
                 'stderr')
@@ -311,31 +310,31 @@ class ScorepPythonKernel(IPythonKernel):
         # ghost cell - load subprocess persistence back to jupyter session
         # if no new variables presented in the cell code - skip loading
         load_jupyter = self.save_definitions(code) + "\n" + \
-                     f"try:\n" + \
-                      "    vars_load = open('{subprocess_dump}', 'rb')\n" + \
-                      "    globals().update(dill.load(vars_load))\n" + \
-                      "    vars_load.close()\n" + \
-                      "except:\n" + \
-                      "    pass\n"
+            "try:\n" + \
+           f"    vars_load = open('{subprocess_dump}', 'rb')\n" + \
+            "    globals().update(dill.load(vars_load))\n" + \
+            "    vars_load.close()\n" + \
+            "except:\n" + \
+            "    pass\n"
         reply_status_load = await super().do_execute(load_jupyter, silent, store_history=False,
                                                      user_expressions=user_expressions, allow_stdin=allow_stdin, cell_id=cell_id)
 
         if reply_status_load['status'] != 'ok':
             self.shell.execution_count += 1
             reply_status_load['execution_count'] = self.shell.execution_count - 1
-            self.aux_files_cleanup()
+            aux_files_cleanup()
             self.cell_output("KernelError: Failed to load cell's persistence and variables to the notebook.",
                              'stderr')
             return reply_status_load
 
-        self.aux_files_cleanup()
+        aux_files_cleanup()
         if 'SCOREP_EXPERIMENT_DIRECTORY' in self.scorep_env:
             scorep_folder = self.scorep_env['SCOREP_EXPERIMENT_DIRECTORY']
         else:
             scorep_folder = max([d for d in os.listdir('.') if os.path.isdir(d) and 'scorep' in d],
                                 key=os.path.getmtime)
         self.cell_output(
-            f"Instrumentation results can be found in {os.getcwd()}/{scorep_folder}\n")
+            f"Instrumentation results can be found in {os.getcwd()}/{scorep_folder}")
         return self.standard_reply()
 
     async def do_execute(self, code, silent, store_history=False, user_expressions=None,
@@ -392,7 +391,7 @@ class ScorepPythonKernel(IPythonKernel):
         elif self.multicellmode:
             return self.append_multicellmode(code)
         elif code.startswith('%%execute_with_scorep'):
-            code = code.split('\n', 1)[1]
+            code = code.split("\n", 1)[1]
             self.user_variables.update(self.get_user_variables(code))
             return await self.scorep_execute(code, silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
         else:
