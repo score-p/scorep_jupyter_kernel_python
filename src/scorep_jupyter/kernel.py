@@ -68,6 +68,11 @@ class ScorepPythonKernel(IPythonKernel):
                 'payload': [],
                 'user_expressions': {},
                 }
+    
+    def aux_files_cleanup(self):
+        for aux_file in [scorep_script_name, jupyter_dump, subprocess_dump]:
+            if os.path.exists(aux_file):
+                os.remove(aux_file)
 
     def set_scorep_env(self, code):
         """
@@ -235,11 +240,6 @@ class ScorepPythonKernel(IPythonKernel):
 
     async def scorep_execute(self, code, silent, store_history=True, user_expressions=None,
                              allow_stdin=False, *, cell_id=None):
-        def aux_files_cleanup():
-            for aux_file in [scorep_script_name, jupyter_dump, subprocess_dump]:
-                if os.path.exists(aux_file):
-                    os.remove(aux_file)
-
         # ghost cell - dump current jupyter session
         dump_jupyter = "import dill\n" + \
             f"dill.dump_session('{jupyter_dump}')"
@@ -249,7 +249,7 @@ class ScorepPythonKernel(IPythonKernel):
         if reply_status_dump['status'] != 'ok':
             self.shell.execution_count += 1
             reply_status_dump['execution_count'] = self.shell.execution_count - 1
-            aux_files_cleanup()
+            self.aux_files_cleanup()
             self.cell_output("KernelError: Failed to pickle notebook's persistence and variables.",
                              'stderr')
             return reply_status_dump
@@ -301,7 +301,7 @@ class ScorepPythonKernel(IPythonKernel):
         proc.wait()
 
         if proc.returncode:
-            aux_files_cleanup()
+            self.aux_files_cleanup()
             self.cell_output(
                 'KernelError: Cell execution failed, cell persistence and variables are not recorded.',
                 'stderr')
@@ -322,12 +322,12 @@ class ScorepPythonKernel(IPythonKernel):
         if reply_status_load['status'] != 'ok':
             self.shell.execution_count += 1
             reply_status_load['execution_count'] = self.shell.execution_count - 1
-            aux_files_cleanup()
+            self.aux_files_cleanup()
             self.cell_output("KernelError: Failed to load cell's persistence and variables to the notebook.",
                              'stderr')
             return reply_status_load
 
-        aux_files_cleanup()
+        self.aux_files_cleanup()
         if 'SCOREP_EXPERIMENT_DIRECTORY' in self.scorep_env:
             scorep_folder = self.scorep_env['SCOREP_EXPERIMENT_DIRECTORY']
         else:
