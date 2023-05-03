@@ -250,7 +250,7 @@ class ScorepPythonKernel(IPythonKernel):
             self.shell.execution_count += 1
             reply_status_dump['execution_count'] = self.shell.execution_count - 1
             self.aux_files_cleanup()
-            self.cell_output("KernelError: Failed to pickle notebook's persistence and variables.",
+            self.cell_output("KernelError: Failed to pickle previous notebook's persistence and variables.",
                              'stderr')
             return reply_status_dump
 
@@ -330,11 +330,13 @@ class ScorepPythonKernel(IPythonKernel):
         self.aux_files_cleanup()
         if 'SCOREP_EXPERIMENT_DIRECTORY' in self.scorep_env:
             scorep_folder = self.scorep_env['SCOREP_EXPERIMENT_DIRECTORY']
+            self.cell_output(
+                f"Instrumentation results can be found in {scorep_folder}")
         else:
             scorep_folder = max([d for d in os.listdir('.') if os.path.isdir(d) and 'scorep' in d],
                                 key=os.path.getmtime)
-        self.cell_output(
-            f"Instrumentation results can be found in {os.getcwd()}/{scorep_folder}")
+            self.cell_output(
+                f"Instrumentation results can be found in {os.getcwd()}/{scorep_folder}")
         return self.standard_reply()
 
     async def do_execute(self, code, silent, store_history=False, user_expressions=None,
