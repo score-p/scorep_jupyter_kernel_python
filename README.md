@@ -60,7 +60,8 @@ To inspect the collected performance data, use tools as Vampir (Trace) or Cube (
 
 The kernel is still under development. The following is on the agenda:
  
- - add tensorflow backend for serialization to support tf
+ - Check alternative Python implementations (Stackless/PyPy) for better serialization support
+ - Performance data visualizations
  
 PRs are welcome.
 
