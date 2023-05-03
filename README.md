@@ -14,6 +14,7 @@ pip install scorep-jupyter
 python -m scorep_jupyter.install
 ```
 The kernel will then be installed in your active python environment.
+You can select the kernel in Jupyter as `scorep-python`
 
 ## Usage
 
@@ -65,12 +66,10 @@ PRs are welcome.
 
 ## General Limitations 
 
-* The kernel does not support jupyter magic, since the Score-P Python binding does not support it.
+* For the execution of a cell, the kernel uses the default IPython kernel. For a cell with Score-P it starts a new Python process. Before starting this process, the state of the previous executed cells is persisted using dill library. However, there is no support for the following objects: frame, generator, traceback
+In the future there might be support for alternative Python implementations (Stackless or PyPy) in order to support serialization of these objects.
 
-For the execution of a cell, the kernel starts a new Python process either with Score-P or standalone. The kernel handles persistency between these processes on its own. Therefore it uses dill and additional techniques. However this comes with the following drawbacks:
-
-* when dealing with big data structures, there might be a big runtime overhead at the beginning and the end of a cell. This is due to additional data saving and loading processes for persistency in the background. However this does not affect the actual user code and the Score-P measurements.
-* dill can not handle each kind of object (e.g. file handles, network connections,...). Thus, they can not be shared between cells and your notebook might not work. We are working on this by adding further serialization mechanisms.
+* when dealing with big data structures, there might be a big runtime overhead at the beginning and the end of a Score-P cell. This is due to additional data saving and loading processes for persistency in the background. However this does not affect the actual user code and the Score-P measurements.
 
 
 ## Citing
