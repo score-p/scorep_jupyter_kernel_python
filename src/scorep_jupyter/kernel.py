@@ -5,6 +5,7 @@ import ast
 import astunparse
 import subprocess
 import re
+import json
 
 PYTHON_EXECUTABLE = sys.executable
 READ_CHUNK_SIZE = 8
@@ -32,7 +33,6 @@ class ScorepPythonKernel(IPythonKernel):
 
         self.scorep_binding_args = []
         self.scorep_env = {}
-        self.system_env = os.environ.copy()
 
         self.user_variables = set()
 
@@ -51,9 +51,6 @@ class ScorepPythonKernel(IPythonKernel):
         self.bash_script = None
         self.python_script = None
 
-        # subprocess observation
-        self.system_env.update({'PYTHONUNBUFFERED': 'x'})
-
     def cell_output(self, string, stream='stdout'):
         """
         Display string as cell output.
@@ -68,7 +65,7 @@ class ScorepPythonKernel(IPythonKernel):
                 'payload': [],
                 'user_expressions': {},
                 }
-    
+
     def aux_files_cleanup(self):
         for aux_file in [scorep_script_name, jupyter_dump, subprocess_dump]:
             if os.path.exists(aux_file):
@@ -241,8 +238,7 @@ class ScorepPythonKernel(IPythonKernel):
     async def scorep_execute(self, code, silent, store_history=True, user_expressions=None,
                              allow_stdin=False, *, cell_id=None):
         # ghost cell - dump current jupyter session
-        dump_jupyter = "import dill\n" + \
-            f"dill.dump_session('{jupyter_dump}')"
+        dump_jupyter = "import dill\n" + f"dill.dump_session('{jupyter_dump}')"
         reply_status_dump = await super().do_execute(dump_jupyter, silent, store_history=False,
                                                      user_expressions=user_expressions, allow_stdin=allow_stdin, cell_id=cell_id)
 
@@ -255,14 +251,20 @@ class ScorepPythonKernel(IPythonKernel):
             return reply_status_dump
 
         # prepare code for the scorep binding instrumented execution
+        # sys.path might have been changed at runtime (new locations to search for modules)
+        # save sys.path from running notebook and set it in subprocess
+        sys_path_updated = json.dumps(sys.path)
         scorep_code = "import scorep\n" + \
                       "with scorep.instrumenter.disable():\n" + \
-            f"    from {userpersistence_token} import * \n" + \
+                     f"    from {userpersistence_token} import * \n" + \
                       "    import dill\n" + \
-            f"    globals().update(dill.load_module_asdict('{jupyter_dump}'))\n" + \
+                     f"    globals().update(dill.load_module_asdict('{jupyter_dump}'))\n" + \
+                      "    import sys\n" + \
+                      "    sys.path.clear()\n" + \
+                     f"    sys.path.extend({sys_path_updated})\n" + \
                       code + "\n" + \
                       "with scorep.instrumenter.disable():\n" + \
-            f"   save_user_variables(globals(), {str(self.user_variables)}, '{subprocess_dump}')"
+                     f"   save_user_variables(globals(), {str(self.user_variables)}, '{subprocess_dump}')"
 
         scorep_script_file = open(scorep_script_name, 'w+')
         scorep_script_file.write(scorep_code)
@@ -270,8 +272,9 @@ class ScorepPythonKernel(IPythonKernel):
 
         cmd = [PYTHON_EXECUTABLE, "-m", "scorep"] + \
             self.scorep_binding_args + [scorep_script_name]
-        proc_env = self.system_env.copy()
+        proc_env = os.environ.copy()
         proc_env.update(self.scorep_env)
+        proc_env.update({'PYTHONUNBUFFERED': 'x'}) # subprocess observation
 
         # observe the process with threads, print warnings/output without interference
         incomplete_line = ''
@@ -333,10 +336,13 @@ class ScorepPythonKernel(IPythonKernel):
             self.cell_output(
                 f"Instrumentation results can be found in {scorep_folder}")
         else:
-            scorep_folder = max([d for d in os.listdir('.') if os.path.isdir(d) and 'scorep' in d],
-                                key=os.path.getmtime)
-            self.cell_output(
-                f"Instrumentation results can be found in {os.getcwd()}/{scorep_folder}")
+            scorep_dirs = [d for d in os.listdir('.') if os.path.isdir(d) and 'scorep' in d]
+            if scorep_dirs:
+                scorep_folder = max(scorep_dirs, key=os.path.getmtime)
+                self.cell_output(
+                    f"Instrumentation results can be found in {os.getcwd()}/{scorep_folder}")
+            else:
+                self.cell_output("KernelWarning: Instrumentation results were not saved locally.", 'stderr')
         return self.standard_reply()
 
     async def do_execute(self, code, silent, store_history=False, user_expressions=None,
@@ -394,10 +400,34 @@ class ScorepPythonKernel(IPythonKernel):
             return self.append_multicellmode(code)
         elif code.startswith('%%execute_with_scorep'):
             code = code.split("\n", 1)[1]
-            self.user_variables.update(self.get_user_variables(code))
+            # parsing for user variables might fail due to SyntaxError
+            try:
+                user_variables = self.get_user_variables(code)
+            except SyntaxError as e:
+                self.cell_output(f"SyntaxError: {e}", 'stderr')
+                return self.standard_reply()
+            self.user_variables.update(user_variables)
             return await self.scorep_execute(code, silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
         else:
-            self.user_variables.update(self.get_user_variables(code))
+            # some line/cell magics involve executing Python code, which must be parsed
+            whitelist_prefixes_cell = ['%%prun', '%%timeit', '%%capture', '%%python', '%%pypy']
+            whitelist_prefixes_line = ['%prun', '%time']
+
+            nomagic_code = '' # code to be parsed for user variables
+            if not code.startswith(tuple(['%', '!'])): # no IPython magics and shell commands
+                nomagic_code = code
+            else:
+                if code.startswith(tuple(whitelist_prefixes_cell)): # cell magic, remove first line
+                    nomagic_code = code.split("\n", 1)[1]
+                elif code.startswith(tuple(whitelist_prefixes_line)): # line magic, remove first word
+                    nomagic_code = code.split(" ", 1)[1]
+            if nomagic_code:
+                try:
+                    user_variables = self.get_user_variables(nomagic_code)
+                except SyntaxError as e:
+                    self.cell_output(f"SyntaxError: {e}", 'stderr')
+                    return self.standard_reply()
+                self.user_variables.update(user_variables)
             return await super().do_execute(code, silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
 
 
