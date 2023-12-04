@@ -104,6 +104,7 @@ class ScorepPythonKernel(IPythonKernel):
     def abort_multicellmode(self):
         self.multicellmode = False
         self.multicell_code = ""
+        self.multicellmode_cellcount = 0
         self.cell_output('Multicell mode aborted.')
         return self.standard_reply()
 
