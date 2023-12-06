@@ -9,10 +9,15 @@ The kernel uses the [Score-P Python bindings](https://github.com/score-p/scorep_
 
 - [Installation](#Installation)
 - [Usage](#Usage)
-  * [Working](#working)
-  * [Not Working](#not-working)
-- [Contact](#Contact)
+  * [Configuration](#Configuring-Score-P-in-Jupyter)
+  * [Basic Execution](#Executing-Cells)
+  * [Multi-Cell Mode](#Multi-Cell-Mode)
+  * [Write Mode](#Write-Mode)
+- [Presentation of Performance Data](#Presentation-of-Performance-Data)
+- [Limitations](#Limitations)
+- [Future Work](#Future-Work)
 - [Citing](#Citing)
+- [Contact](#Contact)
 - [Acknowledgments](#Acknowledgments)
 
 # Installation
