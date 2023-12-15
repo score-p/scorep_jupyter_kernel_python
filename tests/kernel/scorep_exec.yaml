@@ -1,0 +1,31 @@
+-
+  - |-
+    %%execute_with_scorep
+    import scorep
+    with scorep.instrumenter.enable():
+        print("a - b =", a - b)
+  - - "\0"
+    - "a - b = -5\n"
+    - "Instrumentation results can be found in tests_tmp/scorep-traces"
+-
+  - |-
+    %%bash
+    comm_files=("tests_tmp/scorep_script.py" "tests_tmp/jupyter_dump.pkl" "tests_tmp/subprocess_dump.pkl")
+
+    for file in "${comm_files[@]}"; do
+        if [ -e "$file" ]; then
+            echo "Error: $file not cleaned up."
+        fi
+    done
+  - - ""
+-
+  - |-
+    %%bash
+    if [ -d "tests_tmp/scorep-traces" ] && [ -e "tests_tmp/scorep-traces/traces.otf2" ]; then
+        :
+    elif [ -d "tests_tmp/scorep-traces" ]; then
+        echo "'tests_tmp/scorep-traces' exists, but 'traces.otf2' is missing."
+    else
+        echo "'tests_tmp/scorep-traces' does not exist."
+    fi
+  - - ""
