@@ -1,3 +1,5 @@
+[![Unit Tests](https://github.com/score-p/scorep_jupyter_kernel_python/actions/workflows/unit_test.yml/badge.svg)](https://github.com/score-p/scorep_jupyter_kernel_python/actions/workflows/unit_test.yml)
+
 # The Score-P Python Jupyter Kernel
 This is the Score-P Python Kernel that enables you to execute Python code in Jupyter Notebooks with [Score-P](https://score-p.org/).
 

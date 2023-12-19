@@ -1,0 +1,47 @@
+-
+  - |-
+    import numpy as np
+    def f(x):
+        return x**2
+    a_vec = np.arange(a)
+    b_vec =  np.arange(a, b)
+  - - ""
+-
+  - |-
+    %%execute_with_scorep
+    with scorep.instrumenter.enable():
+        import pandas as pd
+        def g(x):
+            return np.log2(x)
+        c_mtx = np.outer(a_vec, b_vec)
+        print("Inner product of a_vec and b_vec =", np.dot(a_vec, b_vec))
+        print("f(4) =", f(4))
+  - - "\0"
+    - "Inner product of a_vec and b_vec = 80\n"
+    - "f(4) = 16\n"
+    - "Instrumentation results can be found in tests_tmp/scorep-traces"
+-
+  - |-
+    print("Outer product of a_vec and b_vec =\n", c_mtx)
+    print("g(16) =", g(16))
+  - - |
+      Outer product of a_vec and b_vec =
+       [[ 0  0  0  0  0]
+       [ 5  6  7  8  9]
+       [10 12 14 16 18]
+       [15 18 21 24 27]
+       [20 24 28 32 36]]
+      g(16) = 4.0
+-
+  - |-
+    df = pd.DataFrame(np.vstack([a_vec, b_vec]).T, columns=['a', 'b'])
+    df['a*b'] = df['a'] * df['b']
+    print(df['a*b'])
+  - - |
+      0     0
+      1     6
+      2    14
+      3    24
+      4    36
+      Name: a*b, dtype: int64
+      
