@@ -6,7 +6,7 @@ requires = [
 build-backend = "setuptools.build_meta:__legacy__"
 
 [project]
-name='pyperf-jupyter'
+name='pyperf_jupyter'
 version='1.0.0'
 authors=[
   {name='Elias Werner',email='elias.werner@tu-dresden.de'},

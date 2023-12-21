@@ -3,6 +3,7 @@ import sys
 import os
 import subprocess
 import re
+import time
 from scorep_jupyter.userpersistence import PersHelper, scorep_script_name, magics_cleanup
 from enum import Enum
 from textwrap import dedent
@@ -15,11 +16,11 @@ class KernelMode(Enum):
     DEFAULT   = (0, 'default')
     MULTICELL = (1, 'multicell')
     WRITEFILE = (2, 'writefile')
-    
+
     def __str__(self):
         return self.value[1]
 
-class ScorepPythonKernel(IPythonKernel):
+class PyPerfKernel(IPythonKernel):
     implementation = 'Python and Score-P'
     implementation_version = '1.0'
     language = 'python'
@@ -29,10 +30,21 @@ class ScorepPythonKernel(IPythonKernel):
         'mimetype': 'text/plain',
         'file_extension': '.py',
     }
-    banner = "Jupyter kernel with Score-P Python binding."
+    banner = "Jupyter kernel for performance engineering."
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+
+        '''
+        magics = super().shell.magics_manager.lsmagic()
+
+        self.whitelist_prefixes_line = list(magics['line'].keys())
+        self.whitelist_prefixes_cell = list(magics['cell'].keys())
+        '''
+
+        # TODO: timeit, python, ...? do not save variables to globals()
+        self.whitelist_prefixes_cell = ['%%prun', '%%timeit', '%%capture', '%%python', '%%pypy']
+        self.whitelist_prefixes_line = ['%prun', '%time']
 
         self.scorep_binding_args = []
         self.scorep_env = {}
@@ -51,7 +63,7 @@ class ScorepPythonKernel(IPythonKernel):
         self.writefile_scorep_env = []
         self.writefile_scorep_binding_args = []
         self.writefile_multicell = False
-        
+
     def cell_output(self, string, stream='stdout'):
         """
         Display string as cell output.
@@ -241,11 +253,99 @@ class ScorepPythonKernel(IPythonKernel):
                 f'KernelWarning: Currently in {self.mode}, command ignored.', 'stderr')
         return self.standard_reply()
 
+
     def ghost_cell_error(self, reply_status, error_message):
         self.shell.execution_count += 1
         reply_status['execution_count'] = self.shell.execution_count - 1
         self.pershelper.postprocess()
         self.cell_output(error_message, 'stderr')
+
+
+    def parse_slurm_nodelist(self, nodelist_string):
+        nodes = []
+        # Regular expression to match patterns like 'node[1-3],node5,node7'
+        pattern = r'(\w+\[\d+-\d+\]|\w+|\d+)'
+        matches = re.findall(pattern, nodelist_string)
+
+        for match in matches:
+            # Check if the match contains a range
+            if '-' in match:
+                node_range = match.split('[')
+                prefix = node_range[0]
+                start, end = map(int, re.findall(r'\d+', node_range[1]))
+                nodes.extend([f"{prefix}{i}" for i in range(start, end + 1)])
+            else:
+                nodes.append(match)
+
+        return nodes
+
+    def report_perfdata(self, stdout_data, duration):
+
+        # might be that parent process pushes to stdout and that output gets reversed
+        # couldn't find a better way than waiting for 1s and hoping that outputs are in correct order in the queue now
+        time.sleep(1)
+
+        stdout_data = stdout_data.split(b"\n\n")
+
+        # init CPU and GPU lists
+        mem_util = []
+        if stdout_data[0]:
+            init_data = pickle.loads(codecs.decode(stdout_data[0], "base64"))
+            cpu_util = [[] for _ in init_data[0]]
+            gpu_util = [[] for _ in init_data[2]]
+            gpu_mem = [[] for _ in init_data[2]]
+
+        for line in stdout_data:
+            if line == b'':
+                continue
+            perf_data = pickle.loads(codecs.decode(line, "base64"))
+            for cpu in range(0, len(perf_data[0])):
+                cpu_util[cpu].append(perf_data[0][cpu])
+
+            mem_util.append(perf_data[1])
+
+            for gpu in range(0, len(perf_data[2])):
+                gpu_util[gpu].append(perf_data[2][gpu])
+                gpu_mem[gpu].append(perf_data[3][gpu])
+
+        report_trs = int(os.environ.get("PYPERF_REPORTS_MIN", 2))
+
+        if len(mem_util) > report_trs:
+            slurm_nodelist = self.parse_slurm_nodelist(os.environ.get("SLURM_NODELIST", ''))
+            # print hint only if multiple nodes on slurm nodelist or slurm nodelist not available
+            # (and we don't know about multi node setup)
+            # TODO: use the list of nodes in perfmonitor to connect via ssh and check the performance data
+            if len(slurm_nodelist) != 1:
+                self.cell_output("\nHint: performance data only for one node, multi node setup not supported yet",
+                                 'stdout')
+
+            self.cell_output("\n----Performance Data----\n", 'stdout')
+            self.cell_output("Duration: " + "{:.2f}".format(duration) + "\n", 'stdout')
+
+            if cpu_util:
+                self.cell_output("--CPU Util--\n", 'stdout')
+                for cpu_index in range(0, len(cpu_util)):
+                    self.cell_output("\tCPU" + str(cpu_index) + "\tAVG: " + "{:.2f}".format(
+                        sum(cpu_util[cpu_index]) / len(cpu_util[cpu_index])) + "\t MIN: " + "{:.2f}".format(
+                        min(cpu_util[cpu_index])) + "\t MAX: " + "{:.2f}".format(max(cpu_util[cpu_index]))+"\n", 'stdout')
+            if len(mem_util) > 0:
+                self.cell_output(
+                    "\n--Mem Util-- \tAVG: " + "{:.2f}".format(
+                        sum(mem_util) / len(mem_util)) + "\t MIN: " + "{:.2f}".format(
+                        min(mem_util)) + "\t MAX: " + "{:.2f}".format(max(mem_util)) + "\n", 'stdout')
+
+            if gpu_util and gpu_mem:
+                self.cell_output("--GPU Util and Mem per GPU--\n", 'stdout')
+                for gpu_index in range(0, len(gpu_util)):
+                    self.cell_output("\tGPU" + str(gpu_index) +
+                                     "\tUtil AVG: " + "{:.2f}".format(
+                        sum(gpu_util[gpu_index]) / len(gpu_util[gpu_index])) + "\t MIN: " + "{:.2f}".format(
+                        min(gpu_util[gpu_index])) + "\t MAX: " + "{:.2f}".format(max(gpu_util[gpu_index])) + "\n", 'stdout')
+                    self.cell_output("\t    " +
+                                     "\t Mem AVG: " + "{:.2f}".format(
+                        sum(gpu_mem[gpu_index]) / len(gpu_mem[gpu_index])) + "\t MIN: " + "{:.2f}".format(
+                        min(gpu_mem[gpu_index])) + "\t MAX: " + "{:.2f}".format(max(gpu_mem[gpu_index])) + "\n", 'stdout')
+
 
     async def scorep_execute(self, code, silent, store_history=True, user_expressions=None,
                              allow_stdin=False, *, cell_id=None):
@@ -413,6 +513,28 @@ class ScorepPythonKernel(IPythonKernel):
                 return self.append_multicellmode(magics_cleanup(code))
             elif self.mode == KernelMode.WRITEFILE:
                 return self.append_writefile(magics_cleanup(code), explicit_scorep=False)
+            self.pershelper.parse(code, 'jupyter')
+
+            # for code without scorep, we are interested in performance data
+            # start a subprocess that tracks the performance data
+            proc_env = os.environ.copy()
+            proc_env.update({'PYTHONUNBUFFERED': 'x'})
+
+            # TODO: add sampling rate for performance data recording
+            perfproc = subprocess.Popen([sys.executable, "-m" "perfmonitor"], stdout=subprocess.PIPE,
+                                        stderr=subprocess.STDOUT, env=proc_env)
+
+            start = time.perf_counter()
+            parent_ret = await super().do_execute(code, silent, store_history, user_expressions, allow_stdin,
+                                                  cell_id=cell_id)
+            duration = time.perf_counter() - start
+
+            perfproc.kill()
+            stdout_data, _ = perfproc.communicate()
+
+            # parse the performance data from the stdout pipe of the subprocess and print the performance data
+            self.report_perfdata(stdout_data, duration)
+            return parent_ret
 
     def do_shutdown(self, restart):
         self.pershelper.postprocess()
@@ -421,4 +543,4 @@ class ScorepPythonKernel(IPythonKernel):
 
 if __name__ == '__main__':
     from ipykernel.kernelapp import IPKernelApp
-    IPKernelApp.launch_instance(kernel_class=ScorepPythonKernel)
+    IPKernelApp.launch_instance(kernel_class=PyPerfKernel)
