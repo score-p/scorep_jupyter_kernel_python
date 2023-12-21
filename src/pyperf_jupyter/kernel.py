@@ -22,7 +22,7 @@ import json
 import time
 import pickle
 import codecs
-from scorep_jupyter.userpersistence import extract_definitions, extract_variables_names
+from pyperf_jupyter.userpersistence import extract_definitions, extract_variables_names
 
 PYTHON_EXECUTABLE = sys.executable
 READ_CHUNK_SIZE = 8
