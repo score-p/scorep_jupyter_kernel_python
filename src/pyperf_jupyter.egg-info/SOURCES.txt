@@ -1,0 +1,13 @@
+LICENSE
+README.md
+pyproject.toml
+src/pyperf_jupyter/__init__.py
+src/pyperf_jupyter/install.py
+src/pyperf_jupyter/kernel.py
+src/pyperf_jupyter/perfmonitor.py
+src/pyperf_jupyter/userpersistence.py
+src/pyperf_jupyter.egg-info/PKG-INFO
+src/pyperf_jupyter.egg-info/SOURCES.txt
+src/pyperf_jupyter.egg-info/dependency_links.txt
+src/pyperf_jupyter.egg-info/requires.txt
+src/pyperf_jupyter.egg-info/top_level.txt

@@ -135,6 +135,7 @@ class PyPerfKernel(IPythonKernel):
             self.cell_output(f'KernelWarning: Currently in {self.mode}, command ignored.', 'stderr')
         return self.standard_reply()
 
+
     def set_scorep_env(self, code):
         """
         Read and record Score-P environment variables from the cell.
