@@ -4,7 +4,7 @@ import os
 import subprocess
 import re
 import time
-from scorep_jupyter.userpersistence import PersHelper, scorep_script_name, magics_cleanup
+from pyperf_jupyter.userpersistence import PersHelper, scorep_script_name
 from enum import Enum
 from textwrap import dedent
 
@@ -45,6 +45,8 @@ class PyPerfKernel(IPythonKernel):
         # TODO: timeit, python, ...? do not save variables to globals()
         self.whitelist_prefixes_cell = ['%%prun', '%%timeit', '%%capture', '%%python', '%%pypy']
         self.whitelist_prefixes_line = ['%prun', '%time']
+
+        self.blacklist_prefixes = ['%lsmagic']
 
         self.scorep_binding_args = []
         self.scorep_env = {}
