@@ -4,6 +4,9 @@ import os
 import subprocess
 import re
 import time
+import matplotlib.pyplot as plt
+# Create interactive widgets
+from ipywidgets import interact
 from pyperf_jupyter.userpersistence import PersHelper, scorep_script_name
 from enum import Enum
 from textwrap import dedent
@@ -42,11 +45,18 @@ class PyPerfKernel(IPythonKernel):
         self.whitelist_prefixes_cell = list(magics['cell'].keys())
         '''
 
+        # setting the matplotlib backend
+        super().shell.run_cell("%matplotlib inline", silent=True, store_history=False)
+        super().shell.run_cell("%matplotlib widget", silent=True, store_history=False)
+
         # TODO: timeit, python, ...? do not save variables to globals()
         self.whitelist_prefixes_cell = ['%%prun', '%%timeit', '%%capture', '%%python', '%%pypy']
         self.whitelist_prefixes_line = ['%prun', '%time']
 
         self.blacklist_prefixes = ['%lsmagic']
+
+        self.code_history = []
+        self.performance_data_history = []
 
         self.scorep_binding_args = []
         self.scorep_env = {}
@@ -281,6 +291,76 @@ class PyPerfKernel(IPythonKernel):
 
         return nodes
 
+    def draw_performance_graph(self, metrics, index):
+        plt.rcParams["figure.figsize"] = (10, 2.5)
+        nmetrics = len(metrics)
+
+        if nmetrics == 1:
+            plt.rcParams["figure.figsize"] = (5, 2.5)
+
+        if nmetrics:
+            # Create a figure and axis
+            if nmetrics < 3:
+                fig, axs = plt.subplots(1, nmetrics)
+                if nmetrics == 1:
+                    axs = [axs]
+            else:
+                # TODO: up to now we have max only 4, if we get more adjust here
+                fig, axs = plt.subplots(2, 2)
+            n = 0
+            if "cpu_util" in metrics:
+                cpudata = self.performance_data_history[index][0]
+                fig.tight_layout(w_pad=5.0)
+                axs[n].set_title('CPU Util')
+                axs[n].set_xlabel('time')
+                axs[n].set_ylabel('util %')
+
+                # Plot the data
+                for cpu_index in range(0, len(cpudata)):
+                    axs[n].plot(cpudata[cpu_index], label="CPU" + str(cpu_index))
+
+                axs[n].legend()
+                n += 1
+            if "mem_util" in metrics:
+                memdata = self.performance_data_history[index][1]
+
+                # Create a figure and axis
+                # fig1, ax1 = plt.subplots()
+                axs[n].set_title('Memory Util')
+                axs[n].set_xlabel('time')
+                axs[n].set_ylabel('util %')
+
+                # Plot the data
+                axs[n].plot(memdata)
+                n += 1
+            if "gpu_util" in metrics:
+                gpudata_util = self.performance_data_history[index][2]
+                fig.tight_layout(w_pad=5.0)
+                axs[n].set_title('GPU Util')
+                axs[n].set_xlabel('time')
+                axs[n].set_ylabel('util %')
+
+                # Plot the data
+                for gpu_index in range(0, len(gpudata_util)):
+                    axs[n].plot(gpudata_util[gpu_index], label="GPU" + str(gpu_index))
+
+                axs[n].legend()
+                n += 1
+            if "gpu_mem" in metrics:
+                gpudata_mem = self.performance_data_history[index][3]
+                fig.tight_layout(w_pad=5.0)
+                axs[n].set_title('GPU Memory')
+                axs[n].set_xlabel('time')
+                axs[n].set_ylabel('util %')
+
+                # Plot the data
+                for gpu_index in range(0, len(gpudata_mem)):
+                    axs[n].plot(gpudata_mem[gpu_index], label="CPU" + str(gpu_index))
+
+                axs[n].legend()
+                n += 1
+            plt.show()
+
     def report_perfdata(self, stdout_data, duration):
 
         # might be that parent process pushes to stdout and that output gets reversed
@@ -329,7 +409,9 @@ class PyPerfKernel(IPythonKernel):
                 for cpu_index in range(0, len(cpu_util)):
                     self.cell_output("\tCPU" + str(cpu_index) + "\tAVG: " + "{:.2f}".format(
                         sum(cpu_util[cpu_index]) / len(cpu_util[cpu_index])) + "\t MIN: " + "{:.2f}".format(
-                        min(cpu_util[cpu_index])) + "\t MAX: " + "{:.2f}".format(max(cpu_util[cpu_index]))+"\n", 'stdout')
+                        min(cpu_util[cpu_index])) + "\t MAX: " + "{:.2f}".format(max(cpu_util[cpu_index])) + "\n",
+                                     'stdout')
+
             if len(mem_util) > 0:
                 self.cell_output(
                     "\n--Mem Util-- \tAVG: " + "{:.2f}".format(
@@ -342,11 +424,18 @@ class PyPerfKernel(IPythonKernel):
                     self.cell_output("\tGPU" + str(gpu_index) +
                                      "\tUtil AVG: " + "{:.2f}".format(
                         sum(gpu_util[gpu_index]) / len(gpu_util[gpu_index])) + "\t MIN: " + "{:.2f}".format(
-                        min(gpu_util[gpu_index])) + "\t MAX: " + "{:.2f}".format(max(gpu_util[gpu_index])) + "\n", 'stdout')
+                        min(gpu_util[gpu_index])) + "\t MAX: " + "{:.2f}".format(max(gpu_util[gpu_index])) + "\n",
+                                     'stdout')
                     self.cell_output("\t    " +
                                      "\t Mem AVG: " + "{:.2f}".format(
                         sum(gpu_mem[gpu_index]) / len(gpu_mem[gpu_index])) + "\t MIN: " + "{:.2f}".format(
-                        min(gpu_mem[gpu_index])) + "\t MAX: " + "{:.2f}".format(max(gpu_mem[gpu_index])) + "\n", 'stdout')
+                        min(gpu_mem[gpu_index])) + "\t MAX: " + "{:.2f}".format(max(gpu_mem[gpu_index])) + "\n",
+                                     'stdout')
+
+            self.performance_data_history.append([cpu_util, mem_util, gpu_util, gpu_mem])
+            return True
+        else:
+            return False
 
 
     async def scorep_execute(self, code, silent, store_history=True, user_expressions=None,
@@ -468,7 +557,35 @@ class PyPerfKernel(IPythonKernel):
         execute cell with super().do_execute(), else save Score-P environment/binding arguments/
         execute cell with Score-P Python binding.
         """
-        if code.startswith('%%scorep_env'):
+
+        '''
+        #displays all ran cell codes with index and timestamp
+        %%display_code_all
+
+        #displays code for index
+        %%display_code_for_index i
+
+        # displays graphs for last cell, arguments: cpu_util etc.
+        %%display_graphs_for_last cpu_util, ...
+        # displays one graph for all cell, arguments: cpu_util etc.
+        %%display_graphs_for_all cpu_util, ...
+        # -> would be cool if we can hover the graph and per timepoint, we see the index of the cell
+        # displays graph for index cell, arguments: cpu_util etc.
+        %%display_graphs_for_index i cpu_util, ...
+        '''
+        if code.startswith('%%display_graph_for_last'):
+            metrics = code.split(' ')
+            self.draw_performance_graph(metrics[1:], -1)
+            return self.standard_reply()
+        elif code.startswith('%%display_graph_for_index'):
+            metrics = code.split(' ')
+            self.draw_performance_graph(metrics[2:], metrics[1])
+            return self.standard_reply()
+        elif code.startswith('%%display_graph_for_all'):
+            #metrics = code.split(' ')
+            #self.draw_performance_graph(metrics[2:], metrics[1])
+            return self.standard_reply()
+        elif code.startswith('%%scorep_env'):
             return self.set_scorep_env(code)
         elif code.startswith('%%scorep_python_binding_arguments'):
             return self.set_scorep_pythonargs(code)
@@ -535,7 +652,8 @@ class PyPerfKernel(IPythonKernel):
             stdout_data, _ = perfproc.communicate()
 
             # parse the performance data from the stdout pipe of the subprocess and print the performance data
-            self.report_perfdata(stdout_data, duration)
+            if self.report_perfdata(stdout_data, duration):
+                self.code_history.append(code)
             return parent_ret
 
     def do_shutdown(self, restart):
