@@ -29,6 +29,11 @@ class ScorepPythonKernel(IPythonKernel):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
+        self.whitelist_prefixes_cell = ['%%prun', '%%timeit', '%%capture', '%%python', '%%pypy']
+        self.whitelist_prefixes_line = ['%prun', '%time']
+
+        self.blacklist_prefixes = ['%lsmagic']
+
         self.scorep_binding_args = []
         self.scorep_env = {}
 
@@ -388,16 +393,18 @@ class ScorepPythonKernel(IPythonKernel):
         else:
             # Some line/cell magics involve executing Python code, which must be parsed
             # TODO: timeit, python, ...? do not save variables to globals()
-            whitelist_prefixes_cell = ['%%prun', '%%timeit', '%%capture', '%%python', '%%pypy']
-            whitelist_prefixes_line = ['%prun', '%time']
-
             nomagic_code = '' # Code to be parsed for user variables
             if not code.startswith(tuple(['%', '!'])): # No IPython magics and shell commands
                 nomagic_code = code
             else:
-                if code.startswith(tuple(whitelist_prefixes_cell)): # Cell magic, remove first line
+                if code.startswith(tuple(self.blacklist_prefixes)):
+                    self.cell_output(code + "is not supposed to be executed with this kernel due to compatibility "
+                                            "issues", 'stderr')
+                    return self.standard_reply()
+
+                if code.startswith(tuple(self.whitelist_prefixes_cell)): # Cell magic, remove first line
                     nomagic_code = code.split("\n", 1)[1]
-                elif code.startswith(tuple(whitelist_prefixes_line)): # Line magic, remove first word
+                elif code.startswith(tuple(self.whitelist_prefixes_line)): # Line magic, remove first word
                     nomagic_code = code.split(" ", 1)[1]
             if nomagic_code:
                 # Parsing for user variables might fail due to SyntaxError
