@@ -18,6 +18,18 @@ import pandas as pd
 
 PYTHON_EXECUTABLE = sys.executable
 READ_CHUNK_SIZE = 8
+import json
+import time
+import pickle
+import codecs
+from scorep_jupyter.userpersistence import extract_definitions, extract_variables_names
+
+PYTHON_EXECUTABLE = sys.executable
+READ_CHUNK_SIZE = 8
+userpersistence_token = "pyperf_jupyter.userpersistence"
+scorep_script_name = "scorep_script.py"
+jupyter_dump = "jupyter_dump.pkl"
+subprocess_dump = "subprocess_dump.pkl"
 
 # kernel modes
 class KernelMode(Enum):
@@ -95,6 +107,7 @@ class PyPerfKernel(IPythonKernel):
                 'payload': [],
                 'user_expressions': {},
                 }
+
 
     def serializer_settings(self, code):
         """
@@ -270,7 +283,6 @@ class PyPerfKernel(IPythonKernel):
                 f'KernelWarning: Currently in {self.mode}, command ignored.', 'stderr')
         return self.standard_reply()
 
-
     def ghost_cell_error(self, reply_status, error_message):
         self.shell.execution_count += 1
         reply_status['execution_count'] = self.shell.execution_count - 1
@@ -444,7 +456,6 @@ class PyPerfKernel(IPythonKernel):
                         sum(cpu_util[cpu_index]) / len(cpu_util[cpu_index])) + "\t MIN: " + "{:.2f}".format(
                         min(cpu_util[cpu_index])) + "\t MAX: " + "{:.2f}".format(max(cpu_util[cpu_index])) + "\n",
                                      'stdout')
-
             if len(mem_util) > 0:
                 self.cell_output(
                     "\n--Mem Util-- \tAVG: " + "{:.2f}".format(
@@ -469,7 +480,6 @@ class PyPerfKernel(IPythonKernel):
             return True
         else:
             return False
-
 
     async def scorep_execute(self, code, silent, store_history=True, user_expressions=None,
                              allow_stdin=False, *, cell_id=None):

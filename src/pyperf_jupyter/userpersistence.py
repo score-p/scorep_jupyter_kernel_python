@@ -232,7 +232,6 @@ def extract_definitions(code):
 
     return definitions_string
 
-
 def extract_variables_names(code):
     """
     Extract user-assigned variables from code.
