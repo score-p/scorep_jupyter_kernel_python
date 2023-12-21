@@ -22,6 +22,9 @@ import json
 import time
 import pickle
 import codecs
+import matplotlib.pyplot as plt
+# Create interactive widgets
+from ipywidgets import interact
 from pyperf_jupyter.userpersistence import extract_definitions, extract_variables_names
 
 PYTHON_EXECUTABLE = sys.executable
@@ -408,10 +411,8 @@ class PyPerfKernel(IPythonKernel):
             plt.show()
 
     def report_perfdata(self, stdout_data, duration):
-
-        # might be that parent process pushes to stdout and that output gets reversed
-        # couldn't find a better way than waiting for 1s and hoping that outputs are in correct order in the queue now
-        time.sleep(1)
+        if nmetrics == 1:
+            plt.rcParams["figure.figsize"] = (5, 2.5)
 
         stdout_data = stdout_data.split(b"\n\n")
 
@@ -422,6 +423,7 @@ class PyPerfKernel(IPythonKernel):
             cpu_util = [[] for _ in init_data[0]]
             gpu_util = [[] for _ in init_data[2]]
             gpu_mem = [[] for _ in init_data[3]]
+
 
         for line in stdout_data:
             if line == b'':
