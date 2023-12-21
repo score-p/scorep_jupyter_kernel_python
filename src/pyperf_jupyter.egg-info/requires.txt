@@ -1,5 +1,0 @@
-ipykernel
-jupyter-client
-astunparse
-scorep
-dill
