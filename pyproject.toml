@@ -25,6 +25,10 @@ dependencies = [
   "astunparse",
   "dill",
   "cloudpickle"
+  "dill",
+  "itables",
+  "matplotlib",
+  "pandas"
 ]
 
 [project.urls]
