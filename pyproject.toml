@@ -28,6 +28,8 @@ dependencies = [
   "matplotlib",
   "pandas",
   "pynvml" # we need that only for Nvidia GPU systems
+  "scorep",
+  "pandas"
 ]
 
 [project.urls]
