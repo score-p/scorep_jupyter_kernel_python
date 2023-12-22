@@ -424,7 +424,6 @@ class PyPerfKernel(IPythonKernel):
             gpu_util = [[] for _ in init_data[2]]
             gpu_mem = [[] for _ in init_data[3]]
 
-
         for line in stdout_data:
             if line == b'':
                 continue
