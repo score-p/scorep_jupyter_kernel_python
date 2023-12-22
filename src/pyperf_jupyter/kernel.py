@@ -291,9 +291,44 @@ class PyPerfKernel(IPythonKernel):
 
         return nodes
 
-    def draw_performance_graph(self, metrics, index):
+    def get_perfdata_index(self, index, metrics):
+        cpu_util = self.performance_data_history[index][0] if "cpu_util" in metrics else [[]]
+        mem_util = self.performance_data_history[index][1] if "mem_util" in metrics else []
+        gpu_util = self.performance_data_history[index][2] if "gpu_util" in metrics else [[]]
+        gpu_mem = self.performance_data_history[index][3] if "gpu_mem" in metrics else [[]]
+
+        return cpu_util, mem_util, gpu_util, gpu_mem
+
+    def get_perfdata_aggregated(self, metrics):
+        perfdata_init = self.performance_data_history[0]
+        # for each cpu and gpu, we need an empty list to be filled
+        cpu_util = [[] for _ in perfdata_init[0]] if perfdata_init[0] else [[]]
+        gpu_util = [[] for _ in perfdata_init[2]] if perfdata_init[2] else [[]]
+        gpu_mem = [[] for _ in perfdata_init[2]] if perfdata_init[3] else [[]]
+        mem_util = []
+
+        for perfdata in self.performance_data_history:
+            if "cpu_util" in metrics:
+                for cpu_index in range(0, len(perfdata[0])):
+                    cpu_util[cpu_index].extend(perfdata[0][cpu_index])
+            if "mem_util" in metrics:
+                mem_util.extend(perfdata[1])
+            if "gpu_util" in metrics:
+                for gpu_index in range(0, len(perfdata[2])):
+                    gpu_util[gpu_index].extend(perfdata[2][gpu_index])
+            if "gpu_mem" in metrics:
+                for gpu_index in range(0, len(perfdata[3])):
+                    gpu_mem[gpu_index].extend(perfdata[3][gpu_index])
+
+        return cpu_util, mem_util, gpu_util, gpu_mem
+
+    def draw_performance_graph(self, perfdata, nmetrics):
+        cpudata = perfdata[0]
+        memdata = perfdata[1]
+        gpudata_util = perfdata[2]
+        gpudata_mem = perfdata[3]
+
         plt.rcParams["figure.figsize"] = (10, 2.5)
-        nmetrics = len(metrics)
 
         if nmetrics == 1:
             plt.rcParams["figure.figsize"] = (5, 2.5)
@@ -307,10 +342,9 @@ class PyPerfKernel(IPythonKernel):
             else:
                 # TODO: up to now we have max only 4, if we get more adjust here
                 fig, axs = plt.subplots(2, 2)
+            fig.tight_layout(w_pad=5.0)
             n = 0
-            if "cpu_util" in metrics:
-                cpudata = self.performance_data_history[index][0]
-                fig.tight_layout(w_pad=5.0)
+            if cpudata[0]:
                 axs[n].set_title('CPU Util')
                 axs[n].set_xlabel('time')
                 axs[n].set_ylabel('util %')
@@ -321,9 +355,7 @@ class PyPerfKernel(IPythonKernel):
 
                 axs[n].legend()
                 n += 1
-            if "mem_util" in metrics:
-                memdata = self.performance_data_history[index][1]
-
+            if memdata:
                 # Create a figure and axis
                 # fig1, ax1 = plt.subplots()
                 axs[n].set_title('Memory Util')
@@ -333,9 +365,7 @@ class PyPerfKernel(IPythonKernel):
                 # Plot the data
                 axs[n].plot(memdata)
                 n += 1
-            if "gpu_util" in metrics:
-                gpudata_util = self.performance_data_history[index][2]
-                fig.tight_layout(w_pad=5.0)
+            if gpudata_util and gpudata_util[0]:
                 axs[n].set_title('GPU Util')
                 axs[n].set_xlabel('time')
                 axs[n].set_ylabel('util %')
@@ -346,9 +376,7 @@ class PyPerfKernel(IPythonKernel):
 
                 axs[n].legend()
                 n += 1
-            if "gpu_mem" in metrics:
-                gpudata_mem = self.performance_data_history[index][3]
-                fig.tight_layout(w_pad=5.0)
+            if gpudata_mem[0]:
                 axs[n].set_title('GPU Memory')
                 axs[n].set_xlabel('time')
                 axs[n].set_ylabel('util %')
@@ -375,7 +403,7 @@ class PyPerfKernel(IPythonKernel):
             init_data = pickle.loads(codecs.decode(stdout_data[0], "base64"))
             cpu_util = [[] for _ in init_data[0]]
             gpu_util = [[] for _ in init_data[2]]
-            gpu_mem = [[] for _ in init_data[2]]
+            gpu_mem = [[] for _ in init_data[3]]
 
         for line in stdout_data:
             if line == b'':
@@ -575,15 +603,18 @@ class PyPerfKernel(IPythonKernel):
         '''
         if code.startswith('%%display_graph_for_last'):
             metrics = code.split(' ')
-            self.draw_performance_graph(metrics[1:], -1)
+            nmetrics = len(metrics) - 1
+            self.draw_performance_graph(self.get_perfdata_index(-1, metrics[1:]), nmetrics)
             return self.standard_reply()
         elif code.startswith('%%display_graph_for_index'):
             metrics = code.split(' ')
-            self.draw_performance_graph(metrics[2:], metrics[1])
+            nmetrics = len(metrics) - 2
+            self.draw_performance_graph(self.get_perfdata_index(int(metrics[1]), metrics[2:]), nmetrics)
             return self.standard_reply()
         elif code.startswith('%%display_graph_for_all'):
-            #metrics = code.split(' ')
-            #self.draw_performance_graph(metrics[2:], metrics[1])
+            metrics = code.split(' ')
+            nmetrics = len(metrics) - 1
+            self.draw_performance_graph(self.get_perfdata_aggregated(metrics[1:]), nmetrics)
             return self.standard_reply()
         elif code.startswith('%%scorep_env'):
             return self.set_scorep_env(code)
