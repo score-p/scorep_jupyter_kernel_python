@@ -5,11 +5,16 @@ import subprocess
 import re
 import time
 import matplotlib.pyplot as plt
+from itables import show
+from datetime import datetime
+
 # Create interactive widgets
 from ipywidgets import interact
 from pyperf_jupyter.userpersistence import PersHelper, scorep_script_name
 from enum import Enum
 from textwrap import dedent
+
+import pandas as pd
 
 PYTHON_EXECUTABLE = sys.executable
 READ_CHUNK_SIZE = 8
@@ -616,6 +621,15 @@ class PyPerfKernel(IPythonKernel):
             nmetrics = len(metrics) - 1
             self.draw_performance_graph(self.get_perfdata_aggregated(metrics[1:]), nmetrics)
             return self.standard_reply()
+
+        elif code.startswith('%%display_code_for_index'):
+            index = int(code.split(' ')[1])
+            self.cell_output("Cell timestamp: " + str(self.code_history[index][0]) + "\n--\n", 'stdout')
+            self.cell_output(self.code_history[index][1], 'stdout')
+            return self.standard_reply()
+        elif code.startswith('%%display_code_history'):
+            show(pd.DataFrame(self.code_history, columns=["timestamp", "code"]).reset_index())
+            return self.standard_reply()
         elif code.startswith('%%scorep_env'):
             return self.set_scorep_env(code)
         elif code.startswith('%%scorep_python_binding_arguments'):
@@ -626,6 +640,7 @@ class PyPerfKernel(IPythonKernel):
             return self.enable_multicellmode()
         elif code.startswith('%%abort_multicellmode'):
             return self.abort_multicellmode()
+
         elif code.startswith('%%finalize_multicellmode'):
             # Cannot be put into a separate function due to tight coupling between do_execute and scorep_execute
             if self.mode == KernelMode.MULTICELL:
@@ -684,7 +699,7 @@ class PyPerfKernel(IPythonKernel):
 
             # parse the performance data from the stdout pipe of the subprocess and print the performance data
             if self.report_perfdata(stdout_data, duration):
-                self.code_history.append(code)
+                self.code_history.append([datetime.now(), code])
             return parent_ret
 
     def do_shutdown(self, restart):
