@@ -23,8 +23,9 @@ import time
 import pickle
 import codecs
 import matplotlib.pyplot as plt
-# Create interactive widgets
-from ipywidgets import interact
+from itables import show
+import pandas as pd
+from datetime import datetime
 from pyperf_jupyter.userpersistence import extract_definitions, extract_variables_names
 
 PYTHON_EXECUTABLE = sys.executable
