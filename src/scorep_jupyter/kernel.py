@@ -223,7 +223,7 @@ class ScorepPythonKernel(IPythonKernel):
             self.scorep_binding_args + [scorep_script_name]
 
         proc_env = os.environ.copy()
-        proc_env.update({'PYTHONUNBUFFERED': 'x'}) # subprocess observation
+        proc_env.update({'PYTHONUNBUFFERED': 'x'}) # scorep path, subprocess observation
 
         incomplete_line = ''
         endline_pattern = re.compile(r'(.*?[\r\n]|.+$)')
