@@ -6,12 +6,12 @@
       /home/runner/work/scorep_jupyter_kernel_python/scorep_jupyter_kernel_python/tests_tmp/my_jupyter_to_script.py
 -
   - |-
-    %%scorep_env
-    SCOREP_ENABLE_TRACING=1
-    SCOREP_ENABLE_PROFILING=0
-    SCOREP_TOTAL_MEMORY=3g
-    SCOREP_EXPERIMENT_DIRECTORY=tests_tmp/scorep-traces
-  - - "Environment variables recorded."
+    import os
+    os.environ['SCOREP_ENABLE_TRACING']="1"
+    os.environ['SCOREP_ENABLE_PROFILING']="0"
+    os.environ['SCOREP_TOTAL_MEMORY']="3g"
+    os.environ['SCOREP_EXPERIMENT_DIRECTORY']="tests_tmp/scorep-traces"
+  - - "Python commands without instrumentation recorded."
 -
   - |-
     %%scorep_python_binding_arguments
@@ -60,7 +60,7 @@
 -
   - |-
     %%bash
-    chmod u+x tests_tmp/my_jupyter_to_script_run.sh
+    chmod u+x ./tests_tmp/my_jupyter_to_script_run.sh
     ./tests_tmp/my_jupyter_to_script_run.sh
   - - "a + b = 15\n"
     - "a - b = -5\n"

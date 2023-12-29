@@ -30,7 +30,6 @@ class ScorepPythonKernel(IPythonKernel):
         super().__init__(**kwargs)
 
         self.scorep_binding_args = []
-        self.scorep_env = {}
 
         self.user_variables = set()
 
@@ -42,7 +41,6 @@ class ScorepPythonKernel(IPythonKernel):
         self.writemode_filename = 'jupyter_to_script'
         self.writemode_multicell = False
         self.writemode_scorep_binding_args = []
-        self.writemode_scorep_env = []
         # TODO: reset variables after each finalize writefile?
         self.bash_script_filename = ""
         self.python_script_filename = ""
@@ -71,17 +69,6 @@ class ScorepPythonKernel(IPythonKernel):
         for aux_file in [scorep_script_name, jupyter_dump, subprocess_dump]:
             if os.path.exists(aux_file):
                 os.remove(aux_file)
-
-    def set_scorep_env(self, code):
-        """
-        Read and record Score-P environment variables from the cell.
-        """
-        for scorep_param in code.split('\n')[1:]:
-            key, val = scorep_param.split('=')
-            self.scorep_env[key] = val
-        self.cell_output(
-            'Score-P environment set successfully: ' + str(self.scorep_env))
-        return self.standard_reply()
 
     def set_scorep_pythonargs(self, code):
         """
@@ -160,7 +147,7 @@ class ScorepPythonKernel(IPythonKernel):
         # TODO: check for os path existence
         self.writemode = False
         self.bash_script.write(
-            f"{' '.join(self.writemode_scorep_env)} {PYTHON_EXECUTABLE} -m scorep {' '.join(self.writemode_scorep_binding_args)} {self.python_script_filename}")
+            f"{PYTHON_EXECUTABLE} -m scorep {' '.join(self.writemode_scorep_binding_args)} {self.python_script_filename}")
 
         self.bash_script.close()
         self.python_script.close()
@@ -171,10 +158,7 @@ class ScorepPythonKernel(IPythonKernel):
         """
         Append cell to write mode sequence. Extract Score-P environment or Python bindings argument if necessary.
         """
-        if code.startswith('%%scorep_env'):
-            self.writemode_scorep_env += code.split('\n')[1:]
-            self.cell_output('Environment variables recorded.')
-        elif code.startswith('%%scorep_python_binding_arguments'):
+        if code.startswith('%%scorep_python_binding_arguments'):
             self.writemode_scorep_binding_args += code.split('\n')[1:]
             self.cell_output('Score-P bindings arguments recorded.')
 
@@ -249,7 +233,6 @@ class ScorepPythonKernel(IPythonKernel):
         cmd = [PYTHON_EXECUTABLE, "-m", "scorep"] + \
             self.scorep_binding_args + [scorep_script_name]
         proc_env = os.environ.copy()
-        proc_env.update(self.scorep_env)
         proc_env.update({'PYTHONUNBUFFERED': 'x'}) # subprocess observation
 
         incomplete_line = ''
@@ -306,8 +289,8 @@ class ScorepPythonKernel(IPythonKernel):
             return reply_status_load
 
         self.comm_files_cleanup()
-        if 'SCOREP_EXPERIMENT_DIRECTORY' in self.scorep_env:
-            scorep_folder = self.scorep_env['SCOREP_EXPERIMENT_DIRECTORY']
+        if 'SCOREP_EXPERIMENT_DIRECTORY' in os.environ:
+            scorep_folder = os.environ['SCOREP_EXPERIMENT_DIRECTORY']
             self.cell_output(
                 f"Instrumentation results can be found in {scorep_folder}")
         else:
@@ -369,8 +352,6 @@ class ScorepPythonKernel(IPythonKernel):
         elif code.startswith('%%enable_multicellmode'):
             return self.enable_multicellmode()
 
-        elif code.startswith('%%scorep_env'):
-            return self.set_scorep_env(code)
         elif code.startswith('%%scorep_python_binding_arguments'):
             return self.set_scorep_pythonargs(code)
         elif self.multicellmode:
