@@ -32,8 +32,6 @@ class ScorepPythonKernel(IPythonKernel):
         self.scorep_binding_args = []
         self.scorep_env = {}
 
-        self.user_variables = set()
-
         self.multicellmode = False
         self.multicellmode_cellcount = 0
         self.multicell_code = ""
@@ -229,6 +227,13 @@ class ScorepPythonKernel(IPythonKernel):
         # Prepare code for the Score-P instrumented execution as subprocess
         # Transmit user persistence and updated sys.path from Jupyter notebook to subprocess
         # After running code, transmit subprocess persistence back to Jupyter notebook
+
+        try:
+            user_variables = extract_variables_names(code)
+        except SyntaxError as e:
+            self.cell_output(f"SyntaxError: {e}", 'stderr')
+            return self.standard_reply()
+        
         sys_path_updated = json.dumps(sys.path)
         scorep_code = "import scorep\n" + \
                       "with scorep.instrumenter.disable():\n" + \
@@ -240,7 +245,7 @@ class ScorepPythonKernel(IPythonKernel):
                      f"    sys.path.extend({sys_path_updated})\n" + \
                       code + "\n" + \
                       "with scorep.instrumenter.disable():\n" + \
-                     f"   save_variables_values(globals(), {str(self.user_variables)}, '{subprocess_dump}')"
+                     f"   save_variables_values(globals(), {str(user_variables)}, '{subprocess_dump}')"
 
         with open(scorep_script_name, 'w+') as file:
             file.write(scorep_code)
@@ -376,37 +381,8 @@ class ScorepPythonKernel(IPythonKernel):
         elif self.multicellmode:
             return self.append_multicellmode(code)
         elif code.startswith('%%execute_with_scorep'):
-            code = code.split("\n", 1)[1]
-            # Parsing for user variables might fail due to SyntaxError
-            try:
-                user_variables = extract_variables_names(code)
-            except SyntaxError as e:
-                self.cell_output(f"SyntaxError: {e}", 'stderr')
-                return self.standard_reply()
-            self.user_variables.update(user_variables)
-            return await self.scorep_execute(code, silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
+            return await self.scorep_execute(code.split("\n", 1)[1], silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
         else:
-            # Some line/cell magics involve executing Python code, which must be parsed
-            # TODO: timeit, python, ...? do not save variables to globals()
-            whitelist_prefixes_cell = ['%%prun', '%%timeit', '%%capture', '%%python', '%%pypy']
-            whitelist_prefixes_line = ['%prun', '%time']
-
-            nomagic_code = '' # Code to be parsed for user variables
-            if not code.startswith(tuple(['%', '!'])): # No IPython magics and shell commands
-                nomagic_code = code
-            else:
-                if code.startswith(tuple(whitelist_prefixes_cell)): # Cell magic, remove first line
-                    nomagic_code = code.split("\n", 1)[1]
-                elif code.startswith(tuple(whitelist_prefixes_line)): # Line magic, remove first word
-                    nomagic_code = code.split(" ", 1)[1]
-            if nomagic_code:
-                # Parsing for user variables might fail due to SyntaxError
-                try:
-                    user_variables = extract_variables_names(nomagic_code)
-                except SyntaxError as e:
-                    self.cell_output(f"SyntaxError: {e}", 'stderr')
-                    return self.standard_reply()
-                self.user_variables.update(user_variables)
             return await super().do_execute(code, silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
 
 
