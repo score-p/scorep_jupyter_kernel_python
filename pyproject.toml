@@ -11,7 +11,7 @@ version='1.0.0'
 authors=[
   {name='Elias Werner',email='elias.werner@tu-dresden.de'},
 ]
-description='This is a Jupyter Python Kernel for performane engineering. Beside performance data as CPU, GPU, memory utilization it supports performance data recording with Score-P.'
+description='This is a Jupyter Python Kernel for performance engineering. Beside performance data as CPU, GPU, memory utilization it supports performance data recording with Score-P.'
 readme={ file='README.md', content-type="text/markdown"}
 license={ file="LICENSE" }
 requires-python = ">=3.8"
@@ -24,11 +24,10 @@ dependencies = [
   "jupyter-client",
   "astunparse",
   "dill",
-  "cloudpickle"
-  "dill",
   "itables",
   "matplotlib",
-  "pandas"
+  "pandas",
+  "pynvml" # we need that only for Nvidia GPU systems
 ]
 
 [project.urls]
