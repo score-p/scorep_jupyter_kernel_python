@@ -39,7 +39,7 @@ jobs:
           pip install --upgrade setuptools
           pip install scorep
           pip install jupyter_kernel_test
-          pip install pyyaml dill numpy pandas
+          pip install pyyaml dill cloudpickle numpy pandas
 
       - name: Build Score-P Python kernel
         run: |
