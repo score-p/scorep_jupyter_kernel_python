@@ -3,7 +3,7 @@
     %%execute_with_scorep
     import scorep
     with scorep.instrumenter.enable():
-        print("a - b =", a - b)
+        print('a - b =', a - b)
   - - "\0"
     - "a - b = -5\n"
     - "Instrumentation results can be found in tests_tmp/scorep-traces"

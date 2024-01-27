@@ -24,7 +24,8 @@ dependencies = [
   "jupyter-client",
   "astunparse",
   "scorep",
-  "dill"
+  "dill",
+  "cloudpickle"
 ]
 
 [project.urls]
