@@ -18,12 +18,25 @@
   - - "Cell marked for multicell mode. It will be executed at position 1"
 -
   - |-
-    print("c =", c)
-    print("Sum(c_vec) =", c_vec.sum())
+    print('c =', c)
+    print('Sum(c_vec) =', c_vec.sum())
   - - "Cell marked for multicell mode. It will be executed at position 2"
 -
   - "%%finalize_multicellmode"
   - - "\0"
+    - "Executing cell 1\n"
+    - "with scorep.instrumenter.enable():\n"
+    - "    c = np.sum(c_mtx)\n"
+    - "    c_vec = np.arange(b, c)\n"
+    - "----------------------------------\n"
+    - "\n"
+    - "\n"
+    - "Executing cell 2\n"
+    - "print('c =', c)\n"
+    - "print('Sum(c_vec) =', c_vec.sum())\n"
+    - "----------------------------------\n"
     - "c = 350\n"
     - "Sum(c_vec) = 61030\n"
+    - "\n"
+    - "\n"
     - "Instrumentation results can be found in tests_tmp/scorep-traces"
