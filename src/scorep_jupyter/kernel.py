@@ -114,8 +114,13 @@ class ScorepPythonKernel(IPythonKernel):
         """
         Append cell to multicell mode sequence.
         """
-        self.multicell_code += ("\n" + code)
         self.multicellmode_cellcount += 1
+        max_line_len = max(len(line) for line in code.split('\n'))
+        self.multicell_code += f"print('Executing cell {self.multicellmode_cellcount}')\n" + \
+                               f"print('''{code}''')\n" + \
+                               f"print('-' * {max_line_len})\n" + \
+                               f"{code}\n" + \
+                               f"print('''\n''')\n"
         self.cell_output(
             f'Cell marked for multicell mode. It will be executed at position {self.multicellmode_cellcount}')
         return self.standard_reply()
