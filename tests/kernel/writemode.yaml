@@ -24,14 +24,14 @@
     b = 10
     a_vec = np.arange(a)
     b_vec =  np.arange(a, b)
-    print("a + b =", a + b)
+    print('a + b =', a + b)
   - - "Python commands without instrumentation recorded."
 -
   - |-
     %%execute_with_scorep
     import scorep
+    print('a - b =', a - b)
     with scorep.instrumenter.enable():
-        print("a - b =", a - b)
         c_mtx = np.outer(a_vec, b_vec)
   - - "Python commands with instrumentation recorded."
 -
@@ -44,12 +44,12 @@
   - |-
     with scorep.instrumenter.enable():
         c = np.sum(c_mtx)
-        c_vec = np.arange(b, c)
+    c_vec = np.arange(b, c)
   - - "Python commands with instrumentation recorded."
 -
   - |-
-    print("c =", c)
-    print("Sum(c_vec) =", c_vec.sum())
+    print('c =', c)
+    print('Sum(c_vec) =', c_vec.sum())
   - - "Python commands with instrumentation recorded."
 -
   - "%%finalize_multicellmode"
