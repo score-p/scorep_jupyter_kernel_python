@@ -5,9 +5,9 @@ import astunparse
 from textwrap import dedent
 
 scorep_script_name = "scorep_script.py"
-jupyter_dump_dir = "jupyter_dump_"
-subprocess_dump_dir = "subprocess_dump_"
-full_dump = "full_dump.pkl"
+jupyter_dump_dir = "jupyter_dump/"
+subprocess_dump_dir = "subprocess_dump/"
+main_dump = "main_dump.pkl"
 os_env_dump = "os_env_dump.pkl"
 sys_path_dump = "sys_path_dump.pkl"
 var_dump = "var_dump.pkl"
@@ -19,15 +19,18 @@ class PersHelper:
         self.serializer = serializer
         self.subprocess_definitions = ""
         self.subprocess_variables = []
+        os.environ['SCOREP_KERNEL_PERSISTENCE_DIR'] = './'
     
     # FIXME
     def pers_cleanup(self):
         """
         Clean up files used for transmitting persistence and running subprocess.
         """
+        full_jupyter_dump_dir = os.environ['SCOREP_KERNEL_PERSISTENCE_DIR'] + jupyter_dump_dir
+        full_subprocess_dump_dir = os.environ['SCOREP_KERNEL_PERSISTENCE_DIR'] + subprocess_dump_dir
         for pers_path in [scorep_script_name, 
-                          *[dirname + filename for dirname in [jupyter_dump_dir, subprocess_dump_dir]
-                          for filename in [full_dump, os_env_dump, sys_path_dump, var_dump]]]:
+                          *[dirname + filename for dirname in [full_jupyter_dump_dir, full_subprocess_dump_dir]
+                          for filename in [main_dump, os_env_dump, sys_path_dump, var_dump]]]:
             if os.path.exists(pers_path):
                 if os.path.isfile(pers_path):
                     os.remove(pers_path)
@@ -38,17 +41,21 @@ class PersHelper:
         """
         Generate code for kernel ghost cell to dump notebook persistence for subprocess.
         """
+        full_jupyter_dump_dir = os.environ['SCOREP_KERNEL_PERSISTENCE_DIR'] + jupyter_dump_dir
+        if not os.path.exists(full_jupyter_dump_dir):
+            os.makedirs(full_jupyter_dump_dir)
+
         jupyter_dump_ = dedent(f"""\
                                import sys
                                import os
                                import {self.serializer}
                                from scorep_jupyter.userpersistence import pickle_runtime, pickle_variables
-                               pickle_runtime(os.environ, sys.path, '{jupyter_dump_dir}', {self.serializer})
+                               pickle_runtime(os.environ, sys.path, '{full_jupyter_dump_dir}', {self.serializer})
                                """)
         if self.serializer == 'dill':
-            return jupyter_dump_ + f"dill.dump_session('{jupyter_dump_dir + full_dump}')"
+            return jupyter_dump_ + f"dill.dump_session('{full_jupyter_dump_dir + main_dump}')"
         elif self.serializer == 'cloudpickle':
-            return jupyter_dump_ + f"pickle_variables({str(self.jupyter_variables)}, globals(), '{jupyter_dump_dir}', {self.serializer})"
+            return jupyter_dump_ + f"pickle_variables({str(self.jupyter_variables)}, globals(), '{full_jupyter_dump_dir}', {self.serializer})"
         
     def subprocess_wrapper(self, code):
         """
@@ -56,21 +63,25 @@ class PersHelper:
         """
         self.parse(code, 'subprocess')
 
+        full_jupyter_dump_dir = os.environ['SCOREP_KERNEL_PERSISTENCE_DIR'] + jupyter_dump_dir
+        full_subprocess_dump_dir = os.environ['SCOREP_KERNEL_PERSISTENCE_DIR'] + subprocess_dump_dir
+        if not os.path.exists(full_subprocess_dump_dir):
+            os.makedirs(full_subprocess_dump_dir)
         subprocess_update = dedent(f"""\
                                    import sys
                                    import os
                                    import {self.serializer}
                                    from scorep_jupyter.userpersistence import pickle_runtime, pickle_variables, load_runtime, load_variables
-                                   load_runtime(os.environ, sys.path, '{jupyter_dump_dir}', {self.serializer})
+                                   load_runtime(os.environ, sys.path, '{full_jupyter_dump_dir}', {self.serializer})
                                    """)
         if self.serializer == 'dill':
-            subprocess_update += f"globals().update(dill.load_module_asdict('{jupyter_dump_dir + full_dump}'))"
+            subprocess_update += f"globals().update(dill.load_module_asdict('{full_jupyter_dump_dir + main_dump}'))"
         elif self.serializer == 'cloudpickle':
-           subprocess_update += (self.jupyter_definitions + f"load_variables(globals(), '{jupyter_dump_dir}', {self.serializer})")
+           subprocess_update += (self.jupyter_definitions + f"load_variables(globals(), '{full_jupyter_dump_dir}', {self.serializer})")
         return subprocess_update + "\n" + code + \
             dedent(f"""
-                   pickle_runtime(os.environ, sys.path, '{subprocess_dump_dir}', {self.serializer})
-                   pickle_variables({str(self.subprocess_variables)}, globals(), '{subprocess_dump_dir}', {self.serializer})
+                   pickle_runtime(os.environ, sys.path, '{full_subprocess_dump_dir}', {self.serializer})
+                   pickle_variables({str(self.subprocess_variables)}, globals(), '{full_subprocess_dump_dir}', {self.serializer})
                    """)
     
     def jupyter_update(self, code):
@@ -79,13 +90,14 @@ class PersHelper:
         """
         self.parse(code, 'jupyter')
 
+        full_subprocess_dump_dir = os.environ['SCOREP_KERNEL_PERSISTENCE_DIR'] + subprocess_dump_dir
         return dedent(f"""\
                       import sys
                       import os
                       from scorep_jupyter.userpersistence import load_runtime, load_variables
-                      load_runtime(os.environ, sys.path, '{subprocess_dump_dir}', {self.serializer})
+                      load_runtime(os.environ, sys.path, '{full_subprocess_dump_dir}', {self.serializer})
                       {self.subprocess_definitions}
-                      load_variables(globals(), '{subprocess_dump_dir}', {self.serializer})
+                      load_variables(globals(), '{full_subprocess_dump_dir}', {self.serializer})
                       """)
 
     def parse(self, code, mode):
