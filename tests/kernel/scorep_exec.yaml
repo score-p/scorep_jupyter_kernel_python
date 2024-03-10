@@ -10,17 +10,6 @@
 -
   - |-
     %%bash
-    comm_files=("tests_tmp/scorep_script.py" "tests_tmp/jupyter_dump.pkl" "tests_tmp/subprocess_dump.pkl")
-
-    for file in "${comm_files[@]}"; do
-        if [ -e "$file" ]; then
-            echo "Error: $file not cleaned up."
-        fi
-    done
-  - - ""
--
-  - |-
-    %%bash
     if [ -d "tests_tmp/scorep-traces" ] && [ -e "tests_tmp/scorep-traces/traces.otf2" ]; then
         :
     elif [ -d "tests_tmp/scorep-traces" ]; then
