@@ -3,6 +3,7 @@ import shutil
 import ast
 import astunparse
 from textwrap import dedent
+from pathlib import Path
 
 scorep_script_name = "scorep_script.py"
 jupyter_dump_dir = "jupyter_dump/"
@@ -21,13 +22,25 @@ class PersHelper:
         self.subprocess_variables = []
         os.environ['SCOREP_KERNEL_PERSISTENCE_DIR'] = './'
     
+    def get_full_jupyter_dump_dir(self):
+        """
+        Get the full path for jupyer dump
+        """
+        return str(Path(os.environ['SCOREP_KERNEL_PERSISTENCE_DIR']) / Path(jupyter_dump_dir))
+
+    def get_full_subprocess_dump_dir(self):
+        """
+        Get the full path for subprocess dump
+        """
+        return str(Path(os.environ['SCOREP_KERNEL_PERSISTENCE_DIR']) / Path(subprocess_dump_dir))
+
     # FIXME
     def pers_cleanup(self):
         """
         Clean up files used for transmitting persistence and running subprocess.
         """
-        full_jupyter_dump_dir = os.environ['SCOREP_KERNEL_PERSISTENCE_DIR'] + jupyter_dump_dir
-        full_subprocess_dump_dir = os.environ['SCOREP_KERNEL_PERSISTENCE_DIR'] + subprocess_dump_dir
+        full_jupyter_dump_dir = self.get_full_jupyter_dump_dir()
+        full_subprocess_dump_dir = self.get_full_subprocess_dump_dir()
         for pers_path in [scorep_script_name, 
                           *[dirname + filename for dirname in [full_jupyter_dump_dir, full_subprocess_dump_dir]
                           for filename in [main_dump, os_env_dump, sys_path_dump, var_dump]]]:
@@ -41,7 +54,7 @@ class PersHelper:
         """
         Generate code for kernel ghost cell to dump notebook persistence for subprocess.
         """
-        full_jupyter_dump_dir = os.environ['SCOREP_KERNEL_PERSISTENCE_DIR'] + jupyter_dump_dir
+        full_jupyter_dump_dir = self.get_full_jupyter_dump_dir()
         if not os.path.exists(full_jupyter_dump_dir):
             os.makedirs(full_jupyter_dump_dir)
 
@@ -63,8 +76,8 @@ class PersHelper:
         """
         self.parse(code, 'subprocess')
 
-        full_jupyter_dump_dir = os.environ['SCOREP_KERNEL_PERSISTENCE_DIR'] + jupyter_dump_dir
-        full_subprocess_dump_dir = os.environ['SCOREP_KERNEL_PERSISTENCE_DIR'] + subprocess_dump_dir
+        full_jupyter_dump_dir = self.get_full_jupyter_dump_dir()
+        full_subprocess_dump_dir = self.get_full_subprocess_dump_dir()
         if not os.path.exists(full_subprocess_dump_dir):
             os.makedirs(full_subprocess_dump_dir)
         subprocess_update = dedent(f"""\
@@ -90,7 +103,7 @@ class PersHelper:
         """
         self.parse(code, 'jupyter')
 
-        full_subprocess_dump_dir = os.environ['SCOREP_KERNEL_PERSISTENCE_DIR'] + subprocess_dump_dir
+        full_subprocess_dump_dir = self.get_full_subprocess_dump_dir()
         return dedent(f"""\
                       import sys
                       import os
