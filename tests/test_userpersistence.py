@@ -11,10 +11,6 @@ from src.scorep_jupyter.userpersistence import extract_variables_names, extract_
 
 PYTHON_EXECUTABLE = sys.executable
 dump_dir = 'tests_tmp/'
-full_dump = "tests_tmp/full_dump.pkl"
-os_env_dump = "tests_tmp/os_env_dump.pkl"
-sys_path_dump = "tests_tmp/sys_path_dump.pkl"
-var_dump = "tests_tmp/var_dump.pkl"
 
 class UserPersistenceTests(unittest.TestCase):
     
