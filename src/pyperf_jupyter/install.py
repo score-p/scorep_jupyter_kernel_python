@@ -17,7 +17,7 @@ def install_kernel_spec():
         with open(os.path.join(d, 'kernel.json'), 'w') as f:
             json.dump(kernel_spec, f, sort_keys=True)
         print("installed the pyperf_jupyter kernel")
-        KernelSpecManager().install_kernel_spec(d, 'PyPerfCPython', user=True)
+        KernelSpecManager().install_kernel_spec(d, 'pyperf', user=True)
 
 
 if __name__ == '__main__':
