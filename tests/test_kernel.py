@@ -6,7 +6,7 @@ import yaml
 tmp_dir = 'test_kernel_tmp/'
 
 class KernelTests(jkt.KernelTests):
-    kernel_name = "scorep-python"
+    kernel_name = "pyperf"
     language_name = "python"
     
     @classmethod
