@@ -44,7 +44,7 @@ jobs:
       - name: Build Score-P Python kernel
         run: |
           pip install .
-          python -m scorep_jupyter.install
+          python -m pyperf_jupyter.install
         
       - name: Run userpersistence tests
         run: |
