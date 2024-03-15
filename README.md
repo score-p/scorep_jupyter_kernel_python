@@ -52,9 +52,9 @@ You can select the kernel in Jupyter as `scorep-python`.
 
 ## Configuring Score-P in Jupyter
 
-`%%scorep_env`
+Set up your Score-P environment with `%env` line magic. 
 
-Set up your Score-P environment. For a documentation of Score-P environment variables, see: [Score-P Measurement Configuration](https://perftools.pages.jsc.fz-juelich.de/cicd/scorep/tags/latest/html/scorepmeasurementconfig.html).
+For a documentation of Score-P environment variables, see: [Score-P Measurement Configuration](https://perftools.pages.jsc.fz-juelich.de/cicd/scorep/tags/latest/html/scorepmeasurementconfig.html).
 
 ![](doc/scorep_setup.png)
 
@@ -127,7 +127,7 @@ Enables the write mode and starts the marking process. Subsequently, "running" c
 Stops the marking process and writes the marked cells in a Python script. Additionally, a bash script will be created for setting the Score-P environment variables, Pyhton bindings arguments and executing the Python script.
 
 **Hints**:
-- Recording a cell containing `%%scorep_env` or `%%scorep_python_binding_arguments` will add the environment variables/Score-P Python bindings to the bash script.
+- Recording a cell containing `%%scorep_python_binding_arguments` will add the Score-P Python bindings parameters to the bash script.
 
 - Code of a cell which is not to be executed with Score-P (not inside the multicell mode and without `%%execute_with_scorep`) will be framed with `with scorep.instrumenter.disable()` in the Python script to prevent instrumentation.
 
