@@ -6,8 +6,8 @@ import json
 
 kernel_spec = {
     "argv": [sys.executable, "-m", "pyperf_jupyter.kernel", "-f", "{connection_file}"],
-    "name": "pyperfCPython",
-    "display_name": "PyPerfCPython",
+    "name": "pyperf",
+    "display_name": "PyPerf",
     "language": "python"
 }
 
