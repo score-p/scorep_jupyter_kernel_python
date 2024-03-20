@@ -3,6 +3,7 @@ import psutil
 import pickle
 import codecs
 import pynvml
+import os
 
 if __name__ == "__main__":
     ngpus = 0
@@ -14,6 +15,8 @@ if __name__ == "__main__":
         gpu_handles = [pynvml.nvmlDeviceGetHandleByIndex(i) for i in range(ngpus)]
     except:
         pass
+
+    freq = int(os.environ.get("PYPERF_REPORT_FREQUENCY", 2))
 
     while True:
         gpu_util = []
@@ -27,6 +30,6 @@ if __name__ == "__main__":
                 urate = pynvml.nvmlDeviceGetUtilizationRates(handle)
                 gpu_util.append(urate.gpu)
                 gpu_mem.append(urate.memory)
-        #print([av_cpu_util, mem_util, gpu_util, gpu_mem])
+        # print([av_cpu_util, mem_util, gpu_util, gpu_mem])
         print(codecs.encode(pickle.dumps([av_cpu_util, mem_util, gpu_util, gpu_mem]), "base64").decode())
-        time.sleep(2)
+        time.sleep(freq)
