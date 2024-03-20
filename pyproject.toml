@@ -23,20 +23,12 @@ dependencies = [
   "ipykernel",
   "jupyter-client",
   "astunparse",
-<<<<<<< HEAD
-=======
-  "scorep", # remove since we do not rely completely on that
->>>>>>> 44aa52a (Update pyproject.toml)
   "dill",
   "itables",
   "matplotlib",
   "pandas",
-  "pynvml" # we need that only for Nvidia GPU systems
-<<<<<<< HEAD
-  "scorep",
-  "pandas"
-=======
->>>>>>> 44aa52a (Update pyproject.toml)
+  "pynvml", # we need that only for Nvidia GPU systems
+  "paramiko"
 ]
 
 [project.urls]

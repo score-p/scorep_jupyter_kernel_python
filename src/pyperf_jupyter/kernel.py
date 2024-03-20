@@ -1,3 +1,6 @@
+import codecs
+import pickle
+
 from ipykernel.ipkernel import IPythonKernel
 import sys
 import os
@@ -15,6 +18,8 @@ from enum import Enum
 from textwrap import dedent
 
 import pandas as pd
+
+import paramiko
 
 PYTHON_EXECUTABLE = sys.executable
 READ_CHUNK_SIZE = 8
@@ -415,71 +420,79 @@ class PyPerfKernel(IPythonKernel):
         if nmetrics == 1:
             plt.rcParams["figure.figsize"] = (5, 2.5)
 
-        stdout_data = stdout_data.split(b"\n\n")
+        # parse the performance data
+        performance_data_nodes = []
+        for stdout_data in stdout_data_node:
+            stdout_data = stdout_data.split(b"\n\n")
+            # init CPU and GPU lists
+            mem_util = []
+            if stdout_data[0]:
+                init_data = pickle.loads(codecs.decode(stdout_data[0], "base64"))
+                cpu_util = [[] for _ in init_data[0]]
+                gpu_util = [[] for _ in init_data[2]]
+                gpu_mem = [[] for _ in init_data[3]]
 
-        # init CPU and GPU lists
-        mem_util = []
-        if stdout_data[0]:
-            init_data = pickle.loads(codecs.decode(stdout_data[0], "base64"))
-            cpu_util = [[] for _ in init_data[0]]
-            gpu_util = [[] for _ in init_data[2]]
-            gpu_mem = [[] for _ in init_data[3]]
 
-        for line in stdout_data:
-            if line == b'':
-                continue
-            perf_data = pickle.loads(codecs.decode(line, "base64"))
-            for cpu in range(0, len(perf_data[0])):
-                cpu_util[cpu].append(perf_data[0][cpu])
+            for line in stdout_data:
+                if line == b'':
+                    continue
+                perf_data = pickle.loads(codecs.decode(line, "base64"))
+                for cpu in range(0, len(perf_data[0])):
+                    cpu_util[cpu].append(perf_data[0][cpu])
 
-            mem_util.append(perf_data[1])
+                mem_util.append(perf_data[1])
 
-            for gpu in range(0, len(perf_data[2])):
-                gpu_util[gpu].append(perf_data[2][gpu])
-                gpu_mem[gpu].append(perf_data[3][gpu])
+                for gpu in range(0, len(perf_data[2])):
+                    gpu_util[gpu].append(perf_data[2][gpu])
+                    gpu_mem[gpu].append(perf_data[3][gpu])
 
+            performance_data_nodes.append([cpu_util, mem_util, gpu_util, gpu_mem])
+
+        self.performance_data_history.append(performance_data_nodes)
+
+        # print the performance data
         report_trs = int(os.environ.get("PYPERF_REPORTS_MIN", 2))
 
-        if len(mem_util) > report_trs:
-            slurm_nodelist = self.parse_slurm_nodelist(os.environ.get("SLURM_NODELIST", ''))
-            # print hint only if multiple nodes on slurm nodelist or slurm nodelist not available
-            # (and we don't know about multi node setup)
-            # TODO: use the list of nodes in perfmonitor to connect via ssh and check the performance data
-            if len(slurm_nodelist) != 1:
-                self.cell_output("\nHint: performance data only for one node, multi node setup not supported yet",
-                                 'stdout')
+        #just count the number of memory measurements to decide whether we want to print the information
+        if len(performance_data_nodes[0][1]) > report_trs:
 
             self.cell_output("\n----Performance Data----\n", 'stdout')
             self.cell_output("Duration: " + "{:.2f}".format(duration) + "\n", 'stdout')
+            for idx, performance_data in enumerate(performance_data_nodes):
 
-            if cpu_util:
-                self.cell_output("--CPU Util--\n", 'stdout')
-                for cpu_index in range(0, len(cpu_util)):
-                    self.cell_output("\tCPU" + str(cpu_index) + "\tAVG: " + "{:.2f}".format(
-                        sum(cpu_util[cpu_index]) / len(cpu_util[cpu_index])) + "\t MIN: " + "{:.2f}".format(
-                        min(cpu_util[cpu_index])) + "\t MAX: " + "{:.2f}".format(max(cpu_util[cpu_index])) + "\n",
-                                     'stdout')
-            if len(mem_util) > 0:
-                self.cell_output(
-                    "\n--Mem Util-- \tAVG: " + "{:.2f}".format(
-                        sum(mem_util) / len(mem_util)) + "\t MIN: " + "{:.2f}".format(
-                        min(mem_util)) + "\t MAX: " + "{:.2f}".format(max(mem_util)) + "\n", 'stdout')
+                if nodelist:
+                    self.cell_output("--NODE " + str(nodelist[idx]) + "--\n", 'stdout')
 
-            if gpu_util and gpu_mem:
-                self.cell_output("--GPU Util and Mem per GPU--\n", 'stdout')
-                for gpu_index in range(0, len(gpu_util)):
-                    self.cell_output("\tGPU" + str(gpu_index) +
-                                     "\tUtil AVG: " + "{:.2f}".format(
-                        sum(gpu_util[gpu_index]) / len(gpu_util[gpu_index])) + "\t MIN: " + "{:.2f}".format(
-                        min(gpu_util[gpu_index])) + "\t MAX: " + "{:.2f}".format(max(gpu_util[gpu_index])) + "\n",
-                                     'stdout')
-                    self.cell_output("\t    " +
-                                     "\t Mem AVG: " + "{:.2f}".format(
-                        sum(gpu_mem[gpu_index]) / len(gpu_mem[gpu_index])) + "\t MIN: " + "{:.2f}".format(
-                        min(gpu_mem[gpu_index])) + "\t MAX: " + "{:.2f}".format(max(gpu_mem[gpu_index])) + "\n",
-                                     'stdout')
+                cpu_util = performance_data[0]
+                mem_util = performance_data[1]
+                gpu_util = performance_data[2]
+                gpu_mem = performance_data[3]
+                if cpu_util:
+                    self.cell_output("--CPU Util--\n", 'stdout')
+                    for cpu_index in range(0, len(cpu_util)):
+                        self.cell_output("\tCPU" + str(cpu_index) + "\tAVG: " + "{:.2f}".format(
+                            sum(cpu_util[cpu_index]) / len(cpu_util[cpu_index])) + "\t MIN: " + "{:.2f}".format(
+                            min(cpu_util[cpu_index])) + "\t MAX: " + "{:.2f}".format(max(cpu_util[cpu_index])) + "\n",
+                                         'stdout')
+                if len(mem_util) > 0:
+                    self.cell_output(
+                        "\n--Mem Util-- \tAVG: " + "{:.2f}".format(
+                            sum(mem_util) / len(mem_util)) + "\t MIN: " + "{:.2f}".format(
+                            min(mem_util)) + "\t MAX: " + "{:.2f}".format(max(mem_util)) + "\n", 'stdout')
 
-            self.performance_data_history.append([cpu_util, mem_util, gpu_util, gpu_mem])
+                if gpu_util and gpu_mem:
+                    self.cell_output("--GPU Util and Mem per GPU--\n", 'stdout')
+                    for gpu_index in range(0, len(gpu_util)):
+                        self.cell_output("\tGPU" + str(gpu_index) +
+                                         "\tUtil AVG: " + "{:.2f}".format(
+                            sum(gpu_util[gpu_index]) / len(gpu_util[gpu_index])) + "\t MIN: " + "{:.2f}".format(
+                            min(gpu_util[gpu_index])) + "\t MAX: " + "{:.2f}".format(max(gpu_util[gpu_index])) + "\n",
+                                         'stdout')
+                        self.cell_output("\t    " +
+                                         "\t Mem AVG: " + "{:.2f}".format(
+                            sum(gpu_mem[gpu_index]) / len(gpu_mem[gpu_index])) + "\t MIN: " + "{:.2f}".format(
+                            min(gpu_mem[gpu_index])) + "\t MAX: " + "{:.2f}".format(max(gpu_mem[gpu_index])) + "\n",
+                                         'stdout')
             return True
         else:
             return False
@@ -698,20 +711,41 @@ class PyPerfKernel(IPythonKernel):
             proc_env = os.environ.copy()
             proc_env.update({'PYTHONUNBUFFERED': 'x'})
 
-            # TODO: add sampling rate for performance data recording
-            perfproc = subprocess.Popen([sys.executable, "-m" "perfmonitor"], stdout=subprocess.PIPE,
-                                        stderr=subprocess.STDOUT, env=proc_env)
+            slurm_nodelist = self.parse_slurm_nodelist(os.environ.get("SLURM_NODELIST", ''))
+
+            perf_ssh_client = paramiko.SSHClient()
+            perf_ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+            node_stderr = []
+            node_stdout = []
+            if slurm_nodelist:
+                for node in slurm_nodelist:
+                    perf_ssh_client.connect(hostname=node)
+                    _, stdout, stderr = perf_ssh_client.exec_command(str(sys.executable) + "-m" + "perfmonitor")
+                    node_stderr.append(stderr)
+                    node_stdout.append(stdout)
+            else:
+                perf_proc = subprocess.Popen([sys.executable, "-m" "perfmonitor"], stdout=subprocess.PIPE,
+                                            stderr=subprocess.STDOUT, env=proc_env)
 
             start = time.perf_counter()
             parent_ret = await super().do_execute(code, silent, store_history, user_expressions, allow_stdin,
                                                   cell_id=cell_id)
             duration = time.perf_counter() - start
 
-            perfproc.kill()
-            stdout_data, _ = perfproc.communicate()
+            stdout_data_node = []
+            if slurm_nodelist:
+                for stdout in node_stdout:
+                    output = stdout.read()
+                    stdout_data_node.append(str(output))
+                perf_ssh_client.close()
+            else:
+                perf_proc.kill()
+                output, _ = perf_proc.communicate()
+                stdout_data_node.append(output)
 
             # parse the performance data from the stdout pipe of the subprocess and print the performance data
-            if self.report_perfdata(stdout_data, duration):
+            if self.report_perfdata(stdout_data_node, duration, slurm_nodelist):
                 self.code_history.append([datetime.now(), code])
             return parent_ret
 
