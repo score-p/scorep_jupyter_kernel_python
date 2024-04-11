@@ -239,8 +239,6 @@ class ScorepPythonKernel(IPythonKernel):
             self.scorep_binding_args + [scorep_script_name]
         proc_env = self.scorep_env.copy()
         proc_env.update({'PATH': os.environ['PATH'], 'PYTHONUNBUFFERED': 'x'}) # scorep path, subprocess observation
-<<<<<<< Updated upstream
-=======
 
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=proc_env)
         # Ghost cell - dump current Jupyter session for subprocess
@@ -269,7 +267,6 @@ class ScorepPythonKernel(IPythonKernel):
             # connect to the communication pipe in case of in-memory communication for persistence
             flags = os.O_RDONLY | os.O_NONBLOCK
             comm_pipe =os.open(self.pershelper.paths['subprocess']['comm'], flags=flags)
->>>>>>> Stashed changes
 
         incomplete_line = ''
         endline_pattern = re.compile(r'(.*?[\r\n]|.+$)')
@@ -321,23 +318,6 @@ class ScorepPythonKernel(IPythonKernel):
                 'stderr')
             return self.standard_reply()
 
-<<<<<<< Updated upstream
-        # Ghost cell - load subprocess definitions and persistence back to Jupyter notebook
-        # Run in a "silent" way to not increase cells counter
-        reply_status_update = await super().do_execute(self.pershelper.jupyter_update(code), silent, store_history=False,
-                                                     user_expressions=user_expressions, allow_stdin=allow_stdin, cell_id=cell_id)
-
-        if reply_status_update['status'] != 'ok':
-            self.shell.execution_count += 1
-            reply_status_update['execution_count'] = self.shell.execution_count - 1
-            self.pershelper.pers_cleanup()
-            self.cell_output("KernelError: Failed to load cell's persistence and variables to the notebook.",
-                             'stderr')
-            return reply_status_update
-
-        self.pershelper.pers_cleanup()
-=======
->>>>>>> Stashed changes
         if 'SCOREP_EXPERIMENT_DIRECTORY' in self.scorep_env:
             scorep_folder = self.scorep_env['SCOREP_EXPERIMENT_DIRECTORY']
             self.cell_output(
