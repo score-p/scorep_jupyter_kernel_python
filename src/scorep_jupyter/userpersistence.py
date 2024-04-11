@@ -3,13 +3,9 @@ import shutil
 import ast
 import astunparse
 from textwrap import dedent
-<<<<<<< Updated upstream
-
-=======
 from pathlib import Path
 import uuid
 import time
->>>>>>> Stashed changes
 scorep_script_name = "scorep_script.py"
 jupyter_dump_dir = "jupyter_dump_"
 subprocess_dump_dir = "subprocess_dump_"
@@ -26,23 +22,6 @@ class PersHelper:
         self.serializer = serializer
         self.subprocess_definitions = ""
         self.subprocess_variables = []
-<<<<<<< Updated upstream
-    
-    # FIXME
-    def pers_cleanup(self):
-        """
-        Clean up files used for transmitting persistence and running subprocess.
-        """
-        for pers_path in [scorep_script_name, 
-                          *[dirname + filename for dirname in [jupyter_dump_dir, subprocess_dump_dir]
-                          for filename in [full_dump, os_env_dump, sys_path_dump, var_dump]]]:
-            if os.path.exists(pers_path):
-                if os.path.isfile(pers_path):
-                    os.remove(pers_path)
-                elif os.path.isdir(pers_path):
-                    shutil.rmtree(pers_path)
-        
-=======
         self.base_path = Path(os.environ['SCOREP_KERNEL_PERSISTENCE_DIR']) / Path("./kernel_persistence/")
         self.paths = {'jupyter':
                           {'os_environ': '', 'sys_path': '', 'var': '', 'comm': ''},
@@ -92,7 +71,6 @@ class PersHelper:
         if os.path.exists(scorep_script_name):
             os.remove(scorep_script_name)
 
->>>>>>> Stashed changes
     def jupyter_dump(self):
         """
         Generate code for kernel ghost cell to dump notebook persistence for subprocess.
@@ -102,15 +80,6 @@ class PersHelper:
                                import os
                                import {self.serializer}
                                from scorep_jupyter.userpersistence import pickle_runtime, pickle_variables
-<<<<<<< Updated upstream
-                               pickle_runtime(os.environ, sys.path, '{jupyter_dump_dir}', {self.serializer})
-                               """)
-        if self.serializer == 'dill':
-            return jupyter_dump_ + f"dill.dump_session('{jupyter_dump_dir + full_dump}')"
-        elif self.serializer == 'cloudpickle':
-            return jupyter_dump_ + f"pickle_variables({str(self.jupyter_variables)}, globals(), '{jupyter_dump_dir}', {self.serializer})"
-        
-=======
                                """)
 
         jupyter_dump_ += f"pickle_runtime(os.environ, sys.path, '{self.paths['jupyter']['os_environ']}', '{self.paths['jupyter']['sys_path']}', {self.serializer})\n" + \
@@ -122,7 +91,6 @@ class PersHelper:
 
         return jupyter_dump_
 
->>>>>>> Stashed changes
     def subprocess_wrapper(self, code):
         """
         Extract subprocess user variables and definitions.
@@ -133,21 +101,6 @@ class PersHelper:
                                    import sys
                                    import os
                                    import {self.serializer}
-<<<<<<< Updated upstream
-                                   from scorep_jupyter.userpersistence import pickle_runtime, pickle_variables, load_runtime, load_variables
-                                   load_runtime(os.environ, sys.path, '{jupyter_dump_dir}', {self.serializer})
-                                   """)
-        if self.serializer == 'dill':
-            subprocess_update += f"globals().update(dill.load_module_asdict('{jupyter_dump_dir + full_dump}'))"
-        elif self.serializer == 'cloudpickle':
-           subprocess_update += (self.jupyter_definitions + f"load_variables(globals(), '{jupyter_dump_dir}', {self.serializer})")
-        return subprocess_update + "\n" + code + \
-            dedent(f"""
-                   pickle_runtime(os.environ, sys.path, '{subprocess_dump_dir}', {self.serializer})
-                   pickle_variables({str(self.subprocess_variables)}, globals(), '{subprocess_dump_dir}', {self.serializer})
-                   """)
-    
-=======
                                    from scorep_jupyter.userpersistence import pickle_runtime, pickle_variables, load_runtime, load_variables, load_globals
                                    """)
 
@@ -171,23 +124,11 @@ class PersHelper:
 
         return subprocess_update
 
->>>>>>> Stashed changes
     def jupyter_update(self, code):
         """
         Update aggregated storage of definitions and user variables for entire notebook.
         """
         self.parse(code, 'jupyter')
-<<<<<<< Updated upstream
-
-        return dedent(f"""\
-                      import sys
-                      import os
-                      from scorep_jupyter.userpersistence import load_runtime, load_variables
-                      load_runtime(os.environ, sys.path, '{subprocess_dump_dir}', {self.serializer})
-                      {self.subprocess_definitions}
-                      load_variables(globals(), '{subprocess_dump_dir}', {self.serializer})
-                      """)
-=======
         jupyter_update = dedent(f"""\
                                 import sys
                                 import os
@@ -197,7 +138,6 @@ class PersHelper:
         jupyter_update += f"load_runtime(os.environ, sys.path, '{self.paths['subprocess']['os_environ']}', '{self.paths['subprocess']['sys_path']}', {self.serializer})\n" + \
                           f"load_globals(globals(), '{self.paths['subprocess']['var']}', {self.serializer}, True)\n"
         return jupyter_update
->>>>>>> Stashed changes
 
     def parse(self, code, mode):
         """
