@@ -41,7 +41,11 @@ class ScorepPythonKernel(IPythonKernel):
         self.bash_script = None
         self.python_script = None
 
+        os.environ['SCOREP_KERNEL_PERSISTENCE_DIR'] = './'
+        os.environ['SCOREP_KERNEL_PERSISTENCE_MODE'] = 'DISK'
+
         self.pershelper = PersHelper('dill')
+
 
     def cell_output(self, string, stream='stdout'):
         """
@@ -62,11 +66,15 @@ class ScorepPythonKernel(IPythonKernel):
         """
         Switch serializer backend used for persistence in kernel.
         """
+        # clean pipes before switching
+        self.pershelper.postprocess()
+
         serializer = code.split('\n')[1]
         if serializer == 'dill':
             self.pershelper = PersHelper('dill')
         elif serializer == 'cloudpickle':
             self.pershelper = PersHelper('cloudpickle')
+
         self.cell_output(f'Serializer backend switched to {serializer}, persistence was reset.')
         return self.standard_reply()
 
@@ -215,23 +223,15 @@ class ScorepPythonKernel(IPythonKernel):
         """
         Execute given code with Score-P Python bindings instrumentation.
         """
-        # Ghost cell - dump current Jupyter session for subprocess
-        # Run in a "silent" way to not increase cells counter
-        reply_status_dump = await super().do_execute(self.pershelper.jupyter_dump(), silent, store_history=False,
-                                                     user_expressions=user_expressions, allow_stdin=allow_stdin, cell_id=cell_id)
-
-        if reply_status_dump['status'] != 'ok':
-            self.shell.execution_count += 1
-            reply_status_dump['execution_count'] = self.shell.execution_count - 1
-            self.pershelper.pers_cleanup()
-            self.cell_output("KernelError: Failed to pickle previous notebook's persistence and variables.",
-                             'stderr')
-            return reply_status_dump
+        # set up pipes for the communication
+        if not self.pershelper.preprocess():
+            self.cell_output("Error setting up the communication. Please try again. Aborting.", "stderr")
+            return self.standard_reply()
 
         # Prepare code for the Score-P instrumented execution as subprocess
         # Transmit user persistence and updated sys.path from Jupyter notebook to subprocess
         # After running code, transmit subprocess persistence back to Jupyter notebook
-        with open(scorep_script_name, 'w+') as file:
+        with open(scorep_script_name, 'w') as file:
             file.write(self.pershelper.subprocess_wrapper(code))
 
         # Launch subprocess with Jupyter notebook environment
@@ -239,44 +239,89 @@ class ScorepPythonKernel(IPythonKernel):
             self.scorep_binding_args + [scorep_script_name]
         proc_env = self.scorep_env.copy()
         proc_env.update({'PATH': os.environ['PATH'], 'PYTHONUNBUFFERED': 'x'}) # scorep path, subprocess observation
+<<<<<<< Updated upstream
+=======
+
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=proc_env)
+        # Ghost cell - dump current Jupyter session for subprocess
+        # Run in a "silent" way to not increase cells counter
+        #self.cell_output("Subprocess launched")
+        #self.cell_output(self.pershelper.jupyter_dump())
+
+
+        reply_status_dump = await super().do_execute(self.pershelper.jupyter_dump(), silent, store_history=False,
+                                                    user_expressions=user_expressions, allow_stdin=allow_stdin, cell_id=cell_id)
+        if reply_status_dump['status'] != 'ok':
+            self.shell.execution_count += 1
+            reply_status_dump['execution_count'] = self.shell.execution_count - 1
+            self.pershelper.postprocess()
+            self.cell_output("KernelError: Failed to pickle previous notebook's persistence and variables.",
+                            'stderr')
+            return reply_status_dump
+
+        # Redirect process stderr to stdout and observe the latter
+        # Observing two stream with two threads causes interference in cell_output in Jupyter notebook
+        # stdout is read in chunks, which are split into lines using \r or \n as delimiter
+        # Last element in the list might be "incomplete line", not ending with \n or \r, it is saved
+        # and merged with the first line in the next chunk
+
+        if os.environ['SCOREP_KERNEL_PERSISTENCE_MODE'] == 'MEMORY':
+            # connect to the communication pipe in case of in-memory communication for persistence
+            flags = os.O_RDONLY | os.O_NONBLOCK
+            comm_pipe =os.open(self.pershelper.paths['subprocess']['comm'], flags=flags)
+>>>>>>> Stashed changes
 
         incomplete_line = ''
         endline_pattern = re.compile(r'(.*?[\r\n]|.+$)')
-
-        with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=proc_env) as proc:
-            # Redirect process stderr to stdout and observe the latter
-            # Observing two stream with two threads causes interfence in cell_output in Jupyter notebook
-            # stdout is read in chunks, which are split into lines using \r or \n as delimeter
-            # Last element in the list might be "incomplete line", not ending with \n or \r, it is saved
-            # and merged with the first line in the next chunk
-
-            # Empty cell output, required for interactive output e.g. tqdm for-loop progress bar
-            self.cell_output('\0')
-            while True:
-                chunk = b'' + proc.stdout.read(READ_CHUNK_SIZE)
-                if not chunk:
+        # Empty cell output, required for interactive output e.g. tqdm for-loop progress bar
+        self.cell_output('\0')
+        while True:
+            if os.environ['SCOREP_KERNEL_PERSISTENCE_MODE'] == 'MEMORY':
+                comm_chunk = os.read(comm_pipe, 1)
+                if comm_chunk != b'':
+                    # for pipe communication, we break as soon as os we get notified by subprocess via comm pipe
                     break
-                chunk = chunk.decode(sys.getdefaultencoding(), errors='ignore')
-                lines = endline_pattern.findall(chunk)
+            chunk = b'' + proc.stdout.read(READ_CHUNK_SIZE)
+            if chunk == b'':
+                break
+            chunk = chunk.decode(sys.getdefaultencoding(), errors='ignore')
+            lines = endline_pattern.findall(chunk)
+            if len(lines) > 0:
+                lines[0] = incomplete_line + lines[0]
+                if lines[-1][-1] not in ['\n', '\r']:
+                    incomplete_line = lines.pop(-1)
+                else:
+                    incomplete_line = ""
+                for line in lines:
+                    self.cell_output(line)
 
-                if len(lines) > 0:
-                    lines[0] = incomplete_line + lines[0]
-                    if lines[-1][-1] not in ['\n', '\r']:
-                        incomplete_line = lines.pop(-1)
-                    else:
-                        incomplete_line = ""
-                    for line in lines:
-                        self.cell_output(line)
+        # os_environ_.clear()
 
-            proc.wait()
+        # sys_path_.clear()
+
+        # Ghost cell - load subprocess definitions and persistence back to Jupyter notebook
+        # Run in a "silent" way to not increase cells counter
+        reply_status_update = await super().do_execute(self.pershelper.jupyter_update(code), silent, store_history=False,
+                                                    user_expressions=user_expressions, allow_stdin=allow_stdin, cell_id=cell_id)
+
+        if reply_status_update['status'] != 'ok':
+            # tidy up
+            self.pershelper.postprocess()
+            self.shell.execution_count += 1
+            reply_status_update['execution_count'] = self.shell.execution_count - 1
+            self.cell_output("KernelError: Failed to load cell's persistence and variables to the notebook.",
+                            'stderr')
+            return reply_status_update
 
         if proc.returncode:
-            self.pershelper.pers_cleanup()
+            # tidy up
+            self.pershelper.postprocess()
             self.cell_output(
                 'KernelError: Cell execution failed, cell persistence and variables are not recorded.',
                 'stderr')
             return self.standard_reply()
 
+<<<<<<< Updated upstream
         # Ghost cell - load subprocess definitions and persistence back to Jupyter notebook
         # Run in a "silent" way to not increase cells counter
         reply_status_update = await super().do_execute(self.pershelper.jupyter_update(code), silent, store_history=False,
@@ -291,6 +336,8 @@ class ScorepPythonKernel(IPythonKernel):
             return reply_status_update
 
         self.pershelper.pers_cleanup()
+=======
+>>>>>>> Stashed changes
         if 'SCOREP_EXPERIMENT_DIRECTORY' in self.scorep_env:
             scorep_folder = self.scorep_env['SCOREP_EXPERIMENT_DIRECTORY']
             self.cell_output(
@@ -305,6 +352,9 @@ class ScorepPythonKernel(IPythonKernel):
                     f"Instrumentation results can be found in {os.getcwd()}/{scorep_folder}")
             else:
                 self.cell_output("KernelWarning: Instrumentation results were not saved locally.", 'stderr')
+
+        # tidy up
+        self.pershelper.postprocess()
         return self.standard_reply()
 
     async def do_execute(self, code, silent, store_history=False, user_expressions=None,
@@ -368,6 +418,10 @@ class ScorepPythonKernel(IPythonKernel):
         else:
             self.pershelper.parse(code, 'jupyter')
             return await super().do_execute(code, silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
+
+    def do_shutdown(self, restart):
+        self.pershelper.postprocess()
+        return super().do_shutdown(restart)
 
 
 if __name__ == '__main__':
