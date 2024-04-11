@@ -1,0 +1,75 @@
+- 
+  - |-
+    import os
+    os.environ['JUPYTER_VAR'] = 'JUPYTER'
+  - - ""
+-
+  - |-
+    import numpy as np
+    def f(x):
+        return x**2
+    a_vec = np.arange(a)
+    b_vec = np.arange(a, b)
+
+    import sys
+    sys.path.append('/new/jupyter/path')
+  - - ""
+-
+  - |-
+    %%execute_with_scorep
+    import pandas as pd
+    def g(x):
+        return np.log2(x)
+    with scorep.instrumenter.enable():
+        c_mtx = np.outer(a_vec, b_vec)
+    print('Inner product of a_vec and b_vec =', np.dot(a_vec, b_vec))
+    print('f(4) =', f(4))
+
+    import os
+    import sys
+    print('JUPYTER_VAR =', os.environ['JUPYTER_VAR'])
+    if '/new/jupyter/path' in sys.path:
+        print("'/new/jupyter/path' found in sys.path")
+
+    os.environ['SUBPROCESS_VAR'] = 'SUBPROCESS'
+    sys.path.append('/new/subprocess/path')
+  - - "\0"
+    - "Inner product of a_vec and b_vec = 80\n"
+    - "f(4) = 16\n"
+    - "JUPYTER_VAR = JUPYTER\n"
+    - "'/new/jupyter/path' found in sys.path\n"
+    - "Instrumentation results can be found in tests_tmp/scorep-traces"
+-
+  - |-
+    print('Outer product of a_vec and b_vec =\n', c_mtx)
+    print('g(16) =', g(16))
+  - - |
+      Outer product of a_vec and b_vec =
+       [[ 0  0  0  0  0]
+       [ 5  6  7  8  9]
+       [10 12 14 16 18]
+       [15 18 21 24 27]
+       [20 24 28 32 36]]
+      g(16) = 4.0
+-
+  - |-
+    df = pd.DataFrame(np.vstack([a_vec, b_vec]).T, columns=['a', 'b'])
+    df['a*b'] = df['a'] * df['b']
+    print(df['a*b'])
+  - - |
+      0     0
+      1     6
+      2    14
+      3    24
+      4    36
+      Name: a*b, dtype: int64
+-
+  - "print('SUBPROCESS_VAR =', os.environ['SUBPROCESS_VAR'])"
+  - - "SUBPROCESS_VAR = SUBPROCESS\n"
+-
+  - |-
+    if '/new/subprocess/path' in sys.path:
+        print("'/new/subprocess/path' found in sys.path")
+  - - "'/new/subprocess/path' found in sys.path\n"
+
+      

@@ -1,0 +1,68 @@
+-
+  - "%%start_writefile tests_tmp/my_jupyter_to_script"
+  - - |
+      Started converting to Python script. See files:
+      /home/runner/work/scorep_jupyter_kernel_python/scorep_jupyter_kernel_python/tests_tmp/my_jupyter_to_script_run.sh
+      /home/runner/work/scorep_jupyter_kernel_python/scorep_jupyter_kernel_python/tests_tmp/my_jupyter_to_script.py
+-
+  - |-
+    %%scorep_env
+    SCOREP_ENABLE_TRACING=1
+    SCOREP_ENABLE_PROFILING=0
+    SCOREP_TOTAL_MEMORY=3g
+    SCOREP_EXPERIMENT_DIRECTORY=tests_tmp/scorep-traces
+  - - "Environment variables recorded."
+-
+  - |-
+    %%scorep_python_binding_arguments
+    --noinstrumenter
+  - - "Score-P bindings arguments recorded."
+-
+  - |-
+    import numpy as np
+    a = 5
+    b = 10
+    a_vec = np.arange(a)
+    b_vec =  np.arange(a, b)
+    print('a + b =', a + b)
+  - - "Python commands without instrumentation recorded."
+-
+  - |-
+    %%execute_with_scorep
+    import scorep
+    print('a - b =', a - b)
+    with scorep.instrumenter.enable():
+        c_mtx = np.outer(a_vec, b_vec)
+  - - "Python commands with instrumentation recorded."
+-
+  - "%%enable_multicellmode"
+  - - ""
+-
+  - "c = np.sum(c_mtx)"
+  - - "Python commands with instrumentation recorded."
+-
+  - |-
+    with scorep.instrumenter.enable():
+        c = np.sum(c_mtx)
+    c_vec = np.arange(b, c)
+  - - "Python commands with instrumentation recorded."
+-
+  - |-
+    print('c =', c)
+    print('Sum(c_vec) =', c_vec.sum())
+  - - "Python commands with instrumentation recorded."
+-
+  - "%%finalize_multicellmode"
+  - - ""
+-
+  - "%%end_writefile"
+  - - "Finished converting to Python script, files closed."
+-
+  - |-
+    %%bash
+    chmod u+x tests_tmp/my_jupyter_to_script_run.sh
+    ./tests_tmp/my_jupyter_to_script_run.sh
+  - - "a + b = 15\n"
+    - "a - b = -5\n"
+    - "c = 350\n"
+    - "Sum(c_vec) = 61030\n"

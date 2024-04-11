@@ -7,11 +7,12 @@ build-backend = "setuptools.build_meta:__legacy__"
 
 [project]
 name='scorep-jupyter'
-version='0.3'
+version='0.6.0'
 authors=[
   {name='Elias Werner',email='elias.werner@tu-dresden.de'},
 ]
 description='This is the Score-P Python Kernel that enables you to execute Python code in Jupyter Notebooks with Score-P. The kernel is based on the Score-P Python bindings.'
+readme={ file='README.md', content-type="text/markdown"}
 license={ file="LICENSE" }
 requires-python = ">=3.8"
 classifiers=[
@@ -22,10 +23,11 @@ dependencies = [
   "ipykernel",
   "jupyter-client",
   "astunparse",
-  "scorep==4.0.2",
-  "uuid",
-  "dill"
+  "scorep",
+  "dill",
+  "cloudpickle"
 ]
 
 [project.urls]
 homepage = "https://github.com/score-p/scorep_jupyter_kernel_python"
+repository = "https://github.com/score-p/scorep_jupyter_kernel_python"

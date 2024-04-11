@@ -1,0 +1,14 @@
+-
+  - |-
+    %%bash
+    export MY_ENV_VAR=1234
+    echo MY_ENV_VAR=$MY_ENV_VAR
+  - - "MY_ENV_VAR=1234\n"
+-
+  - |-
+    a = 5
+    b = 10
+  - - ""
+-
+  - "print('a + b =', a + b)"
+  - - "a + b = 15\n"

@@ -1,0 +1,55 @@
+name: Unit Tests
+
+# Workflow triggers
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+  # Running workflow manually
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # Checks-out repository under $GITHUB_WORKSPACE
+      - uses: actions/checkout@v3
+      - uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip
+
+      - name: Add Score-P repository
+        run: sudo add-apt-repository ppa:andreasgocht/scorep
+
+      - name: Install Score-P
+        run: sudo apt-get -y install scorep
+
+      - name: Set up environment
+        run: echo "$HOME/scorep/bin" >> $GITHUB_PATH
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.8"
+          cache: 'pip'
+      - name: Install Python packages
+        run: |
+          pip install --upgrade pip
+          pip install --upgrade setuptools
+          pip install scorep
+          pip install jupyter_kernel_test
+          pip install pyyaml dill cloudpickle numpy pandas
+
+      - name: Build Score-P Python kernel
+        run: |
+          pip install .
+          python -m scorep_jupyter.install
+        
+      - name: Run userpersistence tests
+        run: |
+          python -m unittest tests/test_userpersistence.py
+          
+      - name: Run kernel tests
+        run: |
+          python -m unittest tests/test_kernel.py

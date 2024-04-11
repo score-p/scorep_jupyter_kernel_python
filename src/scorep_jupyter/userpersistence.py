@@ -1,94 +1,144 @@
 import os
+import shutil
 import ast
 import astunparse
-import dill
-import sys
-import time
+from textwrap import dedent
 
-'''
-Note: general limitation
-changes in modules can not be persisted since pickling/shelving modules is not allowed
-'''
-comm_pipe = "_comm"
-val_pipe = "_val"
+scorep_script_name = "scorep_script.py"
+jupyter_dump_dir = "jupyter_dump_"
+subprocess_dump_dir = "subprocess_dump_"
+full_dump = "full_dump.pkl"
+os_env_dump = "os_env_dump.pkl"
+sys_path_dump = "sys_path_dump.pkl"
+var_dump = "var_dump.pkl"
 
+class PersHelper:
+    def __init__(self, serializer='dill'):
+        self.jupyter_definitions = ""
+        self.jupyter_variables = []
+        self.serializer = serializer
+        self.subprocess_definitions = ""
+        self.subprocess_variables = []
+    
+    # FIXME
+    def pers_cleanup(self):
+        """
+        Clean up files used for transmitting persistence and running subprocess.
+        """
+        for pers_path in [scorep_script_name, 
+                          *[dirname + filename for dirname in [jupyter_dump_dir, subprocess_dump_dir]
+                          for filename in [full_dump, os_env_dump, sys_path_dump, var_dump]]]:
+            if os.path.exists(pers_path):
+                if os.path.isfile(pers_path):
+                    os.remove(pers_path)
+                elif os.path.isdir(pers_path):
+                    shutil.rmtree(pers_path)
+        
+    def jupyter_dump(self):
+        """
+        Generate code for kernel ghost cell to dump notebook persistence for subprocess.
+        """
+        jupyter_dump_ = dedent(f"""\
+                               import sys
+                               import os
+                               import {self.serializer}
+                               from scorep_jupyter.userpersistence import pickle_runtime, pickle_variables
+                               pickle_runtime(os.environ, sys.path, '{jupyter_dump_dir}', {self.serializer})
+                               """)
+        if self.serializer == 'dill':
+            return jupyter_dump_ + f"dill.dump_session('{jupyter_dump_dir + full_dump}')"
+        elif self.serializer == 'cloudpickle':
+            return jupyter_dump_ + f"pickle_variables({str(self.jupyter_variables)}, globals(), '{jupyter_dump_dir}', {self.serializer})"
+        
+    def subprocess_wrapper(self, code):
+        """
+        Extract subprocess user variables and definitions.
+        """
+        self.parse(code, 'subprocess')
 
-def save_user_definitions(code, code_prev):
-    # keep imports, classes and definitions
-    root = ast.parse(code)
+        subprocess_update = dedent(f"""\
+                                   import sys
+                                   import os
+                                   import {self.serializer}
+                                   from scorep_jupyter.userpersistence import pickle_runtime, pickle_variables, load_runtime, load_variables
+                                   load_runtime(os.environ, sys.path, '{jupyter_dump_dir}', {self.serializer})
+                                   """)
+        if self.serializer == 'dill':
+            subprocess_update += f"globals().update(dill.load_module_asdict('{jupyter_dump_dir + full_dump}'))"
+        elif self.serializer == 'cloudpickle':
+           subprocess_update += (self.jupyter_definitions + f"load_variables(globals(), '{jupyter_dump_dir}', {self.serializer})")
+        return subprocess_update + "\n" + code + \
+            dedent(f"""
+                   pickle_runtime(os.environ, sys.path, '{subprocess_dump_dir}', {self.serializer})
+                   pickle_variables({str(self.subprocess_variables)}, globals(), '{subprocess_dump_dir}', {self.serializer})
+                   """)
+    
+    def jupyter_update(self, code):
+        """
+        Update aggregated storage of definitions and user variables for entire notebook.
+        """
+        self.parse(code, 'jupyter')
 
-    code_curr = []
-    for top_node in ast.iter_child_nodes(root):
-        if isinstance(top_node, ast.With):
-            for node in ast.iter_child_nodes(top_node):
-                if (isinstance(node, ast.FunctionDef) or isinstance(node, ast.AsyncFunctionDef) or
-                        isinstance(node, ast.ClassDef) or isinstance(node, ast.Import) or isinstance(node,
-                                                                                                     ast.ImportFrom)):
-                    code_curr.append(node)
-        elif (isinstance(top_node, ast.FunctionDef) or isinstance(top_node, ast.AsyncFunctionDef) or
-              isinstance(top_node, ast.ClassDef) or isinstance(top_node, ast.Import) or isinstance(top_node,
-                                                                                                   ast.ImportFrom)):
-            code_curr.append(top_node)
+        return dedent(f"""\
+                      import sys
+                      import os
+                      from scorep_jupyter.userpersistence import load_runtime, load_variables
+                      load_runtime(os.environ, sys.path, '{subprocess_dump_dir}', {self.serializer})
+                      {self.subprocess_definitions}
+                      load_variables(globals(), '{subprocess_dump_dir}', {self.serializer})
+                      """)
 
-    code_curr_id = [node.name for node in code_curr if isinstance(node, ast.FunctionDef)
-                    or isinstance(node, ast.ClassDef)]
+    def parse(self, code, mode):
+        """
+        Extract user variables names and definitions from the code.
+        """
+        # Code with magics and shell commands is ignored,
+        # unless magics are from "white list" which execute code
+        # in "persistent" manner.
+        whitelist_prefixes_cell = ['%%prun', '%%capture']
+        whitelist_prefixes_line = ['%prun', '%time']
 
-    code_prev = [node for node in ast.iter_child_nodes(ast.parse(code_prev))]
-    code_to_keep = []
-    for node in code_prev:
-        # TODO: maintain synch of imports
-        # TODO: maintain synch of attributes (del keyword)
-        if not (isinstance(node, ast.FunctionDef) or isinstance(node, ast.ClassDef) or
-                isinstance(node, ast.AsyncFunctionDef)):
-            code_to_keep.append(node)
-        else:
-            if node.name not in code_curr_id:
-                code_to_keep.append(node)
-    code_to_keep.append(code_curr)
+        nomagic_code = '' # Code to be parsed for user variables
+        if not code.startswith(tuple(['%', '!'])): # No IPython magics and shell commands
+            nomagic_code = code
+        elif code.startswith(tuple(whitelist_prefixes_cell)): # Cell magic & executed cell, remove first line
+            nomagic_code = code.split("\n", 1)[1]
+        elif code.startswith(tuple(whitelist_prefixes_line)): # Line magic & executed cell, remove first word
+            nomagic_code = code.split(" ", 1)[1]
+        try:
+            user_definitions = extract_definitions(nomagic_code)
+            user_variables = extract_variables_names(nomagic_code)
+        except SyntaxError as e:
+            raise
+        
+        if mode == 'subprocess':
+            # Parse definitions and user variables from subprocess code before running it.
+            self.subprocess_definitions = ""
+            self.subprocess_variables.clear()
+            self.subprocess_definitions += user_definitions
+            self.subprocess_variables.extend(user_variables)
+        elif mode == "jupyter" and self.serializer == "cloudpickle":
+            # Update aggregated storage of definitions and user variables for entire notebook.
+            # Not relevant for dill because of dump_session.
+            self.jupyter_definitions += user_definitions
+            self.jupyter_variables.extend(user_variables)
 
-    pers_string = ""
-    for node in code_to_keep:
-        pers_string += astunparse.unparse(node)
+def pickle_runtime(os_environ_, sys_path_, dump_dir, serializer):
+    os_env_dump_ = dump_dir + os_env_dump
+    sys_path_dump_ = dump_dir + sys_path_dump
 
-    return pers_string
-
-
-def get_user_variables_from_code(code):
-    # found variables might contain more variables because they contain also local variables
-    # note that local variables are filtered later by merging with globals()
-    root = ast.parse(code)
-
-    variables = set()
-    for node in ast.walk(root):
-        # assignment nodes can include attributes, therefore go over all targets and check for attribute nodes
-        if isinstance(node, ast.Assign) or isinstance(node, ast.AnnAssign):
-            for el in node.targets:
-                for target_node in ast.walk(el):
-                    if isinstance(target_node, ast.Name):
-                        variables.add(target_node.id)
-
-    return variables
-
-
-def check_rec_del(basepipeName, t):
-    while True:
-        with open(basepipeName + comm_pipe, "rb") as file:
-            line = file.readline()
-
-        if line == b"REC\n":
-            with open(basepipeName + val_pipe, "wb") as file:
-                file.write(t + b"0000000")
-        elif line == b"DEL\n":
-            os.unlink(basepipeName + comm_pipe)
-            os.unlink(basepipeName + val_pipe)
-            break
-        time.sleep(1)
-
-
-def save_user_variables(globs, variables, basepipeName, prior_variables):
-    user_variables = {k: v for k, v in globs.items() if str(k) in variables}
-    user_variables = {**prior_variables, **user_variables}
-
+    # Don't dump environment variables set by Score-P bindings.
+    # Will force it to re-initialize instead of calling reset_preload()
+    filtered_os_environ_ = {k: v for k, v in os_environ_.items() if not k.startswith('SCOREP_PYTHON_BINDINGS_')}
+    with open(os_env_dump_, 'wb+') as file:
+        serializer.dump(filtered_os_environ_, file)
+    with open(sys_path_dump_, 'wb+') as file:
+        serializer.dump(sys_path_, file)
+    
+def pickle_variables(variables_names, globals_, dump_dir, serializer):
+    var_dump_ = dump_dir + var_dump
+    user_variables = {k: v for k, v in globals_.items() if k in variables_names}
+    
     for el in user_variables.keys():
         # if possible, exchange class of the object here with the class that is stored for persistence. This is
         # valid since the classes should be the same and this does not affect the objects attribute dictionary
@@ -96,55 +146,80 @@ def save_user_variables(globs, variables, basepipeName, prior_variables):
         if non_persistent_class in globals().keys():
             user_variables[el].__class__ = globals()[non_persistent_class]
 
-    if user_variables:
+    with open(var_dump_, 'wb+') as file:
+        serializer.dump(user_variables, file)
 
-        if os.path.exists(basepipeName + comm_pipe) and os.path.exists(basepipeName + val_pipe):
-            with open(basepipeName + comm_pipe, "wb") as file:
-                file.write(b'DEL\n')
+def load_runtime(os_environ_, sys_path_, dump_dir, serializer):
+    os_env_dump_ = dump_dir + os_env_dump
+    sys_path_dump_ = dump_dir + sys_path_dump
 
-        t = dill.dumps(user_variables)
+    loaded_os_environ_ = {}
+    loaded_sys_path_ = []
 
-        # wait until both pipes are deleted from previous cell/process
-        while True:
-            if not (os.path.exists(basepipeName + comm_pipe) and os.path.exists(basepipeName + val_pipe)):
-                break
-            time.sleep(1)
+    if os.path.getsize(os_env_dump_) > 0:
+        with open(os_env_dump_, 'rb') as file:
+            loaded_os_environ_ = serializer.load(file)
+    if os.path.getsize(sys_path_dump_) > 0:
+        with open(sys_path_dump_, 'rb') as file:
+            loaded_sys_path_ = serializer.load(file)
+    
+    #os_environ_.clear()
+    os_environ_.update(loaded_os_environ_)
 
-        os.mkfifo(basepipeName + comm_pipe)
-        os.mkfifo(basepipeName + val_pipe)
-        sys.stdout.write("WAIT" + basepipeName)
+    #sys_path_.clear()
+    sys_path_.extend(loaded_sys_path_)
 
-        check_rec_del(basepipeName, t)
+def load_variables(globals_, dump_dir, serializer):
+    var_dump_ = dump_dir + var_dump
+    if os.path.getsize(var_dump_) > 0:
+        with open(var_dump_, 'rb') as file:
+            globals_.update(serializer.load(file))
 
+def extract_definitions(code):
+    """
+    Extract imported modules and definitions of classes and functions from the code block.
+    """
+    # can't use in kernel as import from scorep_jupyter.userpersistence:
+    # self-reference error during dill dump of notebook
+    root = ast.parse(code)
+    definitions = []
+    for top_node in ast.iter_child_nodes(root):
+        if isinstance(top_node, ast.With):
+            for node in ast.iter_child_nodes(top_node):
+                if (isinstance(node, ast.FunctionDef) or isinstance(node, ast.AsyncFunctionDef) or
+                        isinstance(node, ast.ClassDef) or isinstance(node, ast.Import) or isinstance(node,
+                                                                                                        ast.ImportFrom)):
+                    definitions.append(node)
+        elif (isinstance(top_node, ast.FunctionDef) or isinstance(top_node, ast.AsyncFunctionDef) or
+                isinstance(top_node, ast.ClassDef) or isinstance(top_node, ast.Import) or isinstance(top_node,
+                                                                                                    ast.ImportFrom)):
+            definitions.append(top_node)
 
-def load_user_variables(basepipeName):
-    content = {}
+    definitions_string = ""
+    for node in definitions:
+        definitions_string += astunparse.unparse(node)
 
-    if os.path.exists(basepipeName + comm_pipe) and os.path.exists(basepipeName + val_pipe):
-        # pipes exist, we should ask for the vars
-        with open(basepipeName + comm_pipe, "wb") as file:
-            file.write(b'REC\n')
+    return definitions_string
 
-        line = b""
-        with open(basepipeName + val_pipe, "rb") as file:
-            while True:
-                tmp = file.read(1024 * 1024 * 1024)
-                end = tmp[-7:]
-                if end == b"0000000":
-                    line += tmp[:-7]
-                    break
-                else:
-                    line += tmp
+def extract_variables_names(code):
+    """
+    Extract user-assigned variables from code.
+    Unlike dir(), nothing coming from the imported modules is included.
+    Might contain non-variables as well from assignments, which are later filtered out when dumping variables.
+    """
+    root = ast.parse(code)
 
-        content = dill.loads(line)
-    return content
+    variables = set()
+    for node in ast.walk(root):
+        # assignment nodes can include attributes, therefore go over all targets and check for attribute nodes
+        if isinstance(node, ast.Assign):
+            for el in node.targets:
+                for target_node in ast.walk(el):
+                    if isinstance(target_node, ast.Name):
+                        variables.add(target_node.id)
+        elif isinstance(node, ast.AnnAssign):
+            for target_node in ast.walk(node.target):
+                if isinstance(target_node, ast.Name):
+                    variables.add(target_node.id)
 
-
-def tidy_up(basepipeName):
-    try:
-        if os.path.exists(basepipeName + val_pipe):
-            os.unlink(basepipeName + val_pipe)
-        if os.path.exists(basepipeName + comm_pipe):
-            os.unlink(basepipeName + comm_pipe)
-    except:
-        print("error tidy up")
+    return variables
