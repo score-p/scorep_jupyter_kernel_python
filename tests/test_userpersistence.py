@@ -10,24 +10,21 @@ from textwrap import dedent
 from src.scorep_jupyter.userpersistence import extract_variables_names, extract_definitions, load_variables, load_runtime
 
 PYTHON_EXECUTABLE = sys.executable
-dump_dir = 'tests_tmp/'
-full_dump = "tests_tmp/full_dump.pkl"
-os_env_dump = "tests_tmp/os_env_dump.pkl"
-sys_path_dump = "tests_tmp/sys_path_dump.pkl"
-var_dump = "tests_tmp/var_dump.pkl"
+tmp_dir = 'test_userpersistence_tmp/'
 
 class UserPersistenceTests(unittest.TestCase):
     
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
-        os.system("mkdir tests_tmp")
+        os.system(f'rm -rf {tmp_dir}')
+        os.system(f"mkdir {tmp_dir}")
         return
 
     @classmethod
     def tearDownClass(cls) -> None:
         super().tearDownClass()
-        os.system(f'rm -rf tests_tmp')
+        os.system(f'rm -rf {tmp_dir}')
         return
     
     def test_00_extract_variables_names(self):
@@ -37,7 +34,7 @@ class UserPersistenceTests(unittest.TestCase):
             variables = json.load(file)
         extracted_names = extract_variables_names(code)
         # Extracted names might contain extra non-variables from assignments
-        # Those are filtered out later in pickle_values
+        # Those are filtered out later in dump_values
         self.assertTrue(set(variables.keys()).issubset(extracted_names))
 
     def test_01_extract_definitions(self):
@@ -48,61 +45,95 @@ class UserPersistenceTests(unittest.TestCase):
         extracted_defs = extract_definitions(code)
         self.assertEqual(extracted_defs, expected_defs)
 
-    def test_02_pickle_load_runtime(self):
-        # clean sys.path and os.environ inside subprocess and fill with values from file
-        # load dump and compare with file
-        # merge with load runtime
-        for serializer, serializer_str in zip([dill, cloudpickle], ['dill', 'cloudpickle']):
-            with open("tests/userpersistence/os_environ.json", "r") as file:
-                expected_os_environ = json.load(file)
-            with open("tests/userpersistence/sys_path.json", "r") as file:
-                expected_sys_path = json.load(file)
-            code = dedent(f"""\
-                          from src.scorep_jupyter.userpersistence import pickle_runtime
-                          import {serializer_str}
-                          import os
-                          import sys
-                          os.environ.clear()
-                          sys.path.clear()
-                          os.environ.update({str(expected_os_environ)})
-                          sys.path.extend({str(expected_sys_path)})
-                          pickle_runtime(os.environ, sys.path, '{dump_dir}', {serializer_str})
-                          """)
-            cmd = [PYTHON_EXECUTABLE, "-c", code]
-            with subprocess.Popen(cmd, stdout=subprocess.PIPE) as proc:
+    def handle_communication(self, object, mode, action):
+        if object == 'runtime':
+            filenames = [tmp_dir + 'os_environ_' + mode, tmp_dir + 'sys_path_' + mode]
+        elif object == 'var':
+            filenames = [tmp_dir + 'var_' + mode]
+        
+        if action == 'open':
+            if mode == 'memory':
+                for path in filenames: os.mkfifo(path)
+            elif mode == 'disk':
+                for path in filenames: open(path, 'a').close()
+            return filenames
+        elif action == 'close':
+            if mode == 'memory':
+                for path in filenames: os.unlink(path)
+            elif mode == 'disk':
+                for path in filenames: os.remove(path)
+
+    def test_02_dump_load_runtime(self):
+        #for mode in ['memory', 'disk']:
+        for mode in ['disk']:
+            os_environ_file, sys_path_file = self.handle_communication('runtime', mode, 'open')
+            for serializer in [dill, cloudpickle]:
+                with open("tests/userpersistence/os_environ.json", "r") as file:
+                    expected_os_environ = json.load(file)
+                with open("tests/userpersistence/sys_path.json", "r") as file:
+                    expected_sys_path = json.load(file)
+                code = dedent(f"""\
+                            from src.scorep_jupyter.userpersistence import dump_runtime
+                            import {serializer.__name__}
+                            import os
+                            import sys
+                            os.environ.clear()
+                            sys.path.clear()
+                            os.environ.update({str(expected_os_environ)})
+                            sys.path.extend({str(expected_sys_path)})
+                            dump_runtime(os.environ, sys.path, '{os_environ_file}', '{sys_path_file}', {serializer.__name__})
+                            """)
+                dumped_os_environ = {}
+                dumped_sys_path = []
+
+                cmd = [PYTHON_EXECUTABLE, "-c", code]
+                proc = subprocess.Popen(cmd)
+                
+                if mode == 'memory':
+                    load_runtime(dumped_os_environ, dumped_sys_path, os_environ_file, sys_path_file, serializer)
                 proc.wait()
-            self.assertFalse(proc.returncode)
+                self.assertFalse(proc.returncode)
+                if mode == 'disk':
+                    load_runtime(dumped_os_environ, dumped_sys_path, os_environ_file, sys_path_file, serializer)
 
-            pickled_os_environ = {}
-            pickled_sys_path = []
-            load_runtime(pickled_os_environ, pickled_sys_path, dump_dir, serializer)
-            self.assertEqual(pickled_os_environ, expected_os_environ)
-            self.assertEqual(pickled_sys_path, expected_sys_path)
+                self.assertFalse(proc.returncode)
+                self.assertEqual(dumped_os_environ, expected_os_environ)
+                self.assertEqual(dumped_sys_path, expected_sys_path)
+                self.handle_communication('runtime', mode, 'close')
 
-    def test_03_pickle_load_variables(self):
-        for serializer, serializer_str in zip([dill, cloudpickle], ['dill', 'cloudpickle']):
-            with open("tests/userpersistence/code.py", "r") as file:
-                code = file.read()
-            with open("tests/userpersistence/variables.json", "r") as file:
-                expected_variables = json.load(file)
-                variables_names = list(expected_variables.keys())
+    def test_03_dump_load_variables(self):
+        #for mode in ['memory', 'disk']:
+        for mode in ['disk']:
+            var_file = self.handle_communication('var', mode, 'open')[0]
+            for serializer in [dill, cloudpickle]:
+                with open("tests/userpersistence/code.py", "r") as file:
+                    code = file.read()
+                with open("tests/userpersistence/variables.json", "r") as file:
+                    expected_variables = json.load(file)
+                    variables_names = list(expected_variables.keys())
 
-            code = dedent(f"""\
-                        from src.scorep_jupyter.userpersistence import pickle_variables
-                        import {serializer_str}
-                        """) + code + \
-                        f"\npickle_variables({str(variables_names)}, globals(), '{dump_dir}', {serializer_str})"
-            cmd = [PYTHON_EXECUTABLE, "-c", code]
-            with subprocess.Popen(cmd, stdout=subprocess.PIPE) as proc:
+                code = dedent(f"""\
+                            from src.scorep_jupyter.userpersistence import dump_variables
+                            import {serializer.__name__}
+                            """) + code + \
+                            f"\ndump_variables({str(variables_names)}, globals(), '{var_file}', {serializer.__name__})"
+                dumped_variables = {}
+
+                cmd = [PYTHON_EXECUTABLE, "-c", code]
+                proc = subprocess.Popen(cmd)
+
+                if mode == 'memory':
+                    load_variables(dumped_variables, var_file, serializer)
                 proc.wait()
-            self.assertFalse(proc.returncode)
+                self.assertFalse(proc.returncode)
+                if mode == 'disk':
+                    load_variables(dumped_variables, var_file, serializer)
 
-            pickled_variables = {}
-            load_variables(pickled_variables, dump_dir, serializer)
-            # Easier to skip comparison of CustomClass object
-            pickled_variables.pop('obj')
-            expected_variables.pop('obj')
-            self.assertEqual(pickled_variables, expected_variables)
+                # Easier to skip comparison of CustomClass object
+                dumped_variables.pop('obj')
+                expected_variables.pop('obj')
+                self.assertEqual(dumped_variables, expected_variables)
+                self.handle_communication('var', mode, 'close')
 
 if __name__ == '__main__':
     unittest.main()

@@ -38,7 +38,7 @@
     - "f(4) = 16\n"
     - "JUPYTER_VAR = JUPYTER\n"
     - "'/new/jupyter/path' found in sys.path\n"
-    - "Instrumentation results can be found in tests_tmp/scorep-traces"
+    - "Instrumentation results can be found in test_kernel_tmp/scorep-traces"
 -
   - |-
     print('Outer product of a_vec and b_vec =\n', c_mtx)

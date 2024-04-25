@@ -1,16 +1,16 @@
 -
-  - "%%start_writefile tests_tmp/my_jupyter_to_script"
+  - "%%start_writefile test_kernel_tmp/my_jupyter_to_script"
   - - |
       Started converting to Python script. See files:
-      /home/runner/work/scorep_jupyter_kernel_python/scorep_jupyter_kernel_python/tests_tmp/my_jupyter_to_script_run.sh
-      /home/runner/work/scorep_jupyter_kernel_python/scorep_jupyter_kernel_python/tests_tmp/my_jupyter_to_script.py
+      /home/runner/work/scorep_jupyter_kernel_python/scorep_jupyter_kernel_python/test_kernel_tmp/my_jupyter_to_script_run.sh
+      /home/runner/work/scorep_jupyter_kernel_python/scorep_jupyter_kernel_python/test_kernel_tmp/my_jupyter_to_script.py
 -
   - |-
     %%scorep_env
     SCOREP_ENABLE_TRACING=1
     SCOREP_ENABLE_PROFILING=0
     SCOREP_TOTAL_MEMORY=3g
-    SCOREP_EXPERIMENT_DIRECTORY=tests_tmp/scorep-traces
+    SCOREP_EXPERIMENT_DIRECTORY=test_kernel_tmp/scorep-traces
   - - "Environment variables recorded."
 -
   - |-
@@ -60,8 +60,8 @@
 -
   - |-
     %%bash
-    chmod u+x tests_tmp/my_jupyter_to_script_run.sh
-    ./tests_tmp/my_jupyter_to_script_run.sh
+    chmod u+x test_kernel_tmp/my_jupyter_to_script_run.sh
+    ./test_kernel_tmp/my_jupyter_to_script_run.sh
   - - "a + b = 15\n"
     - "a - b = -5\n"
     - "c = 350\n"

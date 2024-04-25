@@ -4,6 +4,6 @@
     SCOREP_ENABLE_TRACING=1
     SCOREP_ENABLE_PROFILING=0
     SCOREP_TOTAL_MEMORY=3g
-    SCOREP_EXPERIMENT_DIRECTORY=tests_tmp/scorep-traces
+    SCOREP_EXPERIMENT_DIRECTORY=test_kernel_tmp/scorep-traces
   - - "Score-P environment set successfully: {'SCOREP_ENABLE_TRACING': '1', 'SCOREP_ENABLE_PROFILING': '0',
-        'SCOREP_TOTAL_MEMORY': '3g', 'SCOREP_EXPERIMENT_DIRECTORY': 'tests_tmp/scorep-traces'}"
+        'SCOREP_TOTAL_MEMORY': '3g', 'SCOREP_EXPERIMENT_DIRECTORY': 'test_kernel_tmp/scorep-traces'}"

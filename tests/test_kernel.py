@@ -3,6 +3,8 @@ import jupyter_kernel_test as jkt
 import os
 import yaml
 
+tmp_dir = 'test_kernel_tmp/'
+
 class KernelTests(jkt.KernelTests):
     kernel_name = "scorep-python"
     language_name = "python"
@@ -10,13 +12,15 @@ class KernelTests(jkt.KernelTests):
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
-        os.system("mkdir tests_tmp")
+        os.system(f"rm -rf {tmp_dir}")
+        os.system(f"mkdir {tmp_dir}")
+        os.system(f"mkdir {tmp_dir}/scorep-traces")
         return
     
     @classmethod
     def tearDownClass(cls) -> None:
         super().tearDownClass()
-        os.system("rm -rf tests_tmp")
+        os.system(f"rm -rf {tmp_dir}")
         return
 
     def check_stream_output(self, code, expected_output, stream="stdout"):

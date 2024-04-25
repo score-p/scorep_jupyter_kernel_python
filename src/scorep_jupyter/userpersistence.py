@@ -5,68 +5,86 @@ import astunparse
 from textwrap import dedent
 from pathlib import Path
 import uuid
-import time
+
 scorep_script_name = "scorep_script.py"
 
-
 class PersHelper:
-    def __init__(self, serializer='dill'):
+    def __init__(self, serializer='dill', mode='memory'):
         self.jupyter_definitions = ""
         self.jupyter_variables = []
         self.serializer = serializer
+        self.mode = mode
         self.subprocess_definitions = ""
         self.subprocess_variables = []
         self.base_path = Path(os.environ['SCOREP_KERNEL_PERSISTENCE_DIR']) / Path("./kernel_persistence/")
         self.paths = {'jupyter':
-                          {'os_environ': '', 'sys_path': '', 'var': '', 'comm': ''},
+                          {'os_environ': '', 'sys_path': '', 'var': ''},
                       'subprocess':
-                          {'os_environ': '', 'sys_path': '', 'var': '', 'comm': ''}}
+                          {'os_environ': '', 'sys_path': '', 'var': ''}}
 
     def preprocess(self):
         uid = str(uuid.uuid4())
-        if os.environ['SCOREP_KERNEL_PERSISTENCE_MODE'] == 'DISK':
+        if self.mode == 'disk':
             os.makedirs(self.base_path)
 
         for key1 in self.paths:
             dir_path = str(self.base_path / Path(key1))
             for key2 in self.paths[key1]:
 
-                if os.environ['SCOREP_KERNEL_PERSISTENCE_MODE'] == 'MEMORY':
+                if self.mode == 'memory':
                     fd_path = "pyperf_" + key1 + "_" + key2 + "_" + uid
-                elif os.environ['SCOREP_KERNEL_PERSISTENCE_MODE'] == 'DISK':
+                elif self.mode == 'disk':
                     fd_path = dir_path + "_" + key2 + "_" + uid
                 
                 self.paths[key1][key2] = fd_path
                 
                 try:
-                    if os.environ['SCOREP_KERNEL_PERSISTENCE_MODE'] == 'MEMORY':
+                    if self.mode == 'memory':
                         os.mkfifo(fd_path)
-                    elif os.environ['SCOREP_KERNEL_PERSISTENCE_MODE'] == 'DISK':
-                        open(fd_path, 'w').close()
+                    elif self.mode == 'disk':
+                        open(fd_path, 'a').close()
                 except PermissionError:
                     print(f"Permission denied: Cannot create pipe/file at {fd_path}")
+                    return False
                 except FileExistsError:
                     print(f"Pipe/file already exists at {fd_path}")
+                    return False
                 except OSError as e:
                     print(f"Failed to create pipe/file due to an OS error: {e}")
+                    return False
         return True
 
     def postprocess(self):
         """
         Clean up files used for transmitting persistence and running subprocess.
         """
-        if os.environ['SCOREP_KERNEL_PERSISTENCE_MODE'] == 'MEMORY':
+        if self.mode == 'memory':
             for key1 in self.paths:
                 for key2 in self.paths[key1]:
                     fd_path = self.paths[key1][key2]
                     if os.path.exists(fd_path):
                         os.unlink(fd_path)
-        elif os.environ['SCOREP_KERNEL_PERSISTENCE_MODE'] == 'DISK':
+        elif self.mode == 'disk':
             if os.path.exists(str(self.base_path)):
                 shutil.rmtree(str(self.base_path))
                 
         if os.path.exists(scorep_script_name):
             os.remove(scorep_script_name)
+
+    def serializer_settings(self, serializer, mode):
+        error_message = ""
+
+        if serializer in ['dill', 'cloudpickle']:
+            self.serializer = serializer
+        else:
+            error_message += f"'{serializer}' serializer backend is not supported.\n"
+        
+        if mode in ['disk', 'memory']:
+            self.mode = mode
+        else:
+            error_message += f"'{mode}' serialization mode is not recognized, use one of the following options: 'disk', 'memory'.\n"
+        
+        return error_message
 
     def jupyter_dump(self):
         """
@@ -77,16 +95,9 @@ class PersHelper:
                                import os
                                import {self.serializer}
                                from scorep_jupyter.userpersistence import dump_runtime, dump_variables
+                               dump_runtime(os.environ, sys.path, '{self.paths['jupyter']['os_environ']}', '{self.paths['jupyter']['sys_path']}', {self.serializer})
+                               dump_variables({str(self.jupyter_variables)}, globals(), '{self.paths['jupyter']['var']}', {self.serializer})
                                """)
-
-        jupyter_dump_ += f"dump_runtime(os.environ, sys.path, '{self.paths['jupyter']['os_environ']}', '{self.paths['jupyter']['sys_path']}', {self.serializer})\n" + \
-                         f"dump_variables({str(self.jupyter_variables)}, globals(), '{self.paths['jupyter']['var']}', {self.serializer})\n"
-
-        # Explicit synchronization for disk-mode, emulating blocking read-write with pipe
-        if os.environ['SCOREP_KERNEL_PERSISTENCE_MODE'] == 'DISK':
-            jupyter_dump_ += f"with open('{self.paths['jupyter']['comm']}', 'wb') as comm_pipe:\n" + \
-                             '    comm_pipe.write(b"READFILE\\n")\n'
-
         return jupyter_dump_
 
     def subprocess_wrapper(self, code):
@@ -95,40 +106,30 @@ class PersHelper:
         """
         self.parse(code, 'subprocess')
 
-        subprocess_update = dedent(f"""\
-                                   import sys
-                                   import os
-                                   import {self.serializer}
-                                   from scorep_jupyter.userpersistence import dump_runtime, dump_variables, load_runtime, load_variables
-                                   """)
+        subprocess_code = dedent(f"""\
+                                  import sys
+                                  import os
+                                  import {self.serializer}
+                                  from scorep_jupyter.userpersistence import dump_runtime, dump_variables, load_runtime, load_variables
+                                  """)
+        subprocess_code += f"load_runtime(os.environ, sys.path, '{self.paths['jupyter']['os_environ']}', '{self.paths['jupyter']['sys_path']}', {self.serializer})\n"
+        subprocess_code += self.jupyter_definitions
+        subprocess_code += f"load_variables(globals(), '{self.paths['jupyter']['var']}', {self.serializer})"
+        subprocess_code += ("\n" + code + "\n")
 
-        # Explicit synchronization for disk-mode, emulating blocking read-write with pipe
-        if os.environ['SCOREP_KERNEL_PERSISTENCE_MODE'] == 'DISK':
-            subprocess_update += f"with open('{self.paths['jupyter']['comm']}', 'rb') as comm_pipe:\n" + \
-                                 "    r = comm_pipe.readline()\n"
-
-        subprocess_update += f"load_runtime(os.environ, sys.path, '{self.paths['jupyter']['os_environ']}', '{self.paths['jupyter']['sys_path']}', {self.serializer})\n"
-        subprocess_update += self.jupyter_definitions
-        subprocess_update += f"load_variables(globals(), '{self.paths['jupyter']['var']}', {self.serializer})"
-        subprocess_update += ("\n" + code + "\n")
-
-        # Signal subprocess output observer in kernel to end by closing the streams
+        # In memory mode, signal subprocess output observer in kernel to terminate by closing the streams
         # TODO: Missing possible stderr from dump_runtime and dump_variables
-        if os.environ['SCOREP_KERNEL_PERSISTENCE_MODE'] == 'MEMORY':
-            subprocess_update += "sys.stdout.flush()\n" + \
-                                "sys.stderr.flush()\n" + \
-                                "os.close(sys.stdout.fileno())\n" + \
-                                "os.close(sys.stderr.fileno())\n"
-
-        subprocess_update += f"dump_runtime(os.environ, sys.path, '{self.paths['subprocess']['os_environ']}', '{self.paths['subprocess']['sys_path']}', {self.serializer})\n" + \
-                             f"dump_variables({str(self.subprocess_variables)}, globals(), '{self.paths['subprocess']['var']}', {self.serializer})\n"
+        if self.mode == 'memory':
+            subprocess_code += dedent(f"""\
+                                       sys.stdout.flush()
+                                       sys.stderr.flush()
+                                       os.close(sys.stdout.fileno())
+                                       os.close(sys.stderr.fileno())
+                                       """)
+        subprocess_code += f"dump_runtime(os.environ, sys.path, '{self.paths['subprocess']['os_environ']}', '{self.paths['subprocess']['sys_path']}', {self.serializer})\n" + \
+                           f"dump_variables({str(self.subprocess_variables)}, globals(), '{self.paths['subprocess']['var']}', {self.serializer})\n"
         
-        # Explicit synchronization for disk-mode, emulating blocking read-write with pipe
-        #if os.environ['SCOREP_KERNEL_PERSISTENCE_MODE'] == 'DISK':
-        #    subprocess_update += f"with open('{self.paths['jupyter']['comm']}', 'wb') as comm_pipe:\n" + \
-        #                        '    comm_pipe.write(b"READFILE\\n")\n'
-            
-        return subprocess_update
+        return subprocess_code
 
     def jupyter_update(self, code):
         """
@@ -139,14 +140,10 @@ class PersHelper:
                                 import sys
                                 import os
                                 from scorep_jupyter.userpersistence import load_runtime, load_variables
+                                load_runtime(os.environ, sys.path, '{self.paths['subprocess']['os_environ']}', '{self.paths['subprocess']['sys_path']}', {self.serializer})
                                 """)
-        # Explicit synchronization for disk-mode, emulating blocking read-write with pipe
-        #if os.environ['SCOREP_KERNEL_PERSISTENCE_MODE'] == 'DISK':
-        #    jupyter_update += f"with open('{self.paths['jupyter']['comm']}', 'rb') as comm_pipe:\n" + \
-        #                       "    r = comm_pipe.readline()\n"
-            
-        jupyter_update += f"load_runtime(os.environ, sys.path, '{self.paths['subprocess']['os_environ']}', '{self.paths['subprocess']['sys_path']}', {self.serializer})\n" + \
-                          f"load_variables(globals(), '{self.paths['subprocess']['var']}', {self.serializer})\n"
+        jupyter_update += self.jupyter_definitions
+        jupyter_update += f"load_variables(globals(), '{self.paths['subprocess']['var']}', {self.serializer})"
         return jupyter_update
 
     def parse(self, code, mode):
@@ -196,7 +193,6 @@ def dump_runtime(os_environ_, sys_path_, os_environ_dump_, sys_path_dump_, seria
         serializer.dump(sys_path_, file)
 
 def dump_variables(variables_names, globals_, var_dump_, serializer):
-    # blocking write, to wait for the other process
     user_variables = {k: v for k, v in globals_.items() if k in variables_names}
 
     for el in user_variables.keys():
@@ -205,7 +201,7 @@ def dump_variables(variables_names, globals_, var_dump_, serializer):
         non_persistent_class = user_variables[el].__class__.__name__
         if non_persistent_class in globals().keys():
             user_variables[el].__class__ = globals()[non_persistent_class]
-
+    
     with open(var_dump_, 'wb') as file:
         serializer.dump(user_variables, file)
 
@@ -227,7 +223,8 @@ def load_runtime(os_environ_, sys_path_, os_environ_dump_, sys_path_dump_, seria
 
 def load_variables(globals_, var_dump_, serializer):
     with open(var_dump_, 'rb') as file:
-        globals_.update(serializer.load(file))
+        obj = serializer.load(file)
+    globals_.update(obj)
 
 def extract_definitions(code):
     """

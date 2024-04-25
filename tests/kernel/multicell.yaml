@@ -39,4 +39,4 @@
     - "Sum(c_vec) = 61030\n"
     - "\n"
     - "\n"
-    - "Instrumentation results can be found in tests_tmp/scorep-traces"
+    - "Instrumentation results can be found in test_kernel_tmp/scorep-traces"

@@ -42,11 +42,8 @@ class ScorepPythonKernel(IPythonKernel):
         self.python_script = None
 
         os.environ['SCOREP_KERNEL_PERSISTENCE_DIR'] = './'
-        os.environ['SCOREP_KERNEL_PERSISTENCE_MODE'] = 'DISK'
-
-        self.pershelper = PersHelper('dill')
-
-
+        self.pershelper = PersHelper('dill', 'memory')
+        
     def cell_output(self, string, stream='stdout'):
         """
         Display string as cell output.
@@ -62,19 +59,21 @@ class ScorepPythonKernel(IPythonKernel):
                 'user_expressions': {},
                 }
 
-    def switch_serializer(self, code):
+    def serializer_settings(self, code):
         """
         Switch serializer backend used for persistence in kernel.
         """
         # Clean files/pipes before switching
         self.pershelper.postprocess()
 
-        serializer = code.split('\n')[1]
-        if serializer in ['dill', 'cloudpickle']:
-            self.pershelper = PersHelper(serializer)
-            self.cell_output(f'Serializer backend switched to {serializer}, persistence was reset.')
-        else:   
-            self.cell_output(f'KernelError: {serializer} serializer backend is not supported.', 'stderr')
+        serializer, mode = code.split('\n')[1:3]
+
+        error_message = self.pershelper.serializer_settings(serializer, mode)
+        if error_message:
+            self.cell_output(f'KernelError: ' + error_message, 'stderr')
+        else:
+            self.cell_output(f"Serializer set to '{serializer}', mode set to '{mode}'.")
+
         return self.standard_reply()
 
     def set_scorep_env(self, code):
@@ -217,6 +216,12 @@ class ScorepPythonKernel(IPythonKernel):
                 'Python commands without instrumentation recorded.')
         return self.standard_reply()
 
+    def ghost_cell_error(self, reply_status, error_message):
+        self.shell.execution_count += 1
+        reply_status['execution_count'] = self.shell.execution_count - 1
+        self.pershelper.postprocess()
+        self.cell_output(error_message, 'stderr')
+
     async def scorep_execute(self, code, silent, store_history=True, user_expressions=None,
                              allow_stdin=False, *, cell_id=None):
         """
@@ -234,6 +239,17 @@ class ScorepPythonKernel(IPythonKernel):
         with open(scorep_script_name, 'w') as file:
             file.write(self.pershelper.subprocess_wrapper(code))
 
+        # For disk mode use implicit synchronization between kernel and subprocess:
+        # await jupyter_dump, subprocess.wait(), await jupyter_update
+        # Ghost cell - dump current Jupyter session for subprocess
+        # Run in a "silent" way to not increase cells counter
+        if self.pershelper.mode == 'disk':
+            reply_status_dump = await super().do_execute(self.pershelper.jupyter_dump(), silent, store_history=False,
+                                                    user_expressions=user_expressions, allow_stdin=allow_stdin, cell_id=cell_id)
+            if reply_status_dump['status'] != 'ok':
+                self.ghost_cell_error(reply_status_dump, "KernelError: Failed to pickle notebook's persistence.")
+                return reply_status_dump
+            
         # Launch subprocess with Jupyter notebook environment
         cmd = [PYTHON_EXECUTABLE, "-m", "scorep"] + \
             self.scorep_binding_args + [scorep_script_name]
@@ -241,16 +257,14 @@ class ScorepPythonKernel(IPythonKernel):
         proc_env.update({'PATH': os.environ['PATH'], 'PYTHONUNBUFFERED': 'x'}) # scorep path, subprocess observation
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=proc_env)
         
-        # Ghost cell - dump current Jupyter session for subprocess
-        # Run in a "silent" way to not increase cells counter
-        reply_status_dump = await super().do_execute(self.pershelper.jupyter_dump(), silent, store_history=False,
-                                                    user_expressions=user_expressions, allow_stdin=allow_stdin, cell_id=cell_id)
-        if reply_status_dump['status'] != 'ok':
-            self.shell.execution_count += 1
-            reply_status_dump['execution_count'] = self.shell.execution_count - 1
-            self.pershelper.postprocess()
-            self.cell_output("KernelError: Failed to pickle notebook's persistence.", 'stderr')
-            return reply_status_dump
+        # For memory mode jupyter_dump and jupyter_update must be awaited
+        # concurrently to the running subprocess
+        if self.pershelper.mode == 'memory':
+            reply_status_dump = await super().do_execute(self.pershelper.jupyter_dump(), silent, store_history=False,
+                                                        user_expressions=user_expressions, allow_stdin=allow_stdin, cell_id=cell_id)
+            if reply_status_dump['status'] != 'ok':
+                self.ghost_cell_error(reply_status_dump, "KernelError: Failed to pickle notebook's persistence.")
+                return reply_status_dump
 
         # Redirect process stderr to stdout and observe the latter
         # Observing two stream with two threads causes interference in cell_output in Jupyter notebook
@@ -276,23 +290,30 @@ class ScorepPythonKernel(IPythonKernel):
                 for line in lines:
                     self.cell_output(line)
 
+        # In disk mode, subprocess already terminated after dumping persistence to file
+        if self.pershelper.mode == 'disk':
+            if proc.returncode:
+                self.pershelper.postprocess()
+                self.cell_output('KernelError: Cell execution failed, cell persistence was not recorded.', 'stderr')
+                return self.standard_reply()
+            
         # os_environ_.clear()
         # sys_path_.clear()
+
         # Ghost cell - load subprocess persistence back to Jupyter notebook
         # Run in a "silent" way to not increase cells counter
         reply_status_update = await super().do_execute(self.pershelper.jupyter_update(code), silent, store_history=False,
                                                     user_expressions=user_expressions, allow_stdin=allow_stdin, cell_id=cell_id)
         if reply_status_update['status'] != 'ok':
-            self.pershelper.postprocess()
-            self.shell.execution_count += 1
-            reply_status_update['execution_count'] = self.shell.execution_count - 1
-            self.cell_output("KernelError: Failed to load cell's persistence to the notebook.", 'stderr')
+            self.ghost_cell_error(reply_status_update, "KernelError: Failed to load cell's persistence to the notebook.")
             return reply_status_update
-
-        if proc.returncode:
-            self.pershelper.postprocess()
-            self.cell_output('KernelError: Cell execution failed, cell persistence was not recorded.', 'stderr')
-            return self.standard_reply()
+        
+        # In memory mode, subprocess terminates once jupyter_update is executed and pipe is closed
+        if self.pershelper.mode == 'memory':
+            if proc.returncode:
+                self.pershelper.postprocess()
+                self.cell_output('KernelError: Cell execution failed, cell persistence was not recorded.', 'stderr')
+                return self.standard_reply()
 
         # Determine directory to which trace files were saved by Score-P
         if 'SCOREP_EXPERIMENT_DIRECTORY' in self.scorep_env:
@@ -361,8 +382,8 @@ class ScorepPythonKernel(IPythonKernel):
         elif code.startswith('%%enable_multicellmode'):
             return self.enable_multicellmode()
 
-        elif code.startswith('%%switch_serializer'):
-            return self.switch_serializer(code)
+        elif code.startswith('%%serializer_settings'):
+            return self.serializer_settings(code)
         elif code.startswith('%%scorep_env'):
             return self.set_scorep_env(code)
         elif code.startswith('%%scorep_python_binding_arguments'):
