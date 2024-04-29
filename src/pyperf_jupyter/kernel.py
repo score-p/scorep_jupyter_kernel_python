@@ -8,18 +8,23 @@ import subprocess
 import re
 import time
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+
 from itables import show
 from datetime import datetime
 
 # Create interactive widgets
-from ipywidgets import interact
+from ipywidgets import interact, interactive, fixed, interact_manual
+import ipywidgets as widgets
+from IPython.display import display
 from pyperf_jupyter.userpersistence import PersHelper, scorep_script_name
 from enum import Enum
 from textwrap import dedent
 
 import pandas as pd
+from functools import partial
 
-import paramiko
+from statistics import mean
 
 PYTHON_EXECUTABLE = sys.executable
 READ_CHUNK_SIZE = 8
@@ -101,6 +106,10 @@ class PyPerfKernel(IPythonKernel):
         self.writefile_scorep_env = []
         self.writefile_scorep_binding_args = []
         self.writefile_multicell = False
+
+        self.slurm_nodelist = self.parse_slurm_nodelist(os.environ.get("SLURM_NODELIST", ''))
+        # will be set to True as soon as GPU data is received
+        self.gpu_avail = False
 
     def cell_output(self, string, stream='stdout'):
         """
@@ -349,6 +358,143 @@ class PyPerfKernel(IPythonKernel):
 
         return cpu_util, mem_util, gpu_util, gpu_mem
 
+
+    def plot_graph(self, ax, metric, perfdata):
+        # first 0 means first node
+        ax.clear()  # Clear previous plot
+        if metric == 'CPU Util':
+            ax.plot(perfdata[0][0][-3], label='Mean', color=(0.20,0.47,1.00))
+            ax.plot(perfdata[0][0][-2], label='Max', color=(0.20,0.47,1.00, 0.3))
+            ax.plot(perfdata[0][0][-1], label='Min', color=(0.20,0.47,1.00, 0.3))
+        elif metric == 'Mem':
+            ax.plot(perfdata[0][1], label='Value', color=(0.12,0.70,0.00))
+        elif metric == 'GPU Util':
+            ax.plot(perfdata[0][2][-3], label='Mean', color=(0.90,0.30,0.00))
+            ax.plot(perfdata[0][2][-2], label='Max', color=(0.90,0.30,0.00, 0.3))
+            ax.plot(perfdata[0][2][-1], label='Min', color=(0.90,0.30,0.00, 0.3))
+        elif metric == 'GPU Mem':
+            ax.plot(perfdata[0][3][-3], label='Mean', color=(1.00,0.40,1.00))
+            ax.plot(perfdata[0][3][-2], label='Max', color=(1.00,0.40,1.00, 0.3))
+            ax.plot(perfdata[0][3][-1], label='Min', color=(1.00,0.40,1.00, 0.3))
+
+        ax.set_title(f'{metric}')
+        ax.set_xlabel('Time (s)')
+        ax.set_ylabel('Util (%)')
+        ax.legend()
+        ax.grid(True)
+
+    def plot_with_dropdowns(self, metrics, perfdata, metric_start):
+        # Create subplots in a 1x2 grid
+        fig, axes = plt.subplots(1, 2, figsize=(10, 3))
+        dropdowns = []
+
+        # Plot data and create dropdowns for each subplot
+        for i, ax in enumerate(axes):
+            self.plot_graph(ax, metrics[i+metric_start], perfdata)
+
+            # Create dropdown widget for the current subplot
+            dropdown = widgets.Dropdown(options=metrics, description='Metric:', value=metrics[i+metric_start])
+            dropdown.observe(lambda change, ax=ax: self.plot_graph(ax, change['new'], perfdata), names='value')
+
+            # Add dropdown to list
+            dropdowns.append(dropdown)
+
+        # Display dropdowns and plots
+        display(widgets.HBox(dropdowns, layout=widgets.Layout(margin='0 0', padding='0px 15%')))
+        plt.tight_layout()
+        plt.show()
+
+
+    def draw_performance_graph(self, perfdata):
+
+        if self.slurm_nodelist:
+            nodelist = self.slurm_nodelist
+            nodelist.insert(0, 'All')
+            dropdown = widgets.Dropdown(
+                options=nodelist,
+                value='All',
+                description='Number:',
+                disabled=False,
+            )
+            display(dropdown)
+
+        # Dropdown widget
+        metrics = ['CPU Util', 'Mem']
+        if self.gpu_avail:
+            metrics.extend(["GPU Util", "GPU Mem"])
+
+        self.plot_with_dropdowns(metrics, perfdata, 0)
+        if self.gpu_avail:
+            self.plot_with_dropdowns(metrics, perfdata, 2)
+
+        '''
+        cpudata = perfdata[0]
+        memdata = perfdata[1]
+        gpudata_util = perfdata[2]
+        gpudata_mem = perfdata[3]
+
+        plt.rcParams["figure.figsize"] = (10, 2.5)
+
+        if nmetrics == 1:
+            plt.rcParams["figure.figsize"] = (5, 2.5)
+
+        if nmetrics:
+            # Create a figure and axis
+            if nmetrics < 3:
+                fig, axs = plt.subplots(1, nmetrics)
+                if nmetrics == 1:
+                    axs = [axs]
+            else:
+                # TODO: up to now we have max only 4, if we get more adjust here
+                fig, axs = plt.subplots(2, 2)
+            fig.tight_layout(w_pad=5.0)
+            n = 0
+            if cpudata[0]:
+                axs[n].set_title('CPU Util')
+                axs[n].set_xlabel('time')
+                axs[n].set_ylabel('util %')
+
+                # Plot the data
+                for cpu_index in range(0, len(cpudata)):
+                    axs[n].plot(cpudata[cpu_index], label="CPU" + str(cpu_index))
+
+                axs[n].legend()
+                n += 1
+            if memdata:
+                # Create a figure and axis
+                # fig1, ax1 = plt.subplots()
+                axs[n].set_title('Memory Util')
+                axs[n].set_xlabel('time')
+                axs[n].set_ylabel('util %')
+
+                # Plot the data
+                axs[n].plot(memdata)
+                n += 1
+            if gpudata_util and gpudata_util[0]:
+                axs[n].set_title('GPU Util')
+                axs[n].set_xlabel('time')
+                axs[n].set_ylabel('util %')
+
+                # Plot the data
+                for gpu_index in range(0, len(gpudata_util)):
+                    axs[n].plot(gpudata_util[gpu_index], label="GPU" + str(gpu_index))
+
+                axs[n].legend()
+                n += 1
+            if gpudata_mem[0]:
+                axs[n].set_title('GPU Memory')
+                axs[n].set_xlabel('time')
+                axs[n].set_ylabel('util %')
+
+                # Plot the data
+                for gpu_index in range(0, len(gpudata_mem)):
+                    axs[n].plot(gpudata_mem[gpu_index], label="CPU" + str(gpu_index))
+
+                axs[n].legend()
+                n += 1
+            plt.show()
+        '''
+    '''
     def draw_performance_graph(self, perfdata, nmetrics):
         cpudata = perfdata[0]
         memdata = perfdata[1]
@@ -415,6 +561,17 @@ class PyPerfKernel(IPythonKernel):
                 axs[n].legend()
                 n += 1
             plt.show()
+    '''
+    def compute_mean_across_nodes(self, key1, key2, metrics_across_nodes):
+        # use the first list
+        mean_across_nodes = []
+        for i in range(0,len(metrics_across_nodes[key1][key2][0])):
+            mean = metrics_across_nodes[key1][key2][0][i]
+            # check the values on the other lists, compute the mean and add
+            for j in range(1,len(metrics_across_nodes[key1][key2])):
+                mean+=metrics_across_nodes[key1][key2][j][i]
+            mean_across_nodes.append(mean/len(metrics_across_nodes[key1][key2]))
+        return mean_across_nodes
 
     def report_perfdata(self, stdout_data, duration):
         if nmetrics == 1:
@@ -422,6 +579,19 @@ class PyPerfKernel(IPythonKernel):
 
         # parse the performance data
         performance_data_nodes = []
+        metrics_across_nodes = {'CPU': {'MEANS': [],
+                                'MAXS': [],
+                                'MINS': []},
+                        'MEM': {'MEANS': [],
+                                'MAXS': [],
+                                'MINS': []},
+                        'GPU_UTIL': {'MEANS': [],
+                                'MAXS': [],
+                                'MINS': []},
+                        'GPU_MEM': {'MEANS': [],
+                                     'MAXS': [],
+                                     'MINS': []},
+                         }
         for stdout_data in stdout_data_node:
             stdout_data = stdout_data.split(b"\n\n")
             # init CPU and GPU lists
@@ -432,13 +602,27 @@ class PyPerfKernel(IPythonKernel):
                 gpu_util = [[] for _ in init_data[2]]
                 gpu_mem = [[] for _ in init_data[3]]
 
+                # add empty lists for mean, max, min
+                for i in range(0,3):
+                    cpu_util.append([])
+                    gpu_util.append([])
+                    gpu_mem.append([])
+            else:
+                return False
 
             for line in stdout_data:
                 if line == b'':
                     continue
                 perf_data = pickle.loads(codecs.decode(line, "base64"))
+
                 for cpu in range(0, len(perf_data[0])):
                     cpu_util[cpu].append(perf_data[0][cpu])
+
+                last_measurements = [cpu_list[-1] for cpu_list in cpu_util[:-3]]
+                cpu_util[-3].append(mean(last_measurements))
+                cpu_util[-2].append(max(last_measurements))
+                cpu_util[-1].append(min(last_measurements))
+
 
                 mem_util.append(perf_data[1])
 
@@ -446,7 +630,30 @@ class PyPerfKernel(IPythonKernel):
                     gpu_util[gpu].append(perf_data[2][gpu])
                     gpu_mem[gpu].append(perf_data[3][gpu])
 
+                last_measurements = [gpu_list[-1] for gpu_list in gpu_util[:-3]]
+                if last_measurements:
+                    gpu_util[-3].append(mean(last_measurements))
+                    gpu_util[-2].append(max(last_measurements))
+                    gpu_util[-1].append(min(last_measurements))
+
+                last_measurements = [gpu_list[-1] for gpu_list in gpu_mem[:-3]]
+                if last_measurements:
+                    gpu_mem[-3].append(mean(last_measurements))
+                    gpu_mem[-2].append(max(last_measurements))
+                    gpu_mem[-1].append(min(last_measurements))
+
+            # TODO: discuss whether Means of Maxs are relevant or should we consider Mean of Means only?
+            metrics_across_nodes["CPU"]["MEANS"].append(cpu_util[-3])
+            metrics_across_nodes["MEM"]["MEANS"].append(mem_util)
+            metrics_across_nodes["GPU_UTIL"]["MEANS"].append(gpu_util[-3])
+            metrics_across_nodes["GPU_MEM"]["MEANS"].append(gpu_mem[-3])
             performance_data_nodes.append([cpu_util, mem_util, gpu_util, gpu_mem])
+
+        # compute the mean, max, min across the nodes using pure mem_util lists, the mean, max and min lists of the other sensors
+        performance_data_nodes.append(self.compute_mean_across_nodes("CPU", "MEANS", metrics_across_nodes))
+        performance_data_nodes.append(self.compute_mean_across_nodes("MEM", "MEANS", metrics_across_nodes))
+        performance_data_nodes.append(self.compute_mean_across_nodes("GPU_UTIL", "MEANS", metrics_across_nodes))
+        performance_data_nodes.append(self.compute_mean_across_nodes("GPU_MEM", "MEANS", metrics_across_nodes))
 
         self.performance_data_history.append(performance_data_nodes)
 
@@ -458,7 +665,25 @@ class PyPerfKernel(IPythonKernel):
 
             self.cell_output("\n----Performance Data----\n", 'stdout')
             self.cell_output("Duration: " + "{:.2f}".format(duration) + "\n", 'stdout')
-            for idx, performance_data in enumerate(performance_data_nodes):
+            # last 4 values are means across nodes, print them separately
+
+            '''
+            structure in performance_data_nodes:
+            [
+                [NODE_1: [CPU_UTIL:[CPU_1][CPU_2][CPU_N][MEAN][MAX][MIN]]
+                         [MEM_UTIL]
+                         [GPU_UTIL:[GPU_1][GPU_2][GPU_N][MEAN][MAX][MIN]
+                         [GPU_MEM:[GPU_1][GPU_2][GPU_N][MEAN][MAX][MIN]]
+                [NODE_2: [...]]
+                [NODE_N: [...]]
+                [CPU_UTIL_ACROSS_NODES (The mean of the means)]
+                [MEM_UTIL_ACROSS_NODES (The mean of the raw values)]
+                [GPU_UTIL_ACROSS_NODES (The mean of the means)]
+                [GPU_MEM_ACROSS_NODES (The mean of the means)]
+            ]
+            '''
+
+            for idx, performance_data in enumerate(performance_data_nodes[:-4]):
 
                 if nodelist:
                     self.cell_output("--NODE " + str(nodelist[idx]) + "--\n", 'stdout')
@@ -467,21 +692,39 @@ class PyPerfKernel(IPythonKernel):
                 mem_util = performance_data[1]
                 gpu_util = performance_data[2]
                 gpu_mem = performance_data[3]
+
                 if cpu_util:
-                    self.cell_output("--CPU Util--\n", 'stdout')
+                    #self.cell_output("--CPU Util--\n", 'stdout')
+                    self.cell_output(
+                        "\n--CPU Util-- \tAVG: " + "{:.2f}".format(
+                            mean(cpu_util[-3])) + "\t MIN: " + "{:.2f}".format(
+                            min(cpu_util[-1])) + "\t MAX: " + "{:.2f}".format(max(cpu_util[-2])) + "\n", 'stdout')
+                    '''
                     for cpu_index in range(0, len(cpu_util)):
                         self.cell_output("\tCPU" + str(cpu_index) + "\tAVG: " + "{:.2f}".format(
                             sum(cpu_util[cpu_index]) / len(cpu_util[cpu_index])) + "\t MIN: " + "{:.2f}".format(
                             min(cpu_util[cpu_index])) + "\t MAX: " + "{:.2f}".format(max(cpu_util[cpu_index])) + "\n",
                                          'stdout')
+                    '''
                 if len(mem_util) > 0:
                     self.cell_output(
-                        "\n--Mem Util-- \tAVG: " + "{:.2f}".format(
-                            sum(mem_util) / len(mem_util)) + "\t MIN: " + "{:.2f}".format(
+                        "--Mem Util-- \tAVG: " + "{:.2f}".format(
+                            mean(mem_util)) + "\t MIN: " + "{:.2f}".format(
                             min(mem_util)) + "\t MAX: " + "{:.2f}".format(max(mem_util)) + "\n", 'stdout')
 
-                if gpu_util and gpu_mem:
+                if gpu_util[0] and gpu_mem[0]:
+                    self.gpu_avail = True
                     self.cell_output("--GPU Util and Mem per GPU--\n", 'stdout')
+                    self.cell_output(
+                        "--GPU Util-- \tAVG: " + "{:.2f}".format(
+                            mean(gpu_util[-3])) + "\t MIN: " + "{:.2f}".format(
+                            min(gpu_util[-1])) + "\t MAX: " + "{:.2f}".format(max(gpu_util[-2])) + "\n", 'stdout')
+                    self.cell_output("\t    " +
+                                     "\t Mem AVG: " + "{:.2f}".format(
+                        mean(gpu_mem[-3])) + "\t MIN: " + "{:.2f}".format(
+                        min(gpu_mem[-1])) + "\t MAX: " + "{:.2f}".format(max(gpu_mem[-2])) + "\n",
+                                     'stdout')
+                    '''
                     for gpu_index in range(0, len(gpu_util)):
                         self.cell_output("\tGPU" + str(gpu_index) +
                                          "\tUtil AVG: " + "{:.2f}".format(
@@ -493,6 +736,35 @@ class PyPerfKernel(IPythonKernel):
                             sum(gpu_mem[gpu_index]) / len(gpu_mem[gpu_index])) + "\t MIN: " + "{:.2f}".format(
                             min(gpu_mem[gpu_index])) + "\t MAX: " + "{:.2f}".format(max(gpu_mem[gpu_index])) + "\n",
                                          'stdout')
+                    '''
+
+            if len(performance_data_nodes[-4]) > 1:
+                self.cell_output("\n---Across Nodes---\n", 'stdout')
+
+                self.cell_output(
+                    "\n--CPU Util-- \tAVG: " + "{:.2f}".format(
+                        mean(performance_data_nodes[-4])) + "\t MIN: " + "{:.2f}".format(
+                        min(performance_data_nodes[-4])) + "\t MAX: " + "{:.2f}".format(max(performance_data_nodes[-4])) + "\n", 'stdout')
+
+                if performance_data_nodes[-3]:
+                    self.cell_output(
+                        "--Mem Util-- \tAVG: " + "{:.2f}".format(
+                            mean(performance_data_nodes[-3])) + "\t MIN: " + "{:.2f}".format(
+                            min(performance_data_nodes[-3])) + "\t MAX: " + "{:.2f}".format(
+                            max(performance_data_nodes[-3])) + "\n", 'stdout')
+
+                if performance_data_nodes[-2] and performance_data_nodes[-1]:
+                    self.cell_output("--GPU Util and Mem per GPU--\n", 'stdout')
+                    self.cell_output(
+                        "--GPU Util-- \tAVG: " + "{:.2f}".format(
+                            mean(performance_data_nodes[-2])) + "\t MIN: " + "{:.2f}".format(
+                            min(performance_data_nodes[-2])) + "\t MAX: " + "{:.2f}".format(max(performance_data_nodes[-2])) + "\n", 'stdout')
+                    self.cell_output("\t    " +
+                                     "\t Mem AVG: " + "{:.2f}".format(
+                        mean(performance_data_nodes[-1])) + "\t MIN: " + "{:.2f}".format(
+                        min(performance_data_nodes[-1])) + "\t MAX: " + "{:.2f}".format(max(performance_data_nodes[-1])) + "\n",
+                                     'stdout')
+
             return True
         else:
             return False
@@ -632,10 +904,17 @@ class PyPerfKernel(IPythonKernel):
         # displays graph for index cell, arguments: cpu_util etc.
         %%display_graphs_for_index i cpu_util, ...
         '''
+        '''
         if code.startswith('%%display_graph_for_last'):
             metrics = code.split(' ')
             nmetrics = len(metrics) - 1
             self.draw_performance_graph(self.get_perfdata_index(-1, metrics[1:]), nmetrics)
+            return self.standard_reply()
+        '''
+        if code.startswith('%%display_graph_for_last'):
+            metrics = code.split(' ')
+            nmetrics = len(metrics) - 1
+            self.draw_performance_graph(self.performance_data_history[-1])
             return self.standard_reply()
         elif code.startswith('%%display_graph_for_index'):
             metrics = code.split(' ')
@@ -711,41 +990,42 @@ class PyPerfKernel(IPythonKernel):
             proc_env = os.environ.copy()
             proc_env.update({'PYTHONUNBUFFERED': 'x'})
 
-            slurm_nodelist = self.parse_slurm_nodelist(os.environ.get("SLURM_NODELIST", ''))
 
-            perf_ssh_client = paramiko.SSHClient()
-            perf_ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
-            node_stderr = []
-            node_stdout = []
-            if slurm_nodelist:
-                for node in slurm_nodelist:
-                    perf_ssh_client.connect(hostname=node)
-                    _, stdout, stderr = perf_ssh_client.exec_command(str(sys.executable) + "-m" + "perfmonitor")
-                    node_stderr.append(stderr)
-                    node_stdout.append(stdout)
+
+
+            if self.slurm_nodelist:
+                # SLURM is available, use srun to get output for all the nodes
+                # until first \n we would like to get the hostname
+                perf_proc = subprocess.Popen(["srun", "hostname", "&&", "echo", "PERFDATA", "&&",
+                                              sys.executable, "-m" "perfmonitor"],
+                                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=proc_env)
             else:
+                # SLURM is not available, sorry we support only one node
                 perf_proc = subprocess.Popen([sys.executable, "-m" "perfmonitor"], stdout=subprocess.PIPE,
-                                            stderr=subprocess.STDOUT, env=proc_env)
+                                             stderr=subprocess.STDOUT, env=proc_env)
+
 
             start = time.perf_counter()
             parent_ret = await super().do_execute(code, silent, store_history, user_expressions, allow_stdin,
                                                   cell_id=cell_id)
             duration = time.perf_counter() - start
 
+            perf_proc.kill()
+            output, _ = perf_proc.communicate()
+
             stdout_data_node = []
-            if slurm_nodelist:
-                for stdout in node_stdout:
-                    output = stdout.read()
-                    stdout_data_node.append(str(output))
-                perf_ssh_client.close()
+            if self.slurm_nodelist:
+                output.split(b"PERFDATA")
+                for proc in node_subproc:
+                    proc.kill()
+                    output, _ = proc.communicate()
+                    stdout_data_node.append(output)
             else:
-                perf_proc.kill()
-                output, _ = perf_proc.communicate()
                 stdout_data_node.append(output)
 
             # parse the performance data from the stdout pipe of the subprocess and print the performance data
-            if self.report_perfdata(stdout_data_node, duration, slurm_nodelist):
+            if self.report_perfdata(stdout_data_node, duration, self.slurm_nodelist):
                 self.code_history.append([datetime.now(), code])
             return parent_ret
 
