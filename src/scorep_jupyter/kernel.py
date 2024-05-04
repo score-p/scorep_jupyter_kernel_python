@@ -3,10 +3,21 @@ import sys
 import os
 import subprocess
 import re
-from scorep_jupyter.userpersistence import PersHelper, scorep_script_name
+from scorep_jupyter.userpersistence import PersHelper, scorep_script_name, magics_cleanup
+from enum import Enum
+from textwrap import dedent
 
 PYTHON_EXECUTABLE = sys.executable
 READ_CHUNK_SIZE = 8
+
+# kernel modes
+class KernelMode(Enum):
+    DEFAULT   = (0, 'default')
+    MULTICELL = (1, 'multicell')
+    WRITEFILE = (2, 'writefile')
+    
+    def __str__(self):
+        return self.value[1]
 
 class ScorepPythonKernel(IPythonKernel):
     implementation = 'Python and Score-P'
@@ -26,23 +37,20 @@ class ScorepPythonKernel(IPythonKernel):
         self.scorep_binding_args = []
         self.scorep_env = {}
 
-        self.multicellmode = False
-        self.multicellmode_cellcount = 0
-        self.multicell_code = ""
-
-        self.writemode = False
-        self.writemode_filename = 'jupyter_to_script'
-        self.writemode_multicell = False
-        self.writemode_scorep_binding_args = []
-        self.writemode_scorep_env = []
-        # TODO: reset variables after each finalize writefile?
-        self.bash_script_filename = ""
-        self.python_script_filename = ""
-        self.bash_script = None
-        self.python_script = None
-
         os.environ['SCOREP_KERNEL_PERSISTENCE_DIR'] = './'
         self.pershelper = PersHelper('dill', 'memory')
+
+        self.mode = KernelMode.DEFAULT
+
+        self.multicell_cellcount = 0
+        self.multicell_code = ""
+
+        self.writefile_base_name = "jupyter_to_script"
+        self.writefile_bash_name = ""
+        self.writefile_python_name = ""
+        self.writefile_scorep_env = []
+        self.writefile_scorep_binding_args = []
+        self.writefile_multicell = False
         
     def cell_output(self, string, stream='stdout'):
         """
@@ -63,109 +71,158 @@ class ScorepPythonKernel(IPythonKernel):
         """
         Switch serializer backend used for persistence in kernel.
         """
-        # Clean files/pipes before switching
-        self.pershelper.postprocess()
+        if self.mode == KernelMode.DEFAULT:
+            # Clean files/pipes before switching
+            self.pershelper.postprocess()
 
-        serializer_match = re.search(r'SERIALIZER=(\w+)', code.split('\n', 1)[1])
-        mode_match = re.search(r'MODE=(\w+)', code.split('\n', 1)[1])
-        serializer = serializer_match.group(1) if serializer_match else None
-        mode = mode_match.group(1) if mode_match else None
+            serializer_match = re.search(r'SERIALIZER=(\w+)', code.split('\n', 1)[1])
+            mode_match = re.search(r'MODE=(\w+)', code.split('\n', 1)[1])
+            serializer = serializer_match.group(1) if serializer_match else None
+            mode = mode_match.group(1) if mode_match else None
 
-        if serializer:
-            if not self.pershelper.set_serializer(serializer):
-                self.cell_output(f"Serializer '{serializer}' is not recognized, kernel will use '{self.pershelper.serializer}'.", 'stderr')
-                return self.standard_reply()
-        if mode:
-            if not self.pershelper.set_mode(mode):
-                self.cell_output(f"Serialization mode '{mode}' is not recognized, kernel will use '{self.pershelper.mode}'.", 'stderr')
+            if serializer:
+                if not self.pershelper.set_serializer(serializer):
+                    self.cell_output(f"Serializer '{serializer}' is not recognized, kernel will use '{self.pershelper.serializer}'.", 'stderr')
+                    return self.standard_reply()
+            if mode:
+                if not self.pershelper.set_mode(mode):
+                    self.cell_output(f"Serialization mode '{mode}' is not recognized, kernel will use '{self.pershelper.mode}'.", 'stderr')
 
-        self.cell_output(f"Kernel uses '{self.pershelper.serializer}' serializer in '{self.pershelper.mode}' mode.")
+            self.cell_output(f"Kernel uses '{self.pershelper.serializer}' serializer in '{self.pershelper.mode}' mode.")
+        else:
+            self.cell_output(f'KernelWarning: Currently in {self.mode}, command ignored.', 'stderr')
         return self.standard_reply()
 
     def set_scorep_env(self, code):
         """
         Read and record Score-P environment variables from the cell.
         """
-        for scorep_param in code.split('\n')[1:]:
-            key, val = scorep_param.split('=')
-            self.scorep_env[key] = val
-        self.cell_output(
-            'Score-P environment set successfully: ' + str(self.scorep_env))
+        if self.mode == KernelMode.DEFAULT:
+            for scorep_param in code.split('\n')[1:]:
+                key, val = scorep_param.split('=')
+                self.scorep_env[key] = val
+            self.cell_output(
+                'Score-P environment set successfully: ' + str(self.scorep_env))
+        elif self.mode == KernelMode.WRITEFILE:
+            self.writefile_scorep_env += code.split('\n')[1:]
+            self.cell_output('Environment variables recorded.')
+        else:
+            self.cell_output(f'KernelWarning: Currently in {self.mode}, command ignored.', 'stderr')
         return self.standard_reply()
 
     def set_scorep_pythonargs(self, code):
         """
         Read and record Score-P Python binding arguments from the cell.
         """
-        self.scorep_binding_args += code.split('\n')[1:]
-        self.cell_output(
-            'Score-P Python binding arguments set successfully: ' + str(self.scorep_binding_args))
+        if self.mode == KernelMode.DEFAULT:
+            self.scorep_binding_args += code.split('\n')[1:]
+            self.cell_output(
+                'Score-P Python binding arguments set successfully: ' + str(self.scorep_binding_args))
+        elif self.mode == KernelMode.WRITEFILE:
+            self.writefile_scorep_binding_args += code.split('\n')[1:]
+            self.cell_output('Score-P bindings arguments recorded.')
+        else:
+            self.cell_output(f'KernelWarning: Currently in {self.mode}, command ignored.', 'stderr')
         return self.standard_reply()
 
     def enable_multicellmode(self):
         """
         Start multicell mode.
         """
-        # TODO: scorep setup cells are not affected
-        self.multicellmode = True
-        self.cell_output(
-            'Multicell mode enabled. The following cells will be marked for instrumented execution.')
-        return self.standard_reply()
-
-    def abort_multicellmode(self):
-        """
-        Cancel multicell mode.
-        """
-        self.multicellmode = False
-        self.multicell_code = ""
-        self.multicellmode_cellcount = 0
-        self.cell_output('Multicell mode aborted.')
+        if self.mode == KernelMode.DEFAULT:
+            self.mode = KernelMode.MULTICELL
+            self.cell_output('Multicell mode enabled. The following cells will be marked for instrumented execution.')
+        elif self.mode == KernelMode.MULTICELL:
+            self.cell_output(f'KernelWarning: {KernelMode.MULTICELL} mode has already been enabled', 'stderr')
+        elif self.mode == KernelMode.WRITEFILE:
+            self.writefile_multicell = True
         return self.standard_reply()
 
     def append_multicellmode(self, code):
         """
         Append cell to multicell mode sequence.
         """
-        self.multicellmode_cellcount += 1
-        max_line_len = max(len(line) for line in code.split('\n'))
-        self.multicell_code += f"print('Executing cell {self.multicellmode_cellcount}')\n" + \
-                               f"print('''{code}''')\n" + \
-                               f"print('-' * {max_line_len})\n" + \
-                               f"{code}\n" + \
-                               f"print('''\n''')\n"
-        self.cell_output(
-            f'Cell marked for multicell mode. It will be executed at position {self.multicellmode_cellcount}')
+        if self.mode == KernelMode.MULTICELL:
+            self.multicell_cellcount += 1
+            max_line_len = max(len(line) for line in code.split('\n'))
+            self.multicell_code += f"print('Executing cell {self.multicell_cellcount}')\n" + \
+                                f"print('''{code}''')\n" + \
+                                f"print('-' * {max_line_len})\n" + \
+                                f"{code}\n" + \
+                                f"print('''\n''')\n"
+            self.cell_output(
+                f'Cell marked for multicell mode. It will be executed at position {self.multicell_cellcount}')
         return self.standard_reply()
 
-    def start_writefile(self):
+    def abort_multicellmode(self):
+        """
+        Cancel multicell mode.
+        """
+        if self.mode == KernelMode.MULTICELL:
+            self.mode = KernelMode.DEFAULT
+            self.multicell_code = ""
+            self.multicell_cellcount = 0
+            self.cell_output('Multicell mode aborted.')
+        else:
+            self.cell_output(f'KernelWarning: Currently in {self.mode}, command ignored.', 'stderr')
+        return self.standard_reply()
+
+    def start_writefile(self, code):
         """
         Start recording the notebook as a Python script. Custom file name
         can be defined as an argument of the magic command.
         """
         # TODO: Check for os path existence
         # TODO: Edge cases processing, similar to multicellmode
-        self.writemode = True
-        self.bash_script_filename = os.path.realpath(
-            '') + '/' + self.writemode_filename + '_run.sh'
-        self.python_script_filename = os.path.realpath(
-            '') + '/' + self.writemode_filename + '.py'
-        self.bash_script = open(self.bash_script_filename, 'w+')
-        self.bash_script.write('# This bash script is generated automatically to run\n' +
-                               '# Jupyter Notebook -> Python script convertation by Score-P kernel\n' +
-                               '# ' + self.python_script_filename + '\n')
-        self.bash_script.write('#!/bin/bash\n')
-        self.python_script = open(self.python_script_filename, 'w+')
-        self.python_script.write('# This is the automatic Jupyter Notebook -> Python script convertation by Score-P kernel.\n' +
-                                 '# Code corresponding to the cells not marked for Score-P instrumentation\n' +
-                                 '# is framed "with scorep.instrumenter.disable()".\n' +
-                                 '# The script can be run with proper settings with bash script\n' +
-                                 '# ' + self.bash_script_filename + '\n')
-        # import scorep by default, convertation might add scorep commands
-        # that are not present in original notebook (e.g. cells without instrumentation)
-        self.python_script.write('import scorep\n')
+        if self.mode == KernelMode.DEFAULT:
+            self.mode = KernelMode.WRITEFILE
+            writefile_cmd = code.split('\n')[0].split(' ')
+            if len(writefile_cmd) > 1:
+                if writefile_cmd[1].endswith('.py'):
+                    self.writefile_base_name = writefile_cmd[1][:-3]
+                else:
+                    self.writefile_base_name = writefile_cmd[1]
+            self.writefile_bash_name = os.path.realpath('') + '/' + self.writefile_base_name + '_run.sh'
+            self.writefile_python_name = os.path.realpath('') + '/' + self.writefile_base_name + '.py'
 
-        self.cell_output('Started converting to Python script. See files:\n' +
-                         self.bash_script_filename + '\n' + self.python_script_filename + '\n')
+            with open(self.writefile_bash_name, 'w+') as bash_script:
+                bash_script.write(dedent(f"""\
+                                          # This bash script is generated automatically to run
+                                          # Jupyter Notebook -> Python script conversion by Score-P kernel
+                                          # {self.writefile_python_name}
+                                          # !/bin/bash
+                                          """))
+            with open(self.writefile_python_name, 'w+') as python_script:
+                python_script.write(dedent(f"""
+                                            # This is the automatic Jupyter Notebook -> Python script conversion by Score-P kernel.
+                                            # Code corresponding to the cells not marked for Score-P instrumentation
+                                            # is framed "with scorep.instrumenter.disable()
+                                            # The script can be run with proper settings using bash script
+                                            # {self.writefile_bash_name}
+                                            import scorep
+                                            """))
+            self.cell_output('Started converting to Python script. See files:\n' +
+                            self.writefile_bash_name + '\n' + self.writefile_python_name + '\n')
+        elif self.mode == KernelMode.WRITEFILE:
+            self.cell_output(f'KernelWarning: {KernelMode.WRITEFILE} mode has already been enabled', 'stderr')
+        else:
+            self.cell_output(f'KernelWarning: Currently in {self.mode}, command ignored.', 'stderr')
+        return self.standard_reply()
+
+    def append_writefile(self, code, explicit_scorep):
+        """
+        Append cell to writefile.
+        """
+        if self.mode == KernelMode.WRITEFILE:
+            if explicit_scorep or self.writefile_multicell:
+                with open(self.writefile_python_name, 'a') as python_script:
+                    python_script.write(code + '\n')
+                self.cell_output('Python commands with instrumentation recorded.')
+            else:
+                with open(self.writefile_python_name, 'a') as python_script:
+                    code = ''.join(['    ' + line + '\n' for line in code.split('\n')])
+                    python_script.write('with scorep.instrumenter.disable():\n' + code + '\n')
+                self.cell_output('Python commands without instrumentation recorded.')
         return self.standard_reply()
 
     def end_writefile(self):
@@ -173,53 +230,15 @@ class ScorepPythonKernel(IPythonKernel):
         Finish recording the notebook as a Python script.
         """
         # TODO: check for os path existence
-        self.writemode = False
-        self.bash_script.write(
-            f"{' '.join(self.writemode_scorep_env)} {PYTHON_EXECUTABLE} -m scorep {' '.join(self.writemode_scorep_binding_args)} {self.python_script_filename}")
-
-        self.bash_script.close()
-        self.python_script.close()
-        self.cell_output('Finished converting to Python script, files closed.')
-        return self.standard_reply()
-
-    def append_writefile(self, code):
-        """
-        Append cell to write mode sequence. Extract Score-P environment or Python bindings argument if necessary.
-        """
-        if code.startswith('%%scorep_env'):
-            self.writemode_scorep_env += code.split('\n')[1:]
-            self.cell_output('Environment variables recorded.')
-        elif code.startswith('%%scorep_python_binding_arguments'):
-            self.writemode_scorep_binding_args += code.split('\n')[1:]
-            self.cell_output('Score-P bindings arguments recorded.')
-
-        elif code.startswith('%%enable_multicellmode'):
-            self.writemode_multicell = True
-        elif code.startswith('%%finalize_multicellmode'):
-            self.writemode_multicell = False
-        elif code.startswith('%%abort_multicellmode'):
+        if self.mode == KernelMode.WRITEFILE:
+            self.mode = KernelMode.DEFAULT
+            with open(self.writefile_bash_name, 'a') as bash_script:
+                bash_script.write(
+                    f"{' '.join(self.writefile_scorep_env)} {PYTHON_EXECUTABLE} -m scorep {' '.join(self.writefile_scorep_binding_args)} {self.writefile_python_name}")
+            self.cell_output('Finished converting to Python script.')
+        else:
             self.cell_output(
-                'Warning: Multicell abort command is ignored in write mode, check if the output file is recorded as expected.',
-                'stderr')
-
-        elif code.startswith('%%execute_with_scorep') or self.writemode_multicell:
-            # Cut all magic commands
-            code = code.split('\n')
-            code = ''.join(
-                [line + '\n' for line in code if not line.startswith('%%')])
-            self.python_script.write(code + '\n')
-            self.cell_output(
-                'Python commands with instrumentation recorded.')
-
-        elif not self.writemode_multicell:
-            # Cut all magic commands
-            code = code.split('\n')
-            code = ''.join(
-                ['    ' + line + '\n' for line in code if not line.startswith('%%')])
-            self.python_script.write(
-                'with scorep.instrumenter.disable():\n' + code + '\n')
-            self.cell_output(
-                'Python commands without instrumentation recorded.')
+                f'KernelWarning: Currently in {self.mode}, command ignored.', 'stderr')
         return self.standard_reply()
 
     def ghost_cell_error(self, reply_status, error_message):
@@ -347,60 +366,53 @@ class ScorepPythonKernel(IPythonKernel):
         execute cell with super().do_execute(), else save Score-P environment/binding arguments/
         execute cell with Score-P Python binding.
         """
-        if code.startswith('%%start_writefile'):
-            # Get file name from arguments of magic command
-            writefile_cmd = code.split('\n')[0].split(' ')
-            if len(writefile_cmd) > 1:
-                if writefile_cmd[1].endswith('.py'):
-                    self.writemode_filename = writefile_cmd[1][:-3]
-                else:
-                    self.writemode_filename = writefile_cmd[1]
-            return self.start_writefile()
-        elif code.startswith('%%end_writefile'):
-            return self.end_writefile()
-        elif self.writemode:
-            return self.append_writefile(code)
-
-        elif code.startswith('%%finalize_multicellmode'):
-            if not self.multicellmode:
-                self.cell_output(
-                    "KernelError: Multicell mode disabled. Run a cell with %%enable_multicellmode command first.",
-                    'stderr')
-                return self.standard_reply()
-
-            try:
-                reply_status = await self.scorep_execute(self.multicell_code, silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
-            except:
-                self.cell_output("KernelError: Multicell mode failed.",'stderr')
-                return self.standard_reply()
-            self.multicell_code = ""
-            self.multicellmode_cellcount = 0
-            self.multicellmode = False
-            return reply_status
-
-        elif code.startswith('%%abort_multicellmode'):
-            if not self.multicellmode:
-                self.cell_output(
-                    "KernelError: Multicell mode disabled. Run a cell with %%enable_multicellmode command first.",
-                    'stderr')
-                return self.standard_reply()
-            return self.abort_multicellmode()
-        elif code.startswith('%%enable_multicellmode'):
-            return self.enable_multicellmode()
-
-        elif code.startswith('%%serializer_settings'):
-            return self.serializer_settings(code)
-        elif code.startswith('%%scorep_env'):
+        if code.startswith('%%scorep_env'):
             return self.set_scorep_env(code)
         elif code.startswith('%%scorep_python_binding_arguments'):
             return self.set_scorep_pythonargs(code)
-        elif self.multicellmode:
-            return self.append_multicellmode(code)
+        elif code.startswith('%%serializer_settings'):
+            return self.serializer_settings(code)
+        elif code.startswith('%%enable_multicellmode'):
+            return self.enable_multicellmode()
+        elif code.startswith('%%abort_multicellmode'):
+            return self.abort_multicellmode()
+        elif code.startswith('%%finalize_multicellmode'):
+            # Cannot be put into a separate function due to tight coupling between do_execute and scorep_execute
+            if self.mode == KernelMode.MULTICELL:
+                self.mode = KernelMode.DEFAULT
+                try:
+                    reply_status = await self.scorep_execute(self.multicell_code, silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
+                except:
+                    self.cell_output("KernelError: Multicell execution failed.", 'stderr')
+                    return self.standard_reply()
+                self.multicell_code = ""
+                self.multicell_cellcount = 0
+                return reply_status
+            elif self.mode == KernelMode.WRITEFILE:
+                self.writefile_multicell = False
+                return self.standard_reply()
+            else:
+                self.cell_output(f'KernelWarning: Currently in {self.mode}, command ignored.', 'stderr')
+                return self.standard_reply()
+        elif code.startswith('%%start_writefile'):
+            return self.start_writefile(code)
+        elif code.startswith('%%end_writefile'):
+            return self.end_writefile()
         elif code.startswith('%%execute_with_scorep'):
-            return await self.scorep_execute(code.split("\n", 1)[1], silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
+            if self.mode == KernelMode.DEFAULT:
+                return await self.scorep_execute(code.split("\n", 1)[1], silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
+            elif self.mode == KernelMode.MULTICELL:
+                return self.append_multicellmode(magics_cleanup(code.split("\n", 1)[1]))
+            elif self.mode == KernelMode.WRITEFILE:
+                return self.append_writefile(magics_cleanup(code.split("\n", 1)[1]), explicit_scorep=True)
         else:
-            self.pershelper.parse(code, 'jupyter')
-            return await super().do_execute(code, silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
+            if self.mode == KernelMode.DEFAULT:
+                self.pershelper.parse(magics_cleanup(code), 'jupyter')
+                return await super().do_execute(code, silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
+            elif self.mode == KernelMode.MULTICELL:
+                return self.append_multicellmode(magics_cleanup(code))
+            elif self.mode == KernelMode.WRITEFILE:
+                return self.append_writefile(magics_cleanup(code), explicit_scorep=False)
 
     def do_shutdown(self, restart):
         self.pershelper.postprocess()

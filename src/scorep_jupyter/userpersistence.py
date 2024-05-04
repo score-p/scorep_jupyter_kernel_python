@@ -143,22 +143,9 @@ class PersHelper:
         """
         Extract user variables names and definitions from the code.
         """
-        # Code with magics and shell commands is ignored,
-        # unless magics are from "white list" which execute code
-        # in "persistent" manner.
-        whitelist_prefixes_cell = ['%%prun', '%%capture']
-        whitelist_prefixes_line = ['%prun', '%time']
-
-        nomagic_code = ''  # Code to be parsed for user variables
-        if not code.startswith(tuple(['%', '!'])):  # No IPython magics and shell commands
-            nomagic_code = code
-        elif code.startswith(tuple(whitelist_prefixes_cell)):  # Cell magic & executed cell, remove first line
-            nomagic_code = code.split("\n", 1)[1]
-        elif code.startswith(tuple(whitelist_prefixes_line)):  # Line magic & executed cell, remove first word
-            nomagic_code = code.split(" ", 1)[1]
         try:
-            user_definitions = extract_definitions(nomagic_code)
-            user_variables = extract_variables_names(nomagic_code)
+            user_definitions = extract_definitions(code)
+            user_variables = extract_variables_names(code)
         except SyntaxError as e:
             raise
 
@@ -268,3 +255,19 @@ def extract_variables_names(code):
                     variables.add(target_node.id)
 
     return variables
+
+def magics_cleanup(code):
+    """
+    Remove IPython magics from the code. Return only "persistent" code, which is executed with whitelisted magics.
+    """
+    whitelist_prefixes_cell = ['%%prun', '%%capture']
+    whitelist_prefixes_line = ['%prun', '%time']
+
+    nomagic_code = ''  # Code to be parsed for user variables
+    if not code.startswith(tuple(['%', '!'])):  # No IPython magics and shell commands
+        nomagic_code = code
+    elif code.startswith(tuple(whitelist_prefixes_cell)):  # Cell magic & executed cell, remove first line
+        nomagic_code = code.split("\n", 1)[1]
+    elif code.startswith(tuple(whitelist_prefixes_line)):  # Line magic & executed cell, remove first word
+        nomagic_code = code.split(" ", 1)[1]
+    return nomagic_code
