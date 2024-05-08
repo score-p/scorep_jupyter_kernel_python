@@ -1,9 +1,9 @@
 -
   - |-
     %%serializer_settings
-    dill
-    memory
-  - - "Serializer set to 'dill', mode set to 'memory'."
+    SERIALIZER=dill
+    MODE=memory
+  - - "Kernel uses 'dill' serializer in 'memory' mode."
 -
   - |-
     %%execute_with_scorep
@@ -16,9 +16,9 @@
 -
   - |-
     %%serializer_settings
-    dill
-    disk
-  - - "Serializer set to 'dill', mode set to 'disk'."
+    SERIALIZER=dill
+    MODE=disk
+  - - "Kernel uses 'dill' serializer in 'disk' mode."
 -
   - |-
     %%execute_with_scorep
@@ -31,9 +31,9 @@
 -
   - |-
     %%serializer_settings
-    cloudpickle
-    memory
-  - - "Serializer set to 'cloudpickle', mode set to 'memory'."
+    SERIALIZER=cloudpickle
+    MODE=memory
+  - - "Kernel uses 'cloudpickle' serializer in 'memory' mode."
 -
   - |-
     %%execute_with_scorep
@@ -46,9 +46,9 @@
 -
   - |-
     %%serializer_settings
-    cloudpickle
-    disk
-  - - "Serializer set to 'cloudpickle', mode set to 'disk'."
+    SERIALIZER=cloudpickle
+    MODE=disk
+  - - "Kernel uses 'cloudpickle' serializer in 'disk' mode."
 -
   - |-
     %%execute_with_scorep

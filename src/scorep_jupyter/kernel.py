@@ -66,14 +66,20 @@ class ScorepPythonKernel(IPythonKernel):
         # Clean files/pipes before switching
         self.pershelper.postprocess()
 
-        serializer, mode = code.split('\n')[1:3]
+        serializer_match = re.search(r'SERIALIZER=(\w+)', code.split('\n', 1)[1])
+        mode_match = re.search(r'MODE=(\w+)', code.split('\n', 1)[1])
+        serializer = serializer_match.group(1) if serializer_match else None
+        mode = mode_match.group(1) if mode_match else None
 
-        error_message = self.pershelper.serializer_settings(serializer, mode)
-        if error_message:
-            self.cell_output(f'KernelError: ' + error_message, 'stderr')
-        else:
-            self.cell_output(f"Serializer set to '{serializer}', mode set to '{mode}'.")
+        if serializer:
+            if not self.pershelper.set_serializer(serializer):
+                self.cell_output(f"Serializer '{serializer}' is not recognized, kernel will use '{self.pershelper.serializer}'.", 'stderr')
+                return self.standard_reply()
+        if mode:
+            if not self.pershelper.set_mode(mode):
+                self.cell_output(f"Serialization mode '{mode}' is not recognized, kernel will use '{self.pershelper.mode}'.", 'stderr')
 
+        self.cell_output(f"Kernel uses '{self.pershelper.serializer}' serializer in '{self.pershelper.mode}' mode.")
         return self.standard_reply()
 
     def set_scorep_env(self, code):

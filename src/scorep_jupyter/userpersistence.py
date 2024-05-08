@@ -71,20 +71,13 @@ class PersHelper:
         if os.path.exists(scorep_script_name):
             os.remove(scorep_script_name)
 
-    def serializer_settings(self, serializer, mode):
-        error_message = ""
-
-        if serializer in ['dill', 'cloudpickle']:
-            self.serializer = serializer
-        else:
-            error_message += f"'{serializer}' serializer backend is not supported.\n"
-        
-        if mode in ['disk', 'memory']:
-            self.mode = mode
-        else:
-            error_message += f"'{mode}' serialization mode is not recognized, use one of the following options: 'disk', 'memory'.\n"
-        
-        return error_message
+    def set_serializer(self, serializer):
+        valid_serializers = {'dill', 'cloudpickle'}
+        return serializer in valid_serializers and (setattr(self, 'serializer', serializer) or True)
+    
+    def set_mode(self, mode):
+        valid_modes = {'disk', 'memory'}
+        return mode in valid_modes and (setattr(self, 'mode', mode) or True)
 
     def jupyter_dump(self):
         """
