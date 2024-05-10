@@ -65,6 +65,16 @@ Set the Score-P Python bindings arguments. For a documentation of arguments, see
 
 ![](doc/pythonBindings_setup.png)
 
+`%%serializer_settings`
+
+Set serializer used for persistence and mode of communicating persistence between notebook and subprocess. Currently available serializers: `dill`, `cloudpickle`; modes of communication: `disk`, `memory`. If no arguments were provided, will print current configuration. Use:
+```
+%%serializer_settings
+SERIALIZER=[dill,cloudpickle]
+MODE=[disk,memory]
+```
+
+When using persistence in `disk` mode, user can also define directory to which serializer output will be saved with `SCOREP_KERNEL_PERSISTENCE_DIR` environment variable.
 
 ## Executing Cells
 
