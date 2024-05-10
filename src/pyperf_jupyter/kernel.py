@@ -1,17 +1,6 @@
-import codecs
-import pickle
-
 from ipykernel.ipkernel import IPythonKernel
 import sys
 import os
-import subprocess
-import re
-import time
-import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
-
-from itables import show
-from datetime import datetime
 
 # Create interactive widgets
 from ipywidgets import interact, interactive, fixed, interact_manual
@@ -26,17 +15,19 @@ from functools import partial
 
 from statistics import mean
 import json
-PYTHON_EXECUTABLE = sys.executable
-READ_CHUNK_SIZE = 8
+
+import subprocess
+import re
 import json
 import time
 import pickle
 import codecs
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 from itables import show
 import pandas as pd
 from datetime import datetime
-from pyperf_jupyter.userpersistence import extract_definitions, extract_variables_names
+from pyperf_jupyter.userpersistence import PersHelper, scorep_script_name
 
 PYTHON_EXECUTABLE = sys.executable
 READ_CHUNK_SIZE = 8
@@ -68,13 +59,6 @@ class PyPerfKernel(IPythonKernel):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-
-        '''
-        magics = super().shell.magics_manager.lsmagic()
-
-        self.whitelist_prefixes_line = list(magics['line'].keys())
-        self.whitelist_prefixes_cell = list(magics['cell'].keys())
-        '''
 
         # setting the matplotlib backend
         super().shell.run_cell("%matplotlib inline", silent=True, store_history=False)
@@ -437,7 +421,9 @@ class PyPerfKernel(IPythonKernel):
 
             # Add dropdown to list
             dropdowns.append(dropdown)
+            # Display dropdowns and plots
 
+        display(widgets.HBox(dropdowns, layout=widgets.Layout(margin='0 0', padding='0px 15%')))
         plt.tight_layout()
         plt.show()
 
@@ -981,13 +967,10 @@ class PyPerfKernel(IPythonKernel):
             elif self.mode == KernelMode.WRITEFILE:
                 return self.append_writefile(magics_cleanup(code), explicit_scorep=False)
             self.pershelper.parse(code, 'jupyter')
-
             # for code without scorep, we are interested in performance data
             # start a subprocess that tracks the performance data
             proc_env = os.environ.copy()
             proc_env.update({'PYTHONUNBUFFERED': 'x'})
-
-
             if self.slurm_nodelist:
                 # SLURM is available, use srun to get output for all the nodes
                 # until first \n we would like to get the hostname
