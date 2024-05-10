@@ -27,8 +27,7 @@ dependencies = [
   "itables",
   "matplotlib",
   "pandas",
-  "pynvml", # we need that only for Nvidia GPU systems
-  "paramiko"
+  "pynvml" # we need that only for Nvidia GPU systems
 ]
 
 [project.urls]
