@@ -3,7 +3,9 @@
 <p align="center">
 <img width="450" src="doc/jumper_logo2.png"/>
 </p>
+
 # A Jupyter Kernel for Performance Engineering
+
 This is the JUmPER Kernel that enables you to:
 
 1. Monitor Jupyter cells and measure system metrics like cpu, gpu, I/O or memory utilization.
@@ -18,8 +20,8 @@ For binding to Score-P, the kernel uses the [Score-P Python bindings](https://gi
 
 - [Installation](#Installation)
 - [Usage](#Usage)
-  * [Configuration](#Configuring-Score-P-in-Jupyter)
-  * [Basic Execution](#Executing-Cells)
+  * [Monitoring](#Monitoring)
+  * [Score-P Instrumentation](#Score-P-Instrumentation)
   * [Multi-Cell Mode](#Multi-Cell-Mode)
   * [Write Mode](#Write-Mode)
 - [Presentation of Performance Data](#Presentation-of-Performance-Data)
