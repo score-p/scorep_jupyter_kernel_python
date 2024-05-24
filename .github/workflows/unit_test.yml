@@ -40,11 +40,12 @@ jobs:
           pip install scorep
           pip install jupyter_kernel_test
           pip install pyyaml dill cloudpickle numpy pandas
+          pip install ipywidgets itables matplotlib pynvml
 
       - name: Build Score-P Python kernel
         run: |
           pip install .
-          python -m scorep_jupyter.install
+          python -m pyperf_jupyter.install
         
       - name: Run userpersistence tests
         run: |

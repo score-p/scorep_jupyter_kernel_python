@@ -1,25 +1,39 @@
-from ipykernel.ipkernel import IPythonKernel
-import sys
+import json
 import os
-import subprocess
 import re
-from scorep_jupyter.userpersistence import PersHelper, scorep_script_name, magics_cleanup
+import subprocess
+import sys
+import importlib
+
 from enum import Enum
 from textwrap import dedent
+from statistics import mean
+import pandas as pd
+from ipykernel.ipkernel import IPythonKernel
+from itables import show
+from pyperf_jupyter.userpersistence import PersHelper, scorep_script_name
+from pyperf_jupyter.userpersistence import magics_cleanup
+
+from pyperf_jupyter.perfdatahandler import PerformanceDataHandler
+import pyperf_jupyter.visualization as perfvis
+import pyperf_jupyter.parallel_monitor.slurm_monitor as slurm_monitor
 
 PYTHON_EXECUTABLE = sys.executable
 READ_CHUNK_SIZE = 8
+userpersistence_token = "pyperf_jupyter.userpersistence"
+jupyter_dump = "jupyter_dump.pkl"
+subprocess_dump = "subprocess_dump.pkl"
 
 # kernel modes
 class KernelMode(Enum):
     DEFAULT   = (0, 'default')
     MULTICELL = (1, 'multicell')
     WRITEFILE = (2, 'writefile')
-    
+
     def __str__(self):
         return self.value[1]
 
-class ScorepPythonKernel(IPythonKernel):
+class PyPerfKernel(IPythonKernel):
     implementation = 'Python and Score-P'
     implementation_version = '1.0'
     language = 'python'
@@ -29,10 +43,20 @@ class ScorepPythonKernel(IPythonKernel):
         'mimetype': 'text/plain',
         'file_extension': '.py',
     }
-    banner = "Jupyter kernel with Score-P Python binding."
+    banner = "Jupyter kernel for performance engineering."
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+
+        # setting the matplotlib backend
+        super().shell.run_cell("%matplotlib inline", silent=True, store_history=False)
+        super().shell.run_cell("%matplotlib widget", silent=True, store_history=False)
+
+        # TODO: timeit, python, ...? do not save variables to globals()
+        self.whitelist_prefixes_cell = ['%%prun', '%%timeit', '%%capture', '%%python', '%%pypy']
+        self.whitelist_prefixes_line = ['%prun', '%time']
+
+        self.blacklist_prefixes = ['%lsmagic']
 
         self.scorep_binding_args = []
         self.scorep_env = {}
@@ -51,7 +75,12 @@ class ScorepPythonKernel(IPythonKernel):
         self.writefile_scorep_env = []
         self.writefile_scorep_binding_args = []
         self.writefile_multicell = False
-        
+
+        # will be set to True as soon as GPU data is received
+        self.gpu_avail = False
+        self.perfdata_handler = PerformanceDataHandler()
+        self.nodelist = self.perfdata_handler.get_nodelist()
+
     def cell_output(self, string, stream='stdout'):
         """
         Display string as cell output.
@@ -66,6 +95,7 @@ class ScorepPythonKernel(IPythonKernel):
                 'payload': [],
                 'user_expressions': {},
                 }
+
 
     def serializer_settings(self, code):
         """
@@ -89,6 +119,29 @@ class ScorepPythonKernel(IPythonKernel):
                     self.cell_output(f"Serialization mode '{mode}' is not recognized, kernel will use '{self.pershelper.mode}'.", 'stderr')
 
             self.cell_output(f"Kernel uses '{self.pershelper.serializer}' serializer in '{self.pershelper.mode}' mode.")
+        else:
+            self.cell_output(f'KernelWarning: Currently in {self.mode}, command ignored.', 'stderr')
+        return self.standard_reply()
+
+    def set_perfmonitor(self, code):
+        """
+        Read the perfmonitor and try to select it.
+        """
+        if self.mode == KernelMode.DEFAULT:
+            monitor = code.split('\n')[1]
+            if monitor in {'local', "localhost", "LOCAL", "LOCALHOST"}:
+                self.cell_output('Selected local monitor. No parallel monitoring.')
+            else:
+                try:
+                    self.perfdata_handler.set_monitor(monitor)
+                    self.nodelist = self.perfdata_handler.get_nodelist()
+                    if len(self.nodelist) <= 1:
+                        self.nodelist = None
+                        self.cell_output('Found monitor: ' + str(monitor) + ' but no nodelist, using local setup. ')
+                    else:
+                        self.cell_output('Selected monitor: ' + str(monitor) + ' and got nodes: ' + str(self.nodelist))
+                except:
+                    self.cell_output(f'Error setting monitor', 'stderr')
         else:
             self.cell_output(f'KernelWarning: Currently in {self.mode}, command ignored.', 'stderr')
         return self.standard_reply()
@@ -247,6 +300,141 @@ class ScorepPythonKernel(IPythonKernel):
         self.pershelper.postprocess()
         self.cell_output(error_message, 'stderr')
 
+    def report_perfdata(self, performance_data_nodes, duration):
+
+        # print the performance data
+        report_trs = int(os.environ.get("PYPERF_REPORTS_MIN", 2))
+
+        # just count the number of memory measurements to decide whether we want to print the information
+        if len(performance_data_nodes[0][1]) > report_trs:
+
+            self.cell_output("\n----Performance Data----\n", 'stdout')
+            self.cell_output("Duration: " + "{:.2f}".format(duration) + "\n", 'stdout')
+            # last 4 values are means across nodes, print them separately
+
+            '''
+            structure in performance_data_nodes:
+            [
+                [NODE_1: [CPU_UTIL:[CPU_1][CPU_2][CPU_N][MEAN][MAX][MIN]]
+                         [MEM_UTIL]
+                         [GPU_UTIL:[GPU_1][GPU_2][GPU_N][MEAN][MAX][MIN]
+                         [GPU_MEM:[GPU_1][GPU_2][GPU_N][MEAN][MAX][MIN]]
+                [NODE_2: [...]]
+                [NODE_N: [...]]
+                [CPU_UTIL_ACROSS_NODES (The mean of the means)]
+                [MEM_UTIL_ACROSS_NODES (The mean of the raw values)]
+                [GPU_UTIL_ACROSS_NODES (The mean of the means)]
+                [GPU_MEM_ACROSS_NODES (The mean of the means)]
+            ]
+            '''
+
+            for idx, performance_data in enumerate(performance_data_nodes[:-8]):
+
+                if self.nodelist:
+                    self.cell_output("--NODE " + str(self.nodelist[idx]) + "--\n", 'stdout')
+
+                cpu_util = performance_data[0]
+                mem_util = performance_data[1]
+                io_ops_read = performance_data[2]
+                io_ops_write = performance_data[3]
+                io_bytes_read = performance_data[4]
+                io_bytes_write = performance_data[5]
+                gpu_util = performance_data[6]
+                gpu_mem = performance_data[7]
+
+                if cpu_util:
+                    # self.cell_output("--CPU Util--\n", 'stdout')
+                    self.cell_output(
+                        "\nCPU Util    \tAVG: " + "{:.2f}".format(
+                            mean(cpu_util[-3])) + "\t MIN: " + "{:.2f}".format(
+                            min(cpu_util[-1])) + "\t MAX: " + "{:.2f}".format(max(cpu_util[-2])) + "\n", 'stdout')
+
+                if len(mem_util) > 0:
+                    self.cell_output(
+                        "Mem Util    \tAVG: " + "{:.2f}".format(
+                            mean(mem_util)) + "\t MIN: " + "{:.2f}".format(
+                            min(mem_util)) + "\t MAX: " + "{:.2f}".format(max(mem_util)) + "\n", 'stdout')
+
+                if len(io_ops_read) > 0:
+                    self.cell_output(
+                        "IO Ops(R)   \tAVG: " + "{:.2f}".format(
+                            mean(io_ops_read)) + "\t MIN: " + "{:.2f}".format(
+                            min(io_ops_read)) + "\t MAX: " + "{:.2f}".format(max(io_ops_read)) + "\n", 'stdout')
+
+                if len(io_ops_write) > 0:
+                    self.cell_output(
+                        "      (W)   \tAVG: " + "{:.2f}".format(
+                            mean(io_ops_write)) + "\t MIN: " + "{:.2f}".format(
+                            min(io_ops_write)) + "\t MAX: " + "{:.2f}".format(max(io_ops_write)) + "\n", 'stdout')
+
+                if len(io_bytes_read) > 0:
+                    self.cell_output(
+                        "IO Bytes(R) \tAVG: " + "{:.2f}".format(
+                            mean(io_bytes_read)) + "\t MIN: " + "{:.2f}".format(
+                            min(io_bytes_read)) + "\t MAX: " + "{:.2f}".format(max(io_bytes_read)) + "\n", 'stdout')
+
+                if len(io_bytes_write) > 0:
+                    self.cell_output(
+                        "        (W) \tAVG: " + "{:.2f}".format(
+                            mean(io_bytes_write)) + "\t MIN: " + "{:.2f}".format(
+                            min(io_bytes_write)) + "\t MAX: " + "{:.2f}".format(max(io_bytes_write)) + "\n", 'stdout')
+
+                if gpu_util[0] and gpu_mem[0]:
+                    self.gpu_avail = True
+                    self.cell_output("--GPU Util and Mem per GPU--\n", 'stdout')
+                    self.cell_output(
+                        "GPU Util \tAVG: " + "{:.2f}".format(
+                            mean(gpu_util[-3])) + "\t MIN: " + "{:.2f}".format(
+                            min(gpu_util[-1])) + "\t MAX: " + "{:.2f}".format(max(gpu_util[-2])) + "\n", 'stdout')
+                    self.cell_output("\t    " +
+                                     "\tMem AVG: " + "{:.2f}".format(
+                        mean(gpu_mem[-3])) + "\t MIN: " + "{:.2f}".format(
+                        min(gpu_mem[-1])) + "\t MAX: " + "{:.2f}".format(max(gpu_mem[-2])) + "\n",
+                                     'stdout')
+
+            '''
+            performance data nodes consists of:
+            [raw data node0,
+             raw data node1,
+             raw data noden,
+             CPU Mean across nodes,
+             Mem Mean across nodes,
+             IO OPS READ Mean across nodes,
+             IO OPS WRITE Mean across nodes,
+             IO Bytes READ Mean across nodes,
+             IO Bytes WRITE Mean across nodes,
+             GPU Util Mean across nodes (if avail),
+             GPU Mem Mean across nodes (if avail)]
+            '''
+            '''
+            if len(performance_data_nodes)-8 > 1:
+                self.cell_output("\n---Across Nodes---\n", 'stdout')
+
+                self.cell_output(
+                    "\n--CPU Util-- \tAVG: " + "{:.2f}".format(
+                        mean(performance_data_nodes[-4])) + "\t MIN: " + "{:.2f}".format(
+                        min(performance_data_nodes[-4])) + "\t MAX: " + "{:.2f}".format(max(performance_data_nodes[-4])) + "\n", 'stdout')
+
+                if performance_data_nodes[-3]:
+                    self.cell_output(
+                        "--Mem Util-- \tAVG: " + "{:.2f}".format(
+                            mean(performance_data_nodes[-3])) + "\t MIN: " + "{:.2f}".format(
+                            min(performance_data_nodes[-3])) + "\t MAX: " + "{:.2f}".format(
+                            max(performance_data_nodes[-3])) + "\n", 'stdout')
+
+                if performance_data_nodes[-2] and performance_data_nodes[-1]:
+                    self.cell_output("--GPU Util and Mem per GPU--\n", 'stdout')
+                    self.cell_output(
+                        "--GPU Util-- \tAVG: " + "{:.2f}".format(
+                            mean(performance_data_nodes[-2])) + "\t MIN: " + "{:.2f}".format(
+                            min(performance_data_nodes[-2])) + "\t MAX: " + "{:.2f}".format(max(performance_data_nodes[-2])) + "\n", 'stdout')
+                    self.cell_output("\t    " +
+                                     "\tMem AVG: " + "{:.2f}".format(
+                        mean(performance_data_nodes[-1])) + "\t MIN: " + "{:.2f}".format(
+                        min(performance_data_nodes[-1])) + "\t MAX: " + "{:.2f}".format(max(performance_data_nodes[-1])) + "\n",
+                                     'stdout')
+            '''
+
     async def scorep_execute(self, code, silent, store_history=True, user_expressions=None,
                              allow_stdin=False, *, cell_id=None):
         """
@@ -280,6 +468,8 @@ class ScorepPythonKernel(IPythonKernel):
             self.scorep_binding_args + [scorep_script_name]
         proc_env = self.scorep_env.copy()
         proc_env.update({'PATH': os.environ['PATH'], 'PYTHONUNBUFFERED': 'x'}) # scorep path, subprocess observation
+
+        self.perfdata_handler.start_perfmonitor()
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=proc_env)
         
         # For memory mode jupyter_dump and jupyter_update must be awaited
@@ -314,6 +504,8 @@ class ScorepPythonKernel(IPythonKernel):
                     incomplete_line = ""
                 for line in lines:
                     self.cell_output(line)
+
+        performance_data_nodes, duration = self.perfdata_handler.end_perfmonitor(code)
 
         # In disk mode, subprocess already terminated after dumping persistence to file
         if self.pershelper.mode == 'disk':
@@ -357,6 +549,8 @@ class ScorepPythonKernel(IPythonKernel):
                 self.cell_output("KernelWarning: Instrumentation results were not saved locally.", 'stderr')
 
         self.pershelper.postprocess()
+        if performance_data_nodes:
+            self.report_perfdata(performance_data_nodes, duration)
         return self.standard_reply()
 
     async def do_execute(self, code, silent, store_history=False, user_expressions=None,
@@ -366,7 +560,81 @@ class ScorepPythonKernel(IPythonKernel):
         execute cell with super().do_execute(), else save Score-P environment/binding arguments/
         execute cell with Score-P Python binding.
         """
-        if code.startswith('%%scorep_env'):
+
+        '''
+        #displays all ran cell codes with index and timestamp
+        %%display_code_all
+
+        #displays code for index
+        %%display_code_for_index i
+
+        # displays graphs for last cell, arguments: cpu_util etc.
+        %%display_graphs_for_last cpu_util, ...
+        # displays one graph for all cell, arguments: cpu_util etc.
+        %%display_graphs_for_all cpu_util, ...
+        # -> would be cool if we can hover the graph and per timepoint, we see the index of the cell
+        # displays graph for index cell, arguments: cpu_util etc.
+        %%display_graphs_for_index i cpu_util, ...
+        '''
+        '''
+        if code.startswith('%%display_graph_for_last'):
+            metrics = code.split(' ')
+            nmetrics = len(metrics) - 1
+            self.draw_performance_graph(self.get_perfdata_index(-1, metrics[1:]), nmetrics)
+            return self.standard_reply()
+        '''
+        if code.startswith('%%display_graph_for_last'):
+            perfvis.draw_performance_graph(self.nodelist, self.perfdata_handler.get_perfdata_history()[-1], self.gpu_avail)
+            return self.standard_reply()
+        elif code.startswith('%%display_graph_for_index'):
+            if len(code.split(' '))==1:
+                self.cell_output("No index specified. Use: %%display_graph_for_index index", 'stdout')
+            index = int(code.split(' ')[1])
+            if index>=len(self.perfdata_handler.get_perfdata_history()):
+                self.cell_output("Tracked only " + str(len(self.perfdata_handler.get_perfdata_history())) + " cells. This index is not available.")
+            else:
+                perfvis.draw_performance_graph(self.nodelist, self.perfdata_handler.get_perfdata_history()[index], self.gpu_avail)
+            return self.standard_reply()
+        elif code.startswith('%%display_graph_for_all'):
+            perfvis.draw_performance_graph(self.nodelist, self.perfdata_handler.get_perfdata_aggregated(), self.gpu_avail)
+            return self.standard_reply()
+
+        elif code.startswith('%%display_code_for_index'):
+            if len(code.split(' '))==1:
+                self.cell_output("No index specified. Use: %%display_code_for_index index", 'stdout')
+            index = int(code.split(' ')[1])
+            if index >= len(self.perfdata_handler.get_perfdata_history()):
+                self.cell_output("Tracked only " + str(len(self.perfdata_handler.get_perfdata_history())) + " cells. This index is not available.")
+            else:
+                self.cell_output("Cell timestamp: " + str(self.perfdata_handler.get_code_history()[index][0]) + "\n--\n", 'stdout')
+                self.cell_output(self.perfdata_handler.get_code_history()[index][1], 'stdout')
+            return self.standard_reply()
+        elif code.startswith('%%display_code_history'):
+            show(pd.DataFrame(self.perfdata_handler.get_code_history(), columns=["timestamp", "code"]).reset_index())
+            return self.standard_reply()
+        elif code.startswith('%%perfdata_to_variable'):
+            if len(code.split(' '))==1:
+                self.cell_output("No variable to export specified. Use: %%perfdata_to_variable myvar", 'stdout')
+            else:
+                varname = code.split(' ')[1]
+                await super().do_execute(f"{varname}={self.perfdata_handler.get_perfdata_history()}", silent=True)
+                self.cell_output("Exported performance data to " + str(varname) + " variable", 'stdout')
+            return self.standard_reply()
+        elif code.startswith('%%perfdata_to_json'):
+            if len(code.split(' '))==1:
+                self.cell_output("No filename to export specified. Use: %%perfdata_to_variable myfile", 'stdout')
+            else:
+                filename = code.split(' ')[1]
+                with open(f'{filename}_perfdata.json', 'w') as f:
+                    json.dump(self.perfdata_handler.get_perfdata_history(), default=str, fp=f)
+                with open(f'{filename}_code.json', 'w') as f:
+                    json.dump(self.perfdata_handler.get_code_history(), default=str, fp=f)
+                self.cell_output("Exported performance data to " +
+                                 str(filename) + "_perfdata.json and " + str(filename) + "_code.json", 'stdout')
+            return self.standard_reply()
+        elif code.startswith('%%set_perfmonitor'):
+            return self.set_perfmonitor(code)
+        elif code.startswith('%%scorep_env'):
             return self.set_scorep_env(code)
         elif code.startswith('%%scorep_python_binding_arguments'):
             return self.set_scorep_pythonargs(code)
@@ -408,7 +676,12 @@ class ScorepPythonKernel(IPythonKernel):
         else:
             if self.mode == KernelMode.DEFAULT:
                 self.pershelper.parse(magics_cleanup(code), 'jupyter')
-                return await super().do_execute(code, silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
+                self.perfdata_handler.start_perfmonitor()
+                parent_ret = await super().do_execute(code, silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
+                performance_data_nodes, duration = self.perfdata_handler.end_perfmonitor(code)
+                if performance_data_nodes:
+                    self.report_perfdata(performance_data_nodes, duration)
+                return parent_ret
             elif self.mode == KernelMode.MULTICELL:
                 return self.append_multicellmode(magics_cleanup(code))
             elif self.mode == KernelMode.WRITEFILE:
@@ -421,4 +694,4 @@ class ScorepPythonKernel(IPythonKernel):
 
 if __name__ == '__main__':
     from ipykernel.kernelapp import IPKernelApp
-    IPKernelApp.launch_instance(kernel_class=ScorepPythonKernel)
+    IPKernelApp.launch_instance(kernel_class=PyPerfKernel)

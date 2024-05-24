@@ -7,7 +7,7 @@ import dill
 import cloudpickle
 from textwrap import dedent
 
-from src.scorep_jupyter.userpersistence import extract_variables_names, extract_definitions, load_variables, load_runtime
+from src.pyperf_jupyter.userpersistence import extract_variables_names, extract_definitions, load_variables, load_runtime
 
 PYTHON_EXECUTABLE = sys.executable
 tmp_dir = 'test_userpersistence_tmp/'
@@ -111,7 +111,6 @@ class UserPersistenceTests(unittest.TestCase):
                 with open("tests/userpersistence/variables.json", "r") as file:
                     expected_variables = json.load(file)
                     variables_names = list(expected_variables.keys())
-
                 code = dedent(f"""\
                             from src.scorep_jupyter.userpersistence import dump_variables
                             import {serializer.__name__}
