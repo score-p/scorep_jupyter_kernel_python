@@ -21,6 +21,8 @@ class PersHelper:
                           {'os_environ': '', 'sys_path': '', 'var': ''},
                       'subprocess':
                           {'os_environ': '', 'sys_path': '', 'var': ''}}
+        #ensure to start from scratch(e.g. dirs might not be deleted when changing serializer settings at runtime)
+        self.postprocess(force_clean=True)
 
     def preprocess(self):
         uid = str(uuid.uuid4())
@@ -54,17 +56,17 @@ class PersHelper:
                     return False
         return True
 
-    def postprocess(self):
+    def postprocess(self, force_clean=False):
         """
         Clean up files used for transmitting persistence and running subprocess.
         """
-        if self.mode == 'memory':
+        if self.mode == 'memory' or force_clean:
             for key1 in self.paths:
                 for key2 in self.paths[key1]:
                     fd_path = self.paths[key1][key2]
                     if os.path.exists(fd_path):
                         os.unlink(fd_path)
-        elif self.mode == 'disk':
+        if self.mode == 'disk' or force_clean:
             if os.path.exists(str(self.base_path)):
                 shutil.rmtree(str(self.base_path))
                 
