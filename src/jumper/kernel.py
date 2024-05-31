@@ -11,16 +11,16 @@ from statistics import mean
 import pandas as pd
 from ipykernel.ipkernel import IPythonKernel
 from itables import show
-from pyperf_jupyter.userpersistence import PersHelper, scorep_script_name
-from pyperf_jupyter.userpersistence import magics_cleanup
+from jumper.userpersistence import PersHelper, scorep_script_name
+from jumper.userpersistence import magics_cleanup
 
-from pyperf_jupyter.perfdatahandler import PerformanceDataHandler
-import pyperf_jupyter.visualization as perfvis
-import pyperf_jupyter.parallel_monitor.slurm_monitor as slurm_monitor
+from jumper.perfdatahandler import PerformanceDataHandler
+import jumper.visualization as perfvis
+import jumper.parallel_monitor.slurm_monitor as slurm_monitor
 
 PYTHON_EXECUTABLE = sys.executable
 READ_CHUNK_SIZE = 8
-userpersistence_token = "pyperf_jupyter.userpersistence"
+userpersistence_token = "jumper.userpersistence"
 jupyter_dump = "jupyter_dump.pkl"
 subprocess_dump = "subprocess_dump.pkl"
 
@@ -33,7 +33,7 @@ class KernelMode(Enum):
     def __str__(self):
         return self.value[1]
 
-class PyPerfKernel(IPythonKernel):
+class JumperKernel(IPythonKernel):
     implementation = 'Python and Score-P'
     implementation_version = '1.0'
     language = 'python'
@@ -303,7 +303,7 @@ class PyPerfKernel(IPythonKernel):
     def report_perfdata(self, performance_data_nodes, duration):
 
         # print the performance data
-        report_trs = int(os.environ.get("PYPERF_REPORTS_MIN", 2))
+        report_trs = int(os.environ.get("JUMPER_REPORTS_MIN", 2))
 
         # just count the number of memory measurements to decide whether we want to print the information
         if len(performance_data_nodes[0][1]) > report_trs:
@@ -694,4 +694,4 @@ class PyPerfKernel(IPythonKernel):
 
 if __name__ == '__main__':
     from ipykernel.kernelapp import IPKernelApp
-    IPKernelApp.launch_instance(kernel_class=PyPerfKernel)
+    IPKernelApp.launch_instance(kernel_class=JumperKernel)

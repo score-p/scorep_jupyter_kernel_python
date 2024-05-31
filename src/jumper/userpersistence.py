@@ -32,7 +32,7 @@ class PersHelper:
             for key2 in self.paths[key1]:
 
                 if self.mode == 'memory':
-                    fd_path = "pyperf_" + key1 + "_" + key2 + "_" + uid
+                    fd_path = "jumper_" + key1 + "_" + key2 + "_" + uid
                 elif self.mode == 'disk':
                     fd_path = dir_path + "_" + key2 + "_" + uid
                 
@@ -87,7 +87,7 @@ class PersHelper:
                                import sys
                                import os
                                import {self.serializer}
-                               from pyperf_jupyter.userpersistence import dump_runtime, dump_variables
+                               from jumper_jupyter.userpersistence import dump_runtime, dump_variables
                                dump_runtime(os.environ, sys.path, '{self.paths['jupyter']['os_environ']}', '{self.paths['jupyter']['sys_path']}', {self.serializer})
                                dump_variables({str(self.jupyter_variables)}, globals(), '{self.paths['jupyter']['var']}', {self.serializer})
                                """)
@@ -103,7 +103,7 @@ class PersHelper:
                                   import sys
                                   import os
                                   import {self.serializer}
-                                  from pyperf_jupyter.userpersistence import dump_runtime, dump_variables, load_runtime, load_variables
+                                  from jumper_jupyter.userpersistence import dump_runtime, dump_variables, load_runtime, load_variables
                                   """)
         subprocess_code += f"load_runtime(os.environ, sys.path, '{self.paths['jupyter']['os_environ']}', '{self.paths['jupyter']['sys_path']}', {self.serializer})\n"
         subprocess_code += self.jupyter_definitions
@@ -132,7 +132,7 @@ class PersHelper:
         jupyter_update = dedent(f"""\
                                 import sys
                                 import os
-                                from pyperf_jupyter.userpersistence import load_runtime, load_variables
+                                from jumper_jupyter.userpersistence import load_runtime, load_variables
                                 load_runtime(os.environ, sys.path, '{self.paths['subprocess']['os_environ']}', '{self.paths['subprocess']['sys_path']}', {self.serializer})
                                 """)
         jupyter_update += self.jupyter_definitions
@@ -210,7 +210,7 @@ def extract_definitions(code):
     """
     Extract imported modules and definitions of classes and functions from the code block.
     """
-    # can't use in kernel as import from pyperf_jupyter.userpersistence:
+    # can't use in kernel as import from jumper.userpersistence:
     # self-reference error during dill dump of notebook
     root = ast.parse(code)
     definitions = []

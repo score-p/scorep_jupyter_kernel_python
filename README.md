@@ -68,16 +68,16 @@ From the Score-P Python bindings:
 
 Every cell that is executed will be monitored by a parallel running process that collects system metrics for CPU, Memory, IO and if available GPU. Besides that, Jumper forwards the execution of that code to the default Python kernel.
 
-The frequency for performance monitoring can be set via the `PYPERF_REPORT_FREQUENCY`environment variable.
+The frequency for performance monitoring can be set via the `JUMPER_REPORT_FREQUENCY`environment variable.
 
 ```
-%env PYPERF_REPORT_FREQUENCY=2
+%env JUMPER_REPORT_FREQUENCY=2
 ```
 
-Additionally, the number of reports required to store performance data can be defined by the `PYPERF_REPORTS_MIN` environment variable.
+Additionally, the number of reports required to store performance data can be defined by the `JUMPER_REPORTS_MIN` environment variable.
 
 ```
-%env PYPERF_REPORTS_MIN=2
+%env JUMPER_REPORTS_MIN=2
 ```
 
 The performance data is recorded in-memory and the kernel provides several magic commands to display and interact with the data:

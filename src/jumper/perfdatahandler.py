@@ -40,7 +40,7 @@ class PerformanceDataHandler:
     def set_monitor(self, monitor):
         # TODO: add a check whether the monitor module has all required functions implemented
         try:
-            self.monitor_module = importlib.import_module("pyperf_jupyter.parallel_monitor." + monitor + "_monitor")
+            self.monitor_module = importlib.import_module("jumper.parallel_monitor." + monitor + "_monitor")
             classes = inspect.getmembers(self.monitor_module, inspect.isclass)
             # just search for monitoring classes
             pattern = re.compile('.*[mM]onitor.*')

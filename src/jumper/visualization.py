@@ -8,7 +8,7 @@ def plot_graph(ax, metric, perfdata):
     # first 0 means first node
     ax.clear()  # Clear previous plot
     # generate scale
-    x_scale = [x for x in range(0, 2 * len(perfdata[0][0][-3]), int(os.environ.get("PYPERF_REPORT_FREQUENCY", 2)))]
+    x_scale = [x for x in range(0, 2 * len(perfdata[0][0][-3]), int(os.environ.get("JUMPER_REPORT_FREQUENCY", 2)))]
     if metric == 'CPU Util (Min/Max/Mean)':
         ax.plot(x_scale, perfdata[0][0][-3], label='Mean', color=(0.20, 0.47, 1.00))
         ax.plot(x_scale, perfdata[0][0][-2], label='Max', color=(0.20, 0.47, 1.00, 0.3))
