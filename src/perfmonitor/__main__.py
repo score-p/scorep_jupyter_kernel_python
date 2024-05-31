@@ -4,10 +4,13 @@ import pickle
 import codecs
 import pynvml
 import os
+import sys
 
 if __name__ == "__main__":
     ngpus = 0
     gpu_handles = []
+
+    pid = int(sys.argv[1])
 
     try:
         pynvml.nvmlInit()
@@ -22,15 +25,18 @@ if __name__ == "__main__":
         gpu_util = []
         gpu_mem = []
         cpu_util = psutil.cpu_percent(percpu=True)
+        # cpu affininty reflects on cgroups (e.g. if SLURM sets resources for a job)
         av_cpus = psutil.Process().cpu_affinity()
         av_cpu_util = [cpu_util[i] for i in av_cpus]
-        mem_util = psutil.virtual_memory().percent
-        io_data = psutil.Process().io_counters()
+        # bytes -> GB
+        mem_util = (psutil.virtual_memory().total-psutil.virtual_memory().available)/1024/1024/1024
+        io_data = psutil.Process(pid).io_counters()
+        io_data = [io_data[0], io_data[1], io_data[2]/1024/1024, io_data[3]/1024/1024]
         if gpu_handles:
             for handle in gpu_handles:
                 urate = pynvml.nvmlDeviceGetUtilizationRates(handle)
                 gpu_util.append(urate.gpu)
                 gpu_mem.append(urate.memory)
-        # print([av_cpu_util, mem_util, gpu_util, gpu_mem])
+        #print([av_cpu_util, mem_util, gpu_util, gpu_mem, io_data])
         print(codecs.encode(pickle.dumps([av_cpu_util, mem_util, gpu_util, gpu_mem, io_data]), "base64").decode())
         time.sleep(freq)

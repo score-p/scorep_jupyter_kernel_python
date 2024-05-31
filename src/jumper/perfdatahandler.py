@@ -240,14 +240,14 @@ class PerformanceDataHandler:
 
         return performance_data_nodes
 
-    def start_perfmonitor(self):
+    def start_perfmonitor(self, pid):
         if self.monitor_module:
             self.monitor_module.start_monitor()
         else:
             proc_env = os.environ.copy()
             proc_env.update({'PYTHONUNBUFFERED': 'x'})
             # SLURM is not available, sorry we support only one node
-            self.local_perf_proc = subprocess.Popen([sys.executable, "-m" "perfmonitor"], stdout=subprocess.PIPE,
+            self.local_perf_proc = subprocess.Popen([sys.executable, "-m" "perfmonitor", str(pid)], stdout=subprocess.PIPE,
                                          stderr=subprocess.STDOUT, env=proc_env)
 
         self.starttime = time.perf_counter()

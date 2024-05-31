@@ -345,39 +345,27 @@ class JumperKernel(IPythonKernel):
                 if cpu_util:
                     # self.cell_output("--CPU Util--\n", 'stdout')
                     self.cell_output(
-                        "\nCPU Util    \tAVG: " + "{:.2f}".format(
+                        "\nCPU Util (Across CPUs)       \tAVG: " + "{:.2f}".format(
                             mean(cpu_util[-3])) + "\t MIN: " + "{:.2f}".format(
                             min(cpu_util[-1])) + "\t MAX: " + "{:.2f}".format(max(cpu_util[-2])) + "\n", 'stdout')
 
                 if len(mem_util) > 0:
                     self.cell_output(
-                        "Mem Util    \tAVG: " + "{:.2f}".format(
+                        "Mem Util in GB (Across nodes)\tAVG: " + "{:.2f}".format(
                             mean(mem_util)) + "\t MIN: " + "{:.2f}".format(
                             min(mem_util)) + "\t MAX: " + "{:.2f}".format(max(mem_util)) + "\n", 'stdout')
 
                 if len(io_ops_read) > 0:
-                    self.cell_output(
-                        "IO Ops(R)   \tAVG: " + "{:.2f}".format(
-                            mean(io_ops_read)) + "\t MIN: " + "{:.2f}".format(
-                            min(io_ops_read)) + "\t MAX: " + "{:.2f}".format(max(io_ops_read)) + "\n", 'stdout')
+                    self.cell_output("IO Ops (excl.) Read          \tTotal: " + "{:.0f}".format(io_ops_read[-1]) + "\n", 'stdout')
 
                 if len(io_ops_write) > 0:
-                    self.cell_output(
-                        "      (W)   \tAVG: " + "{:.2f}".format(
-                            mean(io_ops_write)) + "\t MIN: " + "{:.2f}".format(
-                            min(io_ops_write)) + "\t MAX: " + "{:.2f}".format(max(io_ops_write)) + "\n", 'stdout')
+                    self.cell_output("               Write         \tTotal: " + "{:.0f}".format(io_ops_write[-1]) + "\n", 'stdout')
 
                 if len(io_bytes_read) > 0:
-                    self.cell_output(
-                        "IO Bytes(R) \tAVG: " + "{:.2f}".format(
-                            mean(io_bytes_read)) + "\t MIN: " + "{:.2f}".format(
-                            min(io_bytes_read)) + "\t MAX: " + "{:.2f}".format(max(io_bytes_read)) + "\n", 'stdout')
+                    self.cell_output("IO Bytes (excl.) Read        \tTotal: " + "{:.2f}".format(io_bytes_read[-1]) + "\n", 'stdout')
 
                 if len(io_bytes_write) > 0:
-                    self.cell_output(
-                        "        (W) \tAVG: " + "{:.2f}".format(
-                            mean(io_bytes_write)) + "\t MIN: " + "{:.2f}".format(
-                            min(io_bytes_write)) + "\t MAX: " + "{:.2f}".format(max(io_bytes_write)) + "\n", 'stdout')
+                    self.cell_output("                 Write       \tTotal: " + "{:.2f}".format(io_bytes_write[-1]) + "\n", 'stdout')
 
                 if gpu_util[0] and gpu_mem[0]:
                     self.gpu_avail = True
@@ -469,9 +457,8 @@ class JumperKernel(IPythonKernel):
         proc_env = self.scorep_env.copy()
         proc_env.update({'PATH': os.environ['PATH'], 'PYTHONUNBUFFERED': 'x'}) # scorep path, subprocess observation
 
-        self.perfdata_handler.start_perfmonitor()
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=proc_env)
-        
+        self.perfdata_handler.start_perfmonitor(proc.pid)
         # For memory mode jupyter_dump and jupyter_update must be awaited
         # concurrently to the running subprocess
         if self.pershelper.mode == 'memory':
@@ -676,7 +663,7 @@ class JumperKernel(IPythonKernel):
         else:
             if self.mode == KernelMode.DEFAULT:
                 self.pershelper.parse(magics_cleanup(code), 'jupyter')
-                self.perfdata_handler.start_perfmonitor()
+                self.perfdata_handler.start_perfmonitor(os.getpid())
                 parent_ret = await super().do_execute(code, silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
                 performance_data_nodes, duration = self.perfdata_handler.end_perfmonitor(code)
                 if performance_data_nodes:
