@@ -168,10 +168,10 @@ def dump_runtime(os_environ_, sys_path_, os_environ_dump_, sys_path_dump_, seria
     # Will force it to re-initialize instead of calling reset_preload()
     filtered_os_environ_ = {k: v for k, v in os_environ_.items() if not k.startswith('SCOREP_PYTHON_BINDINGS_')}
 
-    with open(os_environ_dump_, 'wb') as file:
+    with os.fdopen(os.open(os_environ_dump_, os.O_WRONLY | os.O_CREAT), 'wb') as file:
         serializer.dump(filtered_os_environ_, file)
 
-    with open(sys_path_dump_, 'wb') as file:
+    with os.fdopen(os.open(sys_path_dump_, os.O_WRONLY | os.O_CREAT), 'wb') as file:
         serializer.dump(sys_path_, file)
 
 def dump_variables(variables_names, globals_, var_dump_, serializer):
@@ -184,17 +184,17 @@ def dump_variables(variables_names, globals_, var_dump_, serializer):
         if non_persistent_class in globals().keys():
             user_variables[el].__class__ = globals()[non_persistent_class]
     
-    with open(var_dump_, 'wb') as file:
+    with os.fdopen(os.open(var_dump_, os.O_WRONLY | os.O_CREAT), 'wb') as file:
         serializer.dump(user_variables, file)
 
 def load_runtime(os_environ_, sys_path_, os_environ_dump_, sys_path_dump_, serializer):
     loaded_os_environ_ = {}
     loaded_sys_path_ = []
 
-    with open(os_environ_dump_, 'rb') as file:
+    with os.fdopen(os.open(os_environ_dump_, os.O_RDONLY), 'rb') as file:
         loaded_os_environ_ = serializer.load(file)
 
-    with open(sys_path_dump_, 'rb') as file:
+    with os.fdopen(os.open(sys_path_dump_, os.O_RDONLY), 'rb') as file:
         loaded_sys_path_ = serializer.load(file)
 
     # os_environ_.clear()
@@ -204,7 +204,7 @@ def load_runtime(os_environ_, sys_path_, os_environ_dump_, sys_path_dump_, seria
     sys_path_.extend(loaded_sys_path_)
 
 def load_variables(globals_, var_dump_, serializer):
-    with open(var_dump_, 'rb') as file:
+    with os.fdopen(os.open(var_dump_, os.O_RDONLY), 'rb') as file:
         obj = serializer.load(file)
     globals_.update(obj)
 

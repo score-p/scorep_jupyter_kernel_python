@@ -185,14 +185,14 @@ class ScorepPythonKernel(IPythonKernel):
             self.writefile_bash_name = os.path.realpath('') + '/' + self.writefile_base_name + '_run.sh'
             self.writefile_python_name = os.path.realpath('') + '/' + self.writefile_base_name + '.py'
 
-            with open(self.writefile_bash_name, 'w+') as bash_script:
+            with os.fdopen(os.open(self.writefile_bash_name, os.O_WRONLY | os.O_CREAT), 'w') as bash_script:
                 bash_script.write(dedent(f"""\
                                           # This bash script is generated automatically to run
                                           # Jupyter Notebook -> Python script conversion by Score-P kernel
                                           # {self.writefile_python_name}
                                           # !/bin/bash
                                           """))
-            with open(self.writefile_python_name, 'w+') as python_script:
+            with os.fdopen(os.open(self.writefile_python_name, os.O_WRONLY | os.O_CREAT), 'w') as python_script:
                 python_script.write(dedent(f"""
                                             # This is the automatic Jupyter Notebook -> Python script conversion by Score-P kernel.
                                             # Code corresponding to the cells not marked for Score-P instrumentation
@@ -215,11 +215,11 @@ class ScorepPythonKernel(IPythonKernel):
         """
         if self.mode == KernelMode.WRITEFILE:
             if explicit_scorep or self.writefile_multicell:
-                with open(self.writefile_python_name, 'a') as python_script:
+                with os.fdopen(os.open(self.writefile_python_name, os.O_WRONLY | os.O_APPEND), 'a') as python_script:
                     python_script.write(code + '\n')
                 self.cell_output('Python commands with instrumentation recorded.')
             else:
-                with open(self.writefile_python_name, 'a') as python_script:
+                with os.fdopen(os.open(self.writefile_python_name, os.O_WRONLY | os.O_APPEND), 'a') as python_script:
                     code = ''.join(['    ' + line + '\n' for line in code.split('\n')])
                     python_script.write('with scorep.instrumenter.disable():\n' + code + '\n')
                 self.cell_output('Python commands without instrumentation recorded.')
@@ -232,7 +232,7 @@ class ScorepPythonKernel(IPythonKernel):
         # TODO: check for os path existence
         if self.mode == KernelMode.WRITEFILE:
             self.mode = KernelMode.DEFAULT
-            with open(self.writefile_bash_name, 'a') as bash_script:
+            with os.fdopen(os.open(self.writefile_bash_name, os.O_WRONLY | os.O_APPEND), 'a') as bash_script:
                 bash_script.write(
                     f"{' '.join(self.writefile_scorep_env)} {PYTHON_EXECUTABLE} -m scorep {' '.join(self.writefile_scorep_binding_args)} {self.writefile_python_name}")
             self.cell_output('Finished converting to Python script.')
@@ -261,7 +261,7 @@ class ScorepPythonKernel(IPythonKernel):
         # Prepare code for the Score-P instrumented execution as subprocess
         # Transmit user persistence and updated sys.path from Jupyter notebook to subprocess
         # After running the code, transmit subprocess persistence back to Jupyter notebook
-        with open(scorep_script_name, 'w') as file:
+        with os.fdopen(os.open(scorep_script_name, os.O_WRONLY | os.O_CREAT), 'w') as file:
             file.write(self.pershelper.subprocess_wrapper(code))
 
         # For disk mode use implicit synchronization between kernel and subprocess:
@@ -279,7 +279,8 @@ class ScorepPythonKernel(IPythonKernel):
         cmd = [PYTHON_EXECUTABLE, "-m", "scorep"] + \
             self.scorep_binding_args + [scorep_script_name]
         proc_env = self.scorep_env.copy()
-        proc_env.update({'PATH': os.environ['PATH'], 'PYTHONUNBUFFERED': 'x'}) # scorep path, subprocess observation
+        proc_env.update({'PATH': os.environ.get('PATH', ''), 'LD_LIBRARY_PATH': os.environ.get('LD_LIBRARY_PATH', ''),
+                         'PYTHONPATH': os.environ.get('PYTHONPATH', ''), 'PYTHONUNBUFFERED': 'x'})
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=proc_env)
         
         # For memory mode jupyter_dump and jupyter_update must be awaited
