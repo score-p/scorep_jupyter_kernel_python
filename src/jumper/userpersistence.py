@@ -8,6 +8,7 @@ import uuid
 
 scorep_script_name = "scorep_script.py"
 
+
 class PersHelper:
     def __init__(self, serializer='dill', mode='memory'):
         self.jupyter_definitions = ""
@@ -35,9 +36,9 @@ class PersHelper:
                     fd_path = "jumper_" + key1 + "_" + key2 + "_" + uid
                 elif self.mode == 'disk':
                     fd_path = dir_path + "_" + key2 + "_" + uid
-                
+
                 self.paths[key1][key2] = fd_path
-                
+
                 try:
                     if self.mode == 'memory':
                         os.mkfifo(fd_path)
@@ -67,14 +68,14 @@ class PersHelper:
         elif self.mode == 'disk':
             if os.path.exists(str(self.base_path)):
                 shutil.rmtree(str(self.base_path))
-                
+
         if os.path.exists(scorep_script_name):
             os.remove(scorep_script_name)
 
     def set_serializer(self, serializer):
-        valid_serializers = {'dill', 'cloudpickle'}
+        valid_serializers = {'dill', 'cloudpickle', 'parallel_marshall'}
         return serializer in valid_serializers and (setattr(self, 'serializer', serializer) or True)
-    
+
     def set_mode(self, mode):
         valid_modes = {'disk', 'memory'}
         return mode in valid_modes and (setattr(self, 'mode', mode) or True)
@@ -87,7 +88,7 @@ class PersHelper:
                                import sys
                                import os
                                import {self.serializer}
-                               from jumper_jupyter.userpersistence import dump_runtime, dump_variables
+                               from jumper.userpersistence import dump_runtime, dump_variables
                                dump_runtime(os.environ, sys.path, '{self.paths['jupyter']['os_environ']}', '{self.paths['jupyter']['sys_path']}', {self.serializer})
                                dump_variables({str(self.jupyter_variables)}, globals(), '{self.paths['jupyter']['var']}', {self.serializer})
                                """)
@@ -103,7 +104,7 @@ class PersHelper:
                                   import sys
                                   import os
                                   import {self.serializer}
-                                  from jumper_jupyter.userpersistence import dump_runtime, dump_variables, load_runtime, load_variables
+                                  from jumper.userpersistence import dump_runtime, dump_variables, load_runtime, load_variables
                                   """)
         subprocess_code += f"load_runtime(os.environ, sys.path, '{self.paths['jupyter']['os_environ']}', '{self.paths['jupyter']['sys_path']}', {self.serializer})\n"
         subprocess_code += self.jupyter_definitions
@@ -121,7 +122,7 @@ class PersHelper:
                                        """)
         subprocess_code += f"dump_runtime(os.environ, sys.path, '{self.paths['subprocess']['os_environ']}', '{self.paths['subprocess']['sys_path']}', {self.serializer})\n" + \
                            f"dump_variables({str(self.subprocess_variables)}, globals(), '{self.paths['subprocess']['var']}', {self.serializer})\n"
-        
+
         return subprocess_code
 
     def jupyter_update(self, code):
@@ -132,7 +133,7 @@ class PersHelper:
         jupyter_update = dedent(f"""\
                                 import sys
                                 import os
-                                from jumper_jupyter.userpersistence import load_runtime, load_variables
+                                from jumper.userpersistence import load_runtime, load_variables
                                 load_runtime(os.environ, sys.path, '{self.paths['subprocess']['os_environ']}', '{self.paths['subprocess']['sys_path']}', {self.serializer})
                                 """)
         jupyter_update += self.jupyter_definitions
@@ -172,6 +173,7 @@ def dump_runtime(os_environ_, sys_path_, os_environ_dump_, sys_path_dump_, seria
     with open(sys_path_dump_, 'wb') as file:
         serializer.dump(sys_path_, file)
 
+
 def dump_variables(variables_names, globals_, var_dump_, serializer):
     user_variables = {k: v for k, v in globals_.items() if k in variables_names}
 
@@ -181,9 +183,10 @@ def dump_variables(variables_names, globals_, var_dump_, serializer):
         non_persistent_class = user_variables[el].__class__.__name__
         if non_persistent_class in globals().keys():
             user_variables[el].__class__ = globals()[non_persistent_class]
-    
+
     with open(var_dump_, 'wb') as file:
         serializer.dump(user_variables, file)
+
 
 def load_runtime(os_environ_, sys_path_, os_environ_dump_, sys_path_dump_, serializer):
     loaded_os_environ_ = {}
@@ -201,10 +204,12 @@ def load_runtime(os_environ_, sys_path_, os_environ_dump_, sys_path_dump_, seria
     # sys_path_.clear()
     sys_path_.extend(loaded_sys_path_)
 
+
 def load_variables(globals_, var_dump_, serializer):
     with open(var_dump_, 'rb') as file:
         obj = serializer.load(file)
     globals_.update(obj)
+
 
 def extract_definitions(code):
     """
@@ -232,6 +237,7 @@ def extract_definitions(code):
 
     return definitions_string
 
+
 def extract_variables_names(code):
     """
     Extract user-assigned variables from code.
@@ -254,6 +260,7 @@ def extract_variables_names(code):
                     variables.add(target_node.id)
 
     return variables
+
 
 def magics_cleanup(code):
     """

@@ -6,22 +6,23 @@ import pynvml
 import os
 import sys
 
-if __name__ == "__main__":
-    ngpus = 0
-    gpu_handles = []
 
-    pid = int(sys.argv[1])
+ngpus = 0
+gpu_handles = []
 
+pid = int(sys.argv[1])
+
+try:
+    pynvml.nvmlInit()
+    ngpus = pynvml.nvmlDeviceGetCount()
+    gpu_handles = [pynvml.nvmlDeviceGetHandleByIndex(i) for i in range(ngpus)]
+except:
+    pass
+
+freq = int(os.environ.get("JUMPER_REPORT_FREQUENCY", 2))
+
+while True:
     try:
-        pynvml.nvmlInit()
-        ngpus = pynvml.nvmlDeviceGetCount()
-        gpu_handles = [pynvml.nvmlDeviceGetHandleByIndex(i) for i in range(ngpus)]
-    except:
-        pass
-
-    freq = int(os.environ.get("PYPERF_REPORT_FREQUENCY", 2))
-
-    while True:
         gpu_util = []
         gpu_mem = []
         cpu_util = psutil.cpu_percent(percpu=True)
@@ -39,4 +40,6 @@ if __name__ == "__main__":
                 gpu_mem.append(urate.memory)
         #print([av_cpu_util, mem_util, gpu_util, gpu_mem, io_data])
         print(codecs.encode(pickle.dumps([av_cpu_util, mem_util, gpu_util, gpu_mem, io_data]), "base64").decode())
-        time.sleep(freq)
+    except:
+        pass
+    time.sleep(freq)

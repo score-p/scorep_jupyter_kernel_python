@@ -40,7 +40,7 @@ class PerformanceDataHandler:
     def set_monitor(self, monitor):
         # TODO: add a check whether the monitor module has all required functions implemented
         try:
-            self.monitor_module = importlib.import_module("jumper.parallel_monitor." + monitor + "_monitor")
+            self.monitor_module = importlib.import_module("jumper.multinode_monitor." + monitor + "_monitor")
             classes = inspect.getmembers(self.monitor_module, inspect.isclass)
             # just search for monitoring classes
             pattern = re.compile('.*[mM]onitor.*')
@@ -165,6 +165,7 @@ class PerformanceDataHandler:
             io_ops_write = []
             io_bytes_read = []
             io_bytes_write = []
+
             if stdout_data[0]:
                 init_data = pickle.loads(codecs.decode(stdout_data[0], "base64"))
                 cpu_util = [[] for _ in init_data[0]]
@@ -237,7 +238,6 @@ class PerformanceDataHandler:
         performance_data_nodes.append(compute_mean_across_nodes("GPU_MEM", "MEANS", metrics_across_nodes))
 
         self.performance_data_history.append(performance_data_nodes)
-
         return performance_data_nodes
 
     def start_perfmonitor(self, pid):
@@ -260,7 +260,6 @@ class PerformanceDataHandler:
         else:
             self.local_perf_proc.kill()
             output, _ = self.local_perf_proc.communicate()
-
         stdout_data_node = []
         '''
         if self.slurm_nodelist:

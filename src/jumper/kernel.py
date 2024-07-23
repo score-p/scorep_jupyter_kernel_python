@@ -1,9 +1,10 @@
+import datetime
 import json
 import os
 import re
 import subprocess
 import sys
-import importlib
+import time
 
 from enum import Enum
 from textwrap import dedent
@@ -16,7 +17,7 @@ from jumper.userpersistence import magics_cleanup
 
 from jumper.perfdatahandler import PerformanceDataHandler
 import jumper.visualization as perfvis
-import jumper.parallel_monitor.slurm_monitor as slurm_monitor
+import jumper.multinode_monitor.slurm_monitor as slurm_monitor
 
 PYTHON_EXECUTABLE = sys.executable
 READ_CHUNK_SIZE = 8
@@ -24,14 +25,16 @@ userpersistence_token = "jumper.userpersistence"
 jupyter_dump = "jupyter_dump.pkl"
 subprocess_dump = "subprocess_dump.pkl"
 
+
 # kernel modes
 class KernelMode(Enum):
-    DEFAULT   = (0, 'default')
+    DEFAULT = (0, 'default')
     MULTICELL = (1, 'multicell')
     WRITEFILE = (2, 'writefile')
 
     def __str__(self):
         return self.value[1]
+
 
 class JumperKernel(IPythonKernel):
     implementation = 'Python and Score-P'
@@ -96,7 +99,6 @@ class JumperKernel(IPythonKernel):
                 'user_expressions': {},
                 }
 
-
     def serializer_settings(self, code):
         """
         Switch serializer backend used for persistence in kernel.
@@ -112,11 +114,15 @@ class JumperKernel(IPythonKernel):
 
             if serializer:
                 if not self.pershelper.set_serializer(serializer):
-                    self.cell_output(f"Serializer '{serializer}' is not recognized, kernel will use '{self.pershelper.serializer}'.", 'stderr')
+                    self.cell_output(
+                        f"Serializer '{serializer}' is not recognized, kernel will use '{self.pershelper.serializer}'.",
+                        'stderr')
                     return self.standard_reply()
             if mode:
                 if not self.pershelper.set_mode(mode):
-                    self.cell_output(f"Serialization mode '{mode}' is not recognized, kernel will use '{self.pershelper.mode}'.", 'stderr')
+                    self.cell_output(
+                        f"Serialization mode '{mode}' is not recognized, kernel will use '{self.pershelper.mode}'.",
+                        'stderr')
 
             self.cell_output(f"Kernel uses '{self.pershelper.serializer}' serializer in '{self.pershelper.mode}' mode.")
         else:
@@ -199,10 +205,10 @@ class JumperKernel(IPythonKernel):
             self.multicell_cellcount += 1
             max_line_len = max(len(line) for line in code.split('\n'))
             self.multicell_code += f"print('Executing cell {self.multicell_cellcount}')\n" + \
-                                f"print('''{code}''')\n" + \
-                                f"print('-' * {max_line_len})\n" + \
-                                f"{code}\n" + \
-                                f"print('''\n''')\n"
+                                   f"print('''{code}''')\n" + \
+                                   f"print('-' * {max_line_len})\n" + \
+                                   f"{code}\n" + \
+                                   f"print('''\n''')\n"
             self.cell_output(
                 f'Cell marked for multicell mode. It will be executed at position {self.multicell_cellcount}')
         return self.standard_reply()
@@ -255,7 +261,7 @@ class JumperKernel(IPythonKernel):
                                             import scorep
                                             """))
             self.cell_output('Started converting to Python script. See files:\n' +
-                            self.writefile_bash_name + '\n' + self.writefile_python_name + '\n')
+                             self.writefile_bash_name + '\n' + self.writefile_python_name + '\n')
         elif self.mode == KernelMode.WRITEFILE:
             self.cell_output(f'KernelWarning: {KernelMode.WRITEFILE} mode has already been enabled', 'stderr')
         else:
@@ -356,16 +362,20 @@ class JumperKernel(IPythonKernel):
                             min(mem_util)) + "\t MAX: " + "{:.2f}".format(max(mem_util)) + "\n", 'stdout')
 
                 if len(io_ops_read) > 0:
-                    self.cell_output("IO Ops (excl.) Read          \tTotal: " + "{:.0f}".format(io_ops_read[-1]) + "\n", 'stdout')
+                    self.cell_output("IO Ops (excl.) Read          \tTotal: " + "{:.0f}".format(io_ops_read[-1]) + "\n",
+                                     'stdout')
 
                 if len(io_ops_write) > 0:
-                    self.cell_output("               Write         \tTotal: " + "{:.0f}".format(io_ops_write[-1]) + "\n", 'stdout')
+                    self.cell_output(
+                        "               Write         \tTotal: " + "{:.0f}".format(io_ops_write[-1]) + "\n", 'stdout')
 
                 if len(io_bytes_read) > 0:
-                    self.cell_output("IO Bytes (excl.) Read        \tTotal: " + "{:.2f}".format(io_bytes_read[-1]) + "\n", 'stdout')
+                    self.cell_output(
+                        "IO Bytes (excl.) Read        \tTotal: " + "{:.2f}".format(io_bytes_read[-1]) + "\n", 'stdout')
 
                 if len(io_bytes_write) > 0:
-                    self.cell_output("                 Write       \tTotal: " + "{:.2f}".format(io_bytes_write[-1]) + "\n", 'stdout')
+                    self.cell_output(
+                        "                 Write       \tTotal: " + "{:.2f}".format(io_bytes_write[-1]) + "\n", 'stdout')
 
                 if gpu_util[0] and gpu_mem[0]:
                     self.gpu_avail = True
@@ -446,16 +456,22 @@ class JumperKernel(IPythonKernel):
         # Run in a "silent" way to not increase cells counter
         if self.pershelper.mode == 'disk':
             reply_status_dump = await super().do_execute(self.pershelper.jupyter_dump(), silent, store_history=False,
-                                                    user_expressions=user_expressions, allow_stdin=allow_stdin, cell_id=cell_id)
+                                                         user_expressions=user_expressions, allow_stdin=allow_stdin,
+                                                         cell_id=cell_id)
             if reply_status_dump['status'] != 'ok':
                 self.ghost_cell_error(reply_status_dump, "KernelError: Failed to pickle notebook's persistence.")
                 return reply_status_dump
-            
+
         # Launch subprocess with Jupyter notebook environment
         cmd = [PYTHON_EXECUTABLE, "-m", "scorep"] + \
-            self.scorep_binding_args + [scorep_script_name]
+              self.scorep_binding_args + [scorep_script_name]
         proc_env = self.scorep_env.copy()
-        proc_env.update({'PATH': os.environ['PATH'], 'PYTHONUNBUFFERED': 'x'}) # scorep path, subprocess observation
+        proc_env.update({'PATH': os.environ['PATH'], 'PYTHONUNBUFFERED': 'x'})  # scorep path, subprocess observation
+
+        #determine datetime for figuring out scorep path after execution
+        dt = datetime.datetime.now()
+        hour = dt.strftime("%H")
+        minute = dt.strftime("%M")
 
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=proc_env)
         self.perfdata_handler.start_perfmonitor(proc.pid)
@@ -463,7 +479,8 @@ class JumperKernel(IPythonKernel):
         # concurrently to the running subprocess
         if self.pershelper.mode == 'memory':
             reply_status_dump = await super().do_execute(self.pershelper.jupyter_dump(), silent, store_history=False,
-                                                        user_expressions=user_expressions, allow_stdin=allow_stdin, cell_id=cell_id)
+                                                         user_expressions=user_expressions, allow_stdin=allow_stdin,
+                                                         cell_id=cell_id)
             if reply_status_dump['status'] != 'ok':
                 self.ghost_cell_error(reply_status_dump, "KernelError: Failed to pickle notebook's persistence.")
                 return reply_status_dump
@@ -500,18 +517,21 @@ class JumperKernel(IPythonKernel):
                 self.pershelper.postprocess()
                 self.cell_output('KernelError: Cell execution failed, cell persistence was not recorded.', 'stderr')
                 return self.standard_reply()
-            
+
         # os_environ_.clear()
         # sys_path_.clear()
 
         # Ghost cell - load subprocess persistence back to Jupyter notebook
         # Run in a "silent" way to not increase cells counter
-        reply_status_update = await super().do_execute(self.pershelper.jupyter_update(code), silent, store_history=False,
-                                                    user_expressions=user_expressions, allow_stdin=allow_stdin, cell_id=cell_id)
+        reply_status_update = await super().do_execute(self.pershelper.jupyter_update(code), silent,
+                                                       store_history=False,
+                                                       user_expressions=user_expressions, allow_stdin=allow_stdin,
+                                                       cell_id=cell_id)
         if reply_status_update['status'] != 'ok':
-            self.ghost_cell_error(reply_status_update, "KernelError: Failed to load cell's persistence to the notebook.")
+            self.ghost_cell_error(reply_status_update,
+                                  "KernelError: Failed to load cell's persistence to the notebook.")
             return reply_status_update
-        
+
         # In memory mode, subprocess terminates once jupyter_update is executed and pipe is closed
         if self.pershelper.mode == 'memory':
             if proc.returncode:
@@ -527,13 +547,25 @@ class JumperKernel(IPythonKernel):
         else:
             # Find last creasted directory with scorep* name
             # TODO: Directory isn't created locally when running scorep-collector
-            scorep_dirs = [d for d in os.listdir('.') if os.path.isdir(d) and 'scorep' in d]
-            if scorep_dirs:
-                scorep_folder = max(scorep_dirs, key=os.path.getmtime)
+            max_iterations = 5
+            while max_iterations > 0:
+                # regular scorep folders always: scorep-YYYYMMDD_HHMM_XXXXXXX
+                scorep_dirs = [d for d in os.listdir('.') if os.path.isdir(d) and 'scorep' in d and "_" in d]
+                if scorep_dirs:
+                    scorep_folder = max(scorep_dirs, key=os.path.getmtime)
+                    folder_time = int(scorep_folder.split("_")[1])
+                    start_time = int(hour+minute)
+                    if folder_time >= start_time:
+                        break
+                    time.sleep(1)
+                    max_iterations -= 1
+
+            if max_iterations == 0:
+                self.cell_output("KernelWarning: Path of Instrumentation results could not be determined or were not "
+                                 "saved locally.", 'stderr')
+            else:
                 self.cell_output(
                     f"Instrumentation results can be found in {os.getcwd()}/{scorep_folder}")
-            else:
-                self.cell_output("KernelWarning: Instrumentation results were not saved locally.", 'stderr')
 
         self.pershelper.postprocess()
         if performance_data_nodes:
@@ -571,36 +603,42 @@ class JumperKernel(IPythonKernel):
             return self.standard_reply()
         '''
         if code.startswith('%%display_graph_for_last'):
-            perfvis.draw_performance_graph(self.nodelist, self.perfdata_handler.get_perfdata_history()[-1], self.gpu_avail)
+            perfvis.draw_performance_graph(self.nodelist, self.perfdata_handler.get_perfdata_history()[-1],
+                                           self.gpu_avail)
             return self.standard_reply()
         elif code.startswith('%%display_graph_for_index'):
-            if len(code.split(' '))==1:
+            if len(code.split(' ')) == 1:
                 self.cell_output("No index specified. Use: %%display_graph_for_index index", 'stdout')
             index = int(code.split(' ')[1])
-            if index>=len(self.perfdata_handler.get_perfdata_history()):
-                self.cell_output("Tracked only " + str(len(self.perfdata_handler.get_perfdata_history())) + " cells. This index is not available.")
+            if index >= len(self.perfdata_handler.get_perfdata_history()):
+                self.cell_output("Tracked only " + str(
+                    len(self.perfdata_handler.get_perfdata_history())) + " cells. This index is not available.")
             else:
-                perfvis.draw_performance_graph(self.nodelist, self.perfdata_handler.get_perfdata_history()[index], self.gpu_avail)
+                perfvis.draw_performance_graph(self.nodelist, self.perfdata_handler.get_perfdata_history()[index],
+                                               self.gpu_avail)
             return self.standard_reply()
         elif code.startswith('%%display_graph_for_all'):
-            perfvis.draw_performance_graph(self.nodelist, self.perfdata_handler.get_perfdata_aggregated(), self.gpu_avail)
+            perfvis.draw_performance_graph(self.nodelist, self.perfdata_handler.get_perfdata_aggregated(),
+                                           self.gpu_avail)
             return self.standard_reply()
 
         elif code.startswith('%%display_code_for_index'):
-            if len(code.split(' '))==1:
+            if len(code.split(' ')) == 1:
                 self.cell_output("No index specified. Use: %%display_code_for_index index", 'stdout')
             index = int(code.split(' ')[1])
             if index >= len(self.perfdata_handler.get_perfdata_history()):
-                self.cell_output("Tracked only " + str(len(self.perfdata_handler.get_perfdata_history())) + " cells. This index is not available.")
+                self.cell_output("Tracked only " + str(
+                    len(self.perfdata_handler.get_perfdata_history())) + " cells. This index is not available.")
             else:
-                self.cell_output("Cell timestamp: " + str(self.perfdata_handler.get_code_history()[index][0]) + "\n--\n", 'stdout')
+                self.cell_output(
+                    "Cell timestamp: " + str(self.perfdata_handler.get_code_history()[index][0]) + "\n--\n", 'stdout')
                 self.cell_output(self.perfdata_handler.get_code_history()[index][1], 'stdout')
             return self.standard_reply()
         elif code.startswith('%%display_code_history'):
             show(pd.DataFrame(self.perfdata_handler.get_code_history(), columns=["timestamp", "code"]).reset_index())
             return self.standard_reply()
         elif code.startswith('%%perfdata_to_variable'):
-            if len(code.split(' '))==1:
+            if len(code.split(' ')) == 1:
                 self.cell_output("No variable to export specified. Use: %%perfdata_to_variable myvar", 'stdout')
             else:
                 varname = code.split(' ')[1]
@@ -608,7 +646,7 @@ class JumperKernel(IPythonKernel):
                 self.cell_output("Exported performance data to " + str(varname) + " variable", 'stdout')
             return self.standard_reply()
         elif code.startswith('%%perfdata_to_json'):
-            if len(code.split(' '))==1:
+            if len(code.split(' ')) == 1:
                 self.cell_output("No filename to export specified. Use: %%perfdata_to_variable myfile", 'stdout')
             else:
                 filename = code.split(' ')[1]
@@ -636,7 +674,8 @@ class JumperKernel(IPythonKernel):
             if self.mode == KernelMode.MULTICELL:
                 self.mode = KernelMode.DEFAULT
                 try:
-                    reply_status = await self.scorep_execute(self.multicell_code, silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
+                    reply_status = await self.scorep_execute(self.multicell_code, silent, store_history,
+                                                             user_expressions, allow_stdin, cell_id=cell_id)
                 except:
                     self.cell_output("KernelError: Multicell execution failed.", 'stderr')
                     return self.standard_reply()
@@ -655,7 +694,8 @@ class JumperKernel(IPythonKernel):
             return self.end_writefile()
         elif code.startswith('%%execute_with_scorep'):
             if self.mode == KernelMode.DEFAULT:
-                return await self.scorep_execute(code.split("\n", 1)[1], silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
+                return await self.scorep_execute(code.split("\n", 1)[1], silent, store_history, user_expressions,
+                                                 allow_stdin, cell_id=cell_id)
             elif self.mode == KernelMode.MULTICELL:
                 return self.append_multicellmode(magics_cleanup(code.split("\n", 1)[1]))
             elif self.mode == KernelMode.WRITEFILE:
@@ -664,7 +704,8 @@ class JumperKernel(IPythonKernel):
             if self.mode == KernelMode.DEFAULT:
                 self.pershelper.parse(magics_cleanup(code), 'jupyter')
                 self.perfdata_handler.start_perfmonitor(os.getpid())
-                parent_ret = await super().do_execute(code, silent, store_history, user_expressions, allow_stdin, cell_id=cell_id)
+                parent_ret = await super().do_execute(code, silent, store_history, user_expressions, allow_stdin,
+                                                      cell_id=cell_id)
                 performance_data_nodes, duration = self.perfdata_handler.end_perfmonitor(code)
                 if performance_data_nodes:
                     self.report_perfdata(performance_data_nodes, duration)
@@ -681,4 +722,5 @@ class JumperKernel(IPythonKernel):
 
 if __name__ == '__main__':
     from ipykernel.kernelapp import IPKernelApp
+
     IPKernelApp.launch_instance(kernel_class=JumperKernel)

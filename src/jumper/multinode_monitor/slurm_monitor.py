@@ -2,7 +2,7 @@ import re
 import subprocess
 import sys
 import os
-from pyperf_jupyter.parallel_monitor.abstract_monitor import AbstractMonitor
+from jumper.multinode_monitor.abstract_monitor import AbstractMonitor
 
 class Slurm_Monitor(AbstractMonitor):
 
