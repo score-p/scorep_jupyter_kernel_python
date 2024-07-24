@@ -3,8 +3,8 @@ name: black-action flake8 Lint
 on: [push, pull_request]
 
 jobs:
-  linter_name:
-    name: runner / black formatter
+  black-formatter:
+    name: black formatter
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -12,6 +12,7 @@ jobs:
         with:
           black_args: ". --check"
   flake8-lint:
+    needs: black-formatter
     runs-on: ubuntu-latest
     name: Lint
     steps:
