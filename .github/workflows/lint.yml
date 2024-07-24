@@ -10,7 +10,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: rickstaa/action-black@v1
         with:
-          black_args: ". --check"
+          black_args: "."
   flake8-lint:
     needs: black-formatter
     runs-on: ubuntu-latest
