@@ -11,10 +11,15 @@ class BalancedDistributionIterator(Iterable):
 
     def _balanced_distribution(self, obj):
         if isinstance(obj, dict):
-            size_items = sorted((sys.getsizeof(value), key) for key, value in obj.items())
+            size_items = sorted(
+                (sys.getsizeof(value), key) for key, value in obj.items()
+            )
             bins = [set() for _ in range(self.n_bins)]
         elif isinstance(obj, list):
-            size_items = sorted((sys.getsizeof(value), index) for index, value in enumerate(obj))
+            size_items = sorted(
+                (sys.getsizeof(value), index)
+                for index, value in enumerate(obj)
+            )
             bins = [[] for _ in range(self.n_bins)]
         else:
             raise TypeError("Object must be a dictionary or a list")
@@ -22,7 +27,11 @@ class BalancedDistributionIterator(Iterable):
         sizes = [0] * self.n_bins
         for size, key_or_index in reversed(size_items):
             min_index = sizes.index(min(sizes))
-            bins[min_index].add(key_or_index) if isinstance(obj, dict) else bins[min_index].append(key_or_index)
+            (
+                bins[min_index].add(key_or_index)
+                if isinstance(obj, dict)
+                else bins[min_index].append(key_or_index)
+            )
             sizes[min_index] += size
 
         return bins, [item for _, item in size_items]
