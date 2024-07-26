@@ -1,7 +1,7 @@
 import os
 import stat
 import multiprocessing
-from parallel_marshall.balancedDistributionIterator import (
+from parallel_marshall.balanced_distribution_iterator import (
     BalancedDistributionIterator,
 )
 import importlib
@@ -89,13 +89,6 @@ def dump_subobj(subobj, subobj_path):
 
 # sequential loading of parallel marshalled data
 def load(file):
-    # check if there are multiple workers
-    if not os.path.exists(f"{file.name}_0"):
-        # if not, dumped data should be in file, just load it
-        return serializer_backend.load(file)
-
-    # otherwise, file should contain the paths for the different workers
-    # first unblock of dumper
     logger.debug("Loader started")
     paths = file.read().decode("utf-8").splitlines()
     file.close()

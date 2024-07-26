@@ -103,7 +103,7 @@ class PersHelper:
             "import sys\n"
             "import os\n"
             f"import {self.serializer}\n"
-            "from jumper.userpersistence import dump_runtime,dump_variables,"
+            "from jumper.userpersistence import dump_runtime,dump_variables\n"
             "dump_runtime(os.environ, sys.path,"
             f"'{self.paths['jupyter']['os_environ']}',"
             f"'{self.paths['jupyter']['sys_path']}',{self.serializer})\n"
@@ -131,7 +131,7 @@ class PersHelper:
             f"{self.jupyter_definitions}"
             f"load_variables(globals(),'{self.paths['jupyter']['var']}',"
             f"{self.serializer})\n"
-            f"{code}+\n"
+            f"{code}\n"
         )
 
         # In memory mode, signal subprocess output observer in kernel to
