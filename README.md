@@ -1,4 +1,6 @@
 [![Unit Tests](https://github.com/score-p/scorep_jupyter_kernel_python/actions/workflows/unit_test.yml/badge.svg)](https://github.com/score-p/scorep_jupyter_kernel_python/actions/workflows/unit_test.yml)
+[![Formatting](https://github.com/score-p/scorep_jupyter_kernel_python/actions/workflows/formatter.yml/badge.svg)](https://github.com/score-p/scorep_jupyter_kernel_python/actions/workflows/formatter.yml)
+[![Static Analysis](https://github.com/score-p/scorep_jupyter_kernel_python/actions/workflows/linter.yml/badge.svg)](https://github.com/score-p/scorep_jupyter_kernel_python/actions/workflows/linter.yml)
 
 # The Score-P Python Jupyter Kernel
 This is the Score-P Python Kernel that enables you to execute Python code in Jupyter Notebooks with [Score-P](https://score-p.org/).
