@@ -9,7 +9,7 @@ on:
 jobs:
   flake8-lint:
     runs-on: ubuntu-latest
-    name: Lint
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Check out source repository
         uses: actions/checkout@v3
