@@ -1,8 +1,8 @@
-name: flake8 Lint
+name: Linter
 
 on:
   workflow_run:
-    workflows: [black formatter]
+    workflows: [Formatter]
     types:
       - completed
 

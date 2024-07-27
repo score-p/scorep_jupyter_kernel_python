@@ -1,10 +1,9 @@
-name: black formatter
+name: Formatter
 
 on: [push, pull_request]
 
 jobs:
   black-formatter:
-    name: black formatter
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
