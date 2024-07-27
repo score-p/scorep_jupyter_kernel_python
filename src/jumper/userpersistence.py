@@ -212,10 +212,10 @@ def dump_runtime(
         if not k.startswith("SCOREP_PYTHON_BINDINGS_")
     }
 
-    with open(os_environ_dump_, "wb") as file:
+    with os.fdopen(os.open(os_environ_dump_, os.O_WRONLY | os.O_CREAT), 'wb') as file:
         dill.dump(filtered_os_environ_, file)
 
-    with open(sys_path_dump_, "wb") as file:
+    with os.fdopen(os.open(sys_path_dump_, os.O_WRONLY | os.O_CREAT), 'wb') as file:
         dill.dump(sys_path_, file)
 
 
@@ -232,7 +232,7 @@ def dump_variables(variables_names, globals_, var_dump_, serializer):
         if non_persistent_class in globals().keys():
             user_variables[el].__class__ = globals()[non_persistent_class]
 
-    with open(var_dump_, "wb") as file:
+    with os.fdopen(os.open(var_dump_, os.O_WRONLY | os.O_CREAT), 'wb') as file:
         serializer.dump(user_variables, file)
 
 
@@ -242,10 +242,10 @@ def load_runtime(
     loaded_os_environ_ = {}
     loaded_sys_path_ = []
 
-    with open(os_environ_dump_, "rb") as file:
+    with os.fdopen(os.open(os_environ_dump_, os.O_RDONLY), 'rb') as file:
         loaded_os_environ_ = dill.load(file)
 
-    with open(sys_path_dump_, "rb") as file:
+    with os.fdopen(os.open(sys_path_dump_, os.O_RDONLY), 'rb') as file:
         loaded_sys_path_ = dill.load(file)
 
     # os_environ_.clear()
@@ -256,7 +256,7 @@ def load_runtime(
 
 
 def load_variables(globals_, var_dump_, serializer):
-    with open(var_dump_, "rb") as file:
+    with os.fdopen(os.open(var_dump_, os.O_RDONLY), 'rb') as file:
         obj = serializer.load(file)
     globals_.update(obj)
 

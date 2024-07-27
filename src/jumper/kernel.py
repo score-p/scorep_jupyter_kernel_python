@@ -314,7 +314,7 @@ class JumperKernel(IPythonKernel):
                 os.path.realpath("") + "/" + self.writefile_base_name + ".py"
             )
 
-            with open(self.writefile_bash_name, "w+") as bash_script:
+            with os.fdopen(os.open(self.writefile_bash_name, os.O_WRONLY | os.O_CREAT), 'w') as bash_script:
                 bash_script.write(
                     dedent(
                         f"""
@@ -326,7 +326,7 @@ class JumperKernel(IPythonKernel):
                         """
                     )
                 )
-            with open(self.writefile_python_name, "w+") as python_script:
+            with os.fdopen(os.open(self.writefile_python_name, os.O_WRONLY | os.O_CREAT), 'w') as python_script:
                 python_script.write(
                     dedent(
                         f"""
@@ -367,13 +367,13 @@ class JumperKernel(IPythonKernel):
         """
         if self.mode == KernelMode.WRITEFILE:
             if explicit_scorep or self.writefile_multicell:
-                with open(self.writefile_python_name, "a") as python_script:
+                with os.fdopen(os.open(self.writefile_python_name, os.O_WRONLY | os.O_APPEND), 'a') as python_script:
                     python_script.write(code + "\n")
                 self.cell_output(
                     "Python commands with instrumentation recorded."
                 )
             else:
-                with open(self.writefile_python_name, "a") as python_script:
+                with os.fdopen(os.open(self.writefile_python_name, os.O_WRONLY | os.O_APPEND), 'a') as python_script:
                     code = "".join(
                         ["    " + line + "\n" for line in code.split("\n")]
                     )
@@ -392,7 +392,7 @@ class JumperKernel(IPythonKernel):
         # TODO: check for os path existence
         if self.mode == KernelMode.WRITEFILE:
             self.mode = KernelMode.DEFAULT
-            with open(self.writefile_bash_name, "a") as bash_script:
+            with os.fdopen(os.open(self.writefile_bash_name, os.O_WRONLY | os.O_APPEND), 'a') as bash_script:
                 bash_script.write(
                     f"{' '.join(self.writefile_scorep_env)} "
                     f"{PYTHON_EXECUTABLE} -m scorep "
@@ -626,7 +626,7 @@ class JumperKernel(IPythonKernel):
         # Transmit user persistence and updated sys.path from Jupyter
         # notebook to subprocess After running the code, transmit subprocess
         # persistence back to Jupyter notebook
-        with open(scorep_script_name, "w") as file:
+        with os.fdopen(os.open(scorep_script_name, os.O_WRONLY | os.O_CREAT), 'w') as file:
             file.write(self.pershelper.subprocess_wrapper(code))
 
         # For disk mode use implicit synchronization between kernel and
@@ -656,9 +656,13 @@ class JumperKernel(IPythonKernel):
             + [scorep_script_name]
         )
         proc_env = self.scorep_env.copy()
-        proc_env.update(
-            {"PATH": os.environ["PATH"], "PYTHONUNBUFFERED": "x"}
-        )  # scorep path, subprocess observation
+        proc_env.update({'PATH': os.environ.get('PATH', ''),
+                         'LD_LIBRARY_PATH':
+                             os.environ.get('LD_LIBRARY_PATH', ''),
+                         'PYTHONPATH':
+                             os.environ.get('PYTHONPATH', ''),
+                         'PYTHONUNBUFFERED': 'x'})
+        # scorep path, subprocess observation
 
         # determine datetime for figuring out scorep path after execution
         dt = datetime.datetime.now()
