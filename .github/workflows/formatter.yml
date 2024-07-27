@@ -1,0 +1,12 @@
+name: Formatter
+
+on: [push, pull_request]
+
+jobs:
+  formatter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rickstaa/action-black@v1
+        with:
+          black_args: "-l 79 ."
