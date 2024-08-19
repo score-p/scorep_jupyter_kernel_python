@@ -27,7 +27,7 @@ dependencies = [
   "itables",
   "matplotlib",
   "pandas",
-  "ipywidgtes",
+  "ipywidgets",
   "pynvml" # we need that only for Nvidia GPU systems
 ]
 
