@@ -3,7 +3,7 @@
 [![Static Analysis](https://github.com/score-p/scorep_jupyter_kernel_python/actions/workflows/linter.yml/badge.svg)](https://github.com/score-p/scorep_jupyter_kernel_python/actions/workflows/linter.yml)
 
 <p align="center">
-<img width="450" src="doc/jumper_logo2.png"/>
+<img width="450" src="doc/JUmPER01.png"/>
 </p>
 
 # A Jupyter Kernel for Performance Engineering
@@ -52,6 +52,7 @@ The kernel will then be installed in your active python environment.
 You can select the kernel in Jupyter as `jumper`.
 
 **For using the Score-P features of the kernel you need a proper Score-P installation.**
+Note: this is not required for the monitoring feature of system metrics.
 
 ```
 pip install scorep
@@ -135,12 +136,12 @@ Set the Score-P Python bindings arguments. For a documentation of arguments, see
 
 ![](doc/pythonBindings_setup.png)
 
-`%%serializer_settings`
+`%%marshalling_settings`
 
-Set serializer used for persistence and mode of communicating persistence between notebook and subprocess. Currently available serializers: `dill`, `cloudpickle`; modes of communication: `disk`, `memory`. If no arguments were provided, will print current configuration. Use:
+Set marshaller/serializer used for persistence and mode of communicating persistence between notebook and subprocess. Currently tested marshallers: `dill`, `cloudpickle`, `parallel_marshall`; modes of communication: `disk`, `memory`. If no arguments were provided, will print current configuration. Use:
 ```
-%%serializer_settings
-SERIALIZER=[dill,cloudpickle]
+%%marshalling_settings
+MARSHALLER=[dill,cloudpickle]
 MODE=[disk,memory]
 ```
 

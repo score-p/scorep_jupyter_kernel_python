@@ -11,10 +11,10 @@ scorep_script_name = "scorep_script.py"
 
 
 class PersHelper:
-    def __init__(self, serializer="dill", mode="memory"):
+    def __init__(self, marshaller="dill", mode="memory"):
         self.jupyter_definitions = ""
         self.jupyter_variables = []
-        self.serializer = serializer
+        self.marshaller = marshaller
         self.mode = mode
         self.subprocess_definitions = ""
         self.subprocess_variables = []
@@ -82,12 +82,12 @@ class PersHelper:
         if os.path.exists(scorep_script_name):
             os.remove(scorep_script_name)
 
-    def set_serializer(self, serializer):
-        # TODO: valid serializers should not be configured in code but via an
+    def set_marshaller(self, marshaller):
+        # TODO: valid marshallers should not be configured in code but via an
         # environment variable
-        valid_serializers = {"dill", "cloudpickle", "parallel_marshall"}
-        return serializer in valid_serializers and (
-            setattr(self, "serializer", serializer) or True
+        valid_marshallers = {"dill", "cloudpickle", "parallel_marshall"}
+        return marshaller in valid_marshallers and (
+            setattr(self, "marshaller", marshaller) or True
         )
 
     def set_mode(self, mode):
@@ -102,14 +102,14 @@ class PersHelper:
         jupyter_dump_ = (
             "import sys\n"
             "import os\n"
-            f"import {self.serializer}\n"
+            f"import {self.marshaller}\n"
             "from jumper.userpersistence import dump_runtime,dump_variables\n"
             "dump_runtime(os.environ, sys.path,"
             f"'{self.paths['jupyter']['os_environ']}',"
-            f"'{self.paths['jupyter']['sys_path']}',{self.serializer})\n"
+            f"'{self.paths['jupyter']['sys_path']}',{self.marshaller})\n"
             f"dump_variables({str(self.jupyter_variables)},globals(),"
             f"'{self.paths['jupyter']['var']}',"
-            f"{self.serializer})"
+            f"{self.marshaller})"
         )
 
         return jupyter_dump_
@@ -122,15 +122,15 @@ class PersHelper:
         subprocess_code = (
             "import sys\n"
             "import os\n"
-            f"import {self.serializer}\n"
+            f"import {self.marshaller}\n"
             "from jumper.userpersistence import dump_runtime,"
             "dump_variables, load_runtime, load_variables\n"
             "load_runtime(os.environ, sys.path,"
             f"'{self.paths['jupyter']['os_environ']}',"
-            f"'{self.paths['jupyter']['sys_path']}',{self.serializer})\n"
+            f"'{self.paths['jupyter']['sys_path']}',{self.marshaller})\n"
             f"{self.jupyter_definitions}"
             f"load_variables(globals(),'{self.paths['jupyter']['var']}',"
-            f"{self.serializer})\n"
+            f"{self.marshaller})\n"
             f"{code}\n"
         )
 
@@ -149,10 +149,10 @@ class PersHelper:
             "dump_runtime(os.environ, sys.path,"
             f"'{self.paths['subprocess']['os_environ']}',"
             f"'{self.paths['subprocess']['sys_path']}',"
-            f"{self.serializer})\n"
+            f"{self.marshaller})\n"
             f"dump_variables({str(self.subprocess_variables)},"
             f"globals(),'{self.paths['subprocess']['var']}',"
-            f"{self.serializer})\n"
+            f"{self.marshaller})\n"
         )
 
         return subprocess_code
@@ -169,10 +169,10 @@ class PersHelper:
             "from jumper.userpersistence import load_runtime, load_variables\n"
             f"load_runtime(os.environ, sys.path,"
             f"'{self.paths['subprocess']['os_environ']}',"
-            f"'{self.paths['subprocess']['sys_path']}',{self.serializer})\n"
+            f"'{self.paths['subprocess']['sys_path']}',{self.marshaller})\n"
             f"{self.jupyter_definitions}"
             f"load_variables(globals(),'{self.paths['subprocess']['var']}', "
-            f"{self.serializer})\n"
+            f"{self.marshaller})\n"
         )
 
         return jupyter_update
@@ -202,7 +202,7 @@ class PersHelper:
 
 
 def dump_runtime(
-    os_environ_, sys_path_, os_environ_dump_, sys_path_dump_, serializer
+    os_environ_, sys_path_, os_environ_dump_, sys_path_dump_, marshaller
 ):
     # Don't dump environment variables set by Score-P bindings.
     # Will force it to re-initialize instead of calling reset_preload()
@@ -219,7 +219,7 @@ def dump_runtime(
         dill.dump(sys_path_, file)
 
 
-def dump_variables(variables_names, globals_, var_dump_, serializer):
+def dump_variables(variables_names, globals_, var_dump_, marshaller):
     user_variables = {
         k: v for k, v in globals_.items() if k in variables_names
     }
@@ -233,11 +233,11 @@ def dump_variables(variables_names, globals_, var_dump_, serializer):
             user_variables[el].__class__ = globals()[non_persistent_class]
 
     with os.fdopen(os.open(var_dump_, os.O_WRONLY | os.O_CREAT), 'wb') as file:
-        serializer.dump(user_variables, file)
+        marshaller.dump(user_variables, file)
 
 
 def load_runtime(
-    os_environ_, sys_path_, os_environ_dump_, sys_path_dump_, serializer
+    os_environ_, sys_path_, os_environ_dump_, sys_path_dump_, marshaller
 ):
     loaded_os_environ_ = {}
     loaded_sys_path_ = []
@@ -255,9 +255,9 @@ def load_runtime(
     sys_path_.extend(loaded_sys_path_)
 
 
-def load_variables(globals_, var_dump_, serializer):
+def load_variables(globals_, var_dump_, marshaller):
     with os.fdopen(os.open(var_dump_, os.O_RDONLY), 'rb') as file:
-        obj = serializer.load(file)
+        obj = marshaller.load(file)
     globals_.update(obj)
 
 

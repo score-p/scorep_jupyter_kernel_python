@@ -3,7 +3,7 @@ from IPython.utils.tempdir import TemporaryDirectory
 import os
 import sys
 import json
-from logo import logo_image
+from jumper.logo import logo_image
 
 kernel_spec = {
     "argv": [sys.executable, "-m", "jumper.kernel", "-f", "{connection_file}"],

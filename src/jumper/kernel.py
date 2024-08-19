@@ -111,41 +111,41 @@ class JumperKernel(IPythonKernel):
             "user_expressions": {},
         }
 
-    def serializer_settings(self, code):
+    def marshaller_settings(self, code):
         """
-        Switch serializer backend used for persistence in kernel.
+        Switch serializer/marshalling backend used for persistence in kernel.
         """
         if self.mode == KernelMode.DEFAULT:
             # Clean files/pipes before switching
             self.pershelper.postprocess()
 
-            serializer_match = re.search(
-                r"SERIALIZER=(\w+)", code.split("\n", 1)[1]
+            marshaller_match = re.search(
+                r"MARSHALLER=(\w+)", code.split("\n", 1)[1]
             )
             mode_match = re.search(r"MODE=(\w+)", code.split("\n", 1)[1])
-            serializer = (
-                serializer_match.group(1) if serializer_match else None
+            marshaller = (
+                marshaller_match.group(1) if marshaller_match else None
             )
             mode = mode_match.group(1) if mode_match else None
 
-            if serializer:
-                if not self.pershelper.set_serializer(serializer):
+            if marshaller:
+                if not self.pershelper.set_marshaller(marshaller):
                     self.cell_output(
-                        f"Serializer '{serializer}' is not recognized, "
-                        f"kernel will use '{self.pershelper.serializer}'.",
+                        f"Marshaller '{marshaller}' is not recognized, "
+                        f"kernel will use '{self.pershelper.marshaller}'.",
                         "stderr",
                     )
                     return self.standard_reply()
             if mode:
                 if not self.pershelper.set_mode(mode):
                     self.cell_output(
-                        f"Serialization mode '{mode}' is not recognized, "
+                        f"Marshalling mode '{mode}' is not recognized, "
                         f"kernel will use '{self.pershelper.mode}'.",
                         "stderr",
                     )
 
             self.cell_output(
-                f"Kernel uses '{self.pershelper.serializer}' serializer in"
+                f"Kernel uses '{self.pershelper.marshaller}' marshaller in"
                 f"'{self.pershelper.mode}' mode."
             )
         else:
@@ -979,7 +979,13 @@ class JumperKernel(IPythonKernel):
         elif code.startswith("%%scorep_python_binding_arguments"):
             return self.set_scorep_pythonargs(code)
         elif code.startswith("%%serializer_settings"):
-            return self.serializer_settings(code)
+            self.cell_output(
+                "Deprecated. Use: %%marshalling_settings\n[MARSHALLER=]\n[MODE=]",
+                "stdout",
+            )
+            return self.standard_reply()
+        elif code.startswith("%%marshalling_settings"):
+            return self.marshaller_settings(code)
         elif code.startswith("%%enable_multicellmode"):
             return self.enable_multicellmode()
         elif code.startswith("%%abort_multicellmode"):

@@ -60,7 +60,9 @@ def dump(obj, file):
     logger.debug("Writer communicated paths")
 
     if workers == 1:
-        serializer_backend.dump(obj, paths[0])
+        with os.fdopen(os.open(paths[0], os.O_WRONLY | os.O_CREAT),
+                       "wb") as f:
+            serializer_backend.dump(obj, f)
         return
 
     # multi processing scheme
