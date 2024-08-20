@@ -1,9 +1,9 @@
 -
   - |-
-    %%serializer_settings
-    SERIALIZER=dill
+    %%marshalling_settings
+    MARSHALLER=dill
     MODE=memory
-  - - "Kernel uses 'dill' serializer in 'memory' mode."
+  - - "Kernel uses 'dill' marshaller in 'memory' mode."
 -
   - |-
     %%execute_with_scorep
@@ -15,10 +15,10 @@
     - "Instrumentation results can be found in test_kernel_tmp/scorep-traces"
 -
   - |-
-    %%serializer_settings
-    SERIALIZER=dill
+    %%marshalling_settings
+    MARSHALLER=dill
     MODE=disk
-  - - "Kernel uses 'dill' serializer in 'disk' mode."
+  - - "Kernel uses 'dill' marshaller in 'disk' mode."
 -
   - |-
     %%execute_with_scorep
@@ -30,10 +30,10 @@
     - "Instrumentation results can be found in test_kernel_tmp/scorep-traces"
 -
   - |-
-    %%serializer_settings
-    SERIALIZER=cloudpickle
+    %%marshalling_settings
+    MARSHALLER=cloudpickle
     MODE=memory
-  - - "Kernel uses 'cloudpickle' serializer in 'memory' mode."
+  - - "Kernel uses 'cloudpickle' marshaller in 'memory' mode."
 -
   - |-
     %%execute_with_scorep
@@ -45,10 +45,10 @@
     - "Instrumentation results can be found in test_kernel_tmp/scorep-traces"
 -
   - |-
-    %%serializer_settings
-    SERIALIZER=cloudpickle
+    %%marshalling_settings
+    MARSHALLER=cloudpickle
     MODE=disk
-  - - "Kernel uses 'cloudpickle' serializer in 'disk' mode."
+  - - "Kernel uses 'cloudpickle' marshaller in 'disk' mode."
 -
   - |-
     %%execute_with_scorep

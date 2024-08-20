@@ -31,7 +31,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.8"
+          python-version: "3.11"
           cache: 'pip'
       - name: Install Python packages
         run: |
@@ -40,11 +40,12 @@ jobs:
           pip install scorep
           pip install jupyter_kernel_test
           pip install pyyaml dill cloudpickle numpy pandas
+          pip install ipywidgets itables matplotlib pynvml
 
-      - name: Build Score-P Python kernel
+      - name: Build JUmPER kernel
         run: |
           pip install .
-          python -m scorep_jupyter.install
+          python -m jumper.install
         
       - name: Run userpersistence tests
         run: |

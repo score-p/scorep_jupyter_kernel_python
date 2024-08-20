@@ -3,12 +3,13 @@ import jupyter_kernel_test as jkt
 import os
 import yaml
 
-tmp_dir = 'test_kernel_tmp/'
+tmp_dir = "test_kernel_tmp/"
+
 
 class KernelTests(jkt.KernelTests):
-    kernel_name = "scorep-python"
+    kernel_name = "jumper"
     language_name = "python"
-    
+
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
@@ -16,7 +17,7 @@ class KernelTests(jkt.KernelTests):
         os.system(f"mkdir {tmp_dir}")
         os.system(f"mkdir {tmp_dir}/scorep-traces")
         return
-    
+
     @classmethod
     def tearDownClass(cls) -> None:
         super().tearDownClass()
@@ -32,7 +33,7 @@ class KernelTests(jkt.KernelTests):
             self.assertEqual(msg["content"]["text"], expected_msg)
 
     def check_from_file(self, filename):
-        with open(filename, 'r') as file:
+        with open(filename, "r") as file:
             cells = yaml.safe_load(file)
         for code, expected_output in cells:
             self.check_stream_output(code, expected_output)
@@ -40,24 +41,25 @@ class KernelTests(jkt.KernelTests):
     # Enumerate tests to ensure proper execution order
     def test_00_scorep_env(self):
         self.check_from_file("tests/kernel/scorep_env.yaml")
-    
+
     def test_01_scorep_pythonargs(self):
         self.check_from_file("tests/kernel/scorep_pythonargs.yaml")
-    
+
     def test_02_ipykernel_exec(self):
         self.check_from_file("tests/kernel/ipykernel_exec.yaml")
-    
+
     def test_03_scorep_exec(self):
         self.check_from_file("tests/kernel/scorep_exec.yaml")
-    
+
     def test_04_persistence(self):
         self.check_from_file("tests/kernel/persistence.yaml")
 
     def test_05_multicell(self):
         self.check_from_file("tests/kernel/multicell.yaml")
-    
+
     def test_06_writemode(self):
         self.check_from_file("tests/kernel/writemode.yaml")
+
 
 if __name__ == "__main__":
     unittest.main()

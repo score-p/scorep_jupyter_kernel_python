@@ -2,10 +2,19 @@
 [![Formatting](https://github.com/score-p/scorep_jupyter_kernel_python/actions/workflows/formatter.yml/badge.svg)](https://github.com/score-p/scorep_jupyter_kernel_python/actions/workflows/formatter.yml)
 [![Static Analysis](https://github.com/score-p/scorep_jupyter_kernel_python/actions/workflows/linter.yml/badge.svg)](https://github.com/score-p/scorep_jupyter_kernel_python/actions/workflows/linter.yml)
 
-# The Score-P Python Jupyter Kernel
-This is the Score-P Python Kernel that enables you to execute Python code in Jupyter Notebooks with [Score-P](https://score-p.org/).
+<p align="center">
+<img width="450" src="doc/JUmPER01.png"/>
+</p>
 
-The kernel uses the [Score-P Python bindings](https://github.com/score-p/scorep_binding_python).
+# A Jupyter Kernel for Performance Engineering
+
+This is the JUmPER Kernel that enables you to:
+
+1. Monitor Jupyter cells and measure system metrics like cpu, gpu, I/O or memory utilization.
+
+2. Instrument and trace or profile Jupyter cells with [Score-P](https://score-p.org/).
+
+For binding to Score-P, the kernel uses the [Score-P Python bindings](https://github.com/score-p/scorep_binding_python). Monitoring does not rely on Score-P and you can use it without a Score-P installation.
 
 
 
@@ -13,8 +22,8 @@ The kernel uses the [Score-P Python bindings](https://github.com/score-p/scorep_
 
 - [Installation](#Installation)
 - [Usage](#Usage)
-  * [Configuration](#Configuring-Score-P-in-Jupyter)
-  * [Basic Execution](#Executing-Cells)
+  * [Monitoring](#Monitoring)
+  * [Score-P Instrumentation](#Score-P-Instrumentation)
   * [Multi-Cell Mode](#Multi-Cell-Mode)
   * [Write Mode](#Write-Mode)
 - [Presentation of Performance Data](#Presentation-of-Performance-Data)
@@ -26,19 +35,11 @@ The kernel uses the [Score-P Python bindings](https://github.com/score-p/scorep_
 
 # Installation
 
-**For using the kernel you need a proper Score-P installation.**
-
-From the Score-P Python bindings:
-
-> You need at least Score-P 5.0, build with `--enable-shared` and the gcc compiler plugin.
-> Please make sure that `scorep-config` is in your `PATH` variable.
-> For Ubuntu LTS systems there is a non-official ppa of Score-P available: https://launchpad.net/~andreasgocht/+archive/ubuntu/scorep .
-
-To install the kernel and all dependencies, including the Python bindings use: 
+To install the kernel and required dependencies for supporting the monitoring features:
 
 ```
-pip install scorep-jupyter
-python -m scorep_jupyter.install
+pip install jumper-kernel
+python -m jumper.install
 ```
 
 You can also build the kernel from source via:
@@ -48,11 +49,79 @@ pip install .
 ```
 
 The kernel will then be installed in your active python environment.
-You can select the kernel in Jupyter as `scorep-python`.
+You can select the kernel in Jupyter as `jumper`.
+
+**For using the Score-P features of the kernel you need a proper Score-P installation.**
+Note: this is not required for the monitoring feature of system metrics.
+
+```
+pip install scorep
+```
+
+From the Score-P Python bindings:
+
+> You need at least Score-P 5.0, build with `--enable-shared` and the gcc compiler plugin.
+> Please make sure that `scorep-config` is in your `PATH` variable.
+> For Ubuntu LTS systems there is a non-official ppa of Score-P available: https://launchpad.net/~andreasgocht/+archive/ubuntu/scorep .
+
 
 # Usage
 
-## Configuring Score-P in Jupyter
+## Monitoring
+
+Every cell that is executed will be monitored by a parallel running process that collects system metrics for CPU, Memory, IO and if available GPU. Besides that, Jumper forwards the execution of that code to the default Python kernel.
+
+The frequency for performance monitoring can be set via the `JUMPER_REPORT_FREQUENCY`environment variable.
+
+```
+%env JUMPER_REPORT_FREQUENCY=2
+```
+
+Additionally, the number of reports required to store performance data can be defined by the `JUMPER_REPORTS_MIN` environment variable.
+
+```
+%env JUMPER_REPORTS_MIN=2
+```
+
+The performance data is recorded in-memory and the kernel provides several magic commands to display and interact with the data:
+
+
+![](doc/code_history.png)
+
+`%%display_code_history`
+
+Shows the history of the code of monitored cells with index and timestamp.
+
+`%%display_code_for_index`
+
+Shows the code for the cell of the selected index.
+
+
+![](doc/monitoring.gif)
+
+`%%display_graph_for_last`
+
+Shows the performance display for the last monitored cell.
+
+`%%display_graph_for_index [index]`
+
+Shows the performance display for the cell of the selected index.
+
+`%%display_graph_for_all`
+
+Shows the accumulated performance display for all monitored cells.
+
+`%%perfdata_to_variable [varname]`
+
+Exports the performance data to a variable
+
+`%%perfdata_to_json [filename]`
+
+Exports the performance data and the code to json files.
+
+## Score-P Instrumentation
+
+### Configuring Score-P in Jupyter
 
 `%%scorep_env`
 
@@ -67,27 +136,17 @@ Set the Score-P Python bindings arguments. For a documentation of arguments, see
 
 ![](doc/pythonBindings_setup.png)
 
-`%%serializer_settings`
+`%%marshalling_settings`
 
-Set serializer used for persistence and mode of communicating persistence between notebook and subprocess. Currently available serializers: `dill`, `cloudpickle`; modes of communication: `disk`, `memory`. If no arguments were provided, will print current configuration. Use:
+Set marshaller/serializer used for persistence and mode of communicating persistence between notebook and subprocess. Currently tested marshallers: `dill`, `cloudpickle`, `parallel_marshall`; modes of communication: `disk`, `memory`. If no arguments were provided, will print current configuration. Use:
 ```
-%%serializer_settings
-SERIALIZER=[dill,cloudpickle]
+%%marshalling_settings
+MARSHALLER=[dill,cloudpickle]
 MODE=[disk,memory]
 ```
 
 When using persistence in `disk` mode, user can also define directory to which serializer output will be saved with `SCOREP_KERNEL_PERSISTENCE_DIR` environment variable.
 
-## Executing Cells
-
-### Without Score-P
-You can execute cells without Score-P as usual:
-
-<img src="doc/no_instrumentation.png" width="800" />
-
-
-
-### With Score-P
 `%%execute_with_scorep`
 
 Executes a cell with Score-P, i.e. it calls `python -m scorep <cell code>`
@@ -152,21 +211,23 @@ Stops the marking process and writes the marked cells in a Python script. Additi
 
 # Presentation of Performance Data
 
-To inspect the collected performance data, use tools as Vampir (Trace) or Cube (Profile).
+For the monitoring data, use the build-in magic commands or build your own visualizations after exporting the data to a variable or json via the introduced magic commands.
+
+To inspect the Score-P collected performance data, use tools as Vampir (Trace) or Cube (Profile).
 
 # Limitations 
 
 ## Serialization Type Support
-For the execution of a cell, the kernel uses the default IPython kernel. For a cell with Score-P it starts a new Python process. Before starting this process, the state of the previous executed cells is persisted using `dill` library (https://github.com/uqfoundation/dill). However: 
+For the execution of a cell, the kernel uses the default IPython kernel. For a cell with Score-P it starts a new Python process. Before starting this process, the state of the previous executed cells is persisted using `dill` (https://github.com/uqfoundation/dill) or `cloudpickle` (https://github.com/cloudpipe/cloudpickle/releases). However:
 
 > `dill` cannot yet pickle these standard types:
 > frame, generator, traceback
 
+Similar yields for cloudpickle. Use the `%%serializer_settings` magic command to switch between both depending on your needs.
 
 ## Overhead
 
 When dealing with big data structures, there might be a big runtime overhead at the beginning and the end of a Score-P cell. This is due to additional data saving and loading processes for persistency in the background. However this does not affect the actual user code and the Score-P measurements.
-
 
 # Future Work
 
@@ -174,7 +235,7 @@ The kernel is still under development. The following is on the agenda:
  
  - Check alternative Python implementations (Stackless/PyPy) for better serialization support
  - Performance data visualizations
- - Overhead reduction
+ - Overhead reduction (we already implemented in-memory communication for persistence handling and plan to have a parallel serializer)
  
 PRs are welcome.
 
