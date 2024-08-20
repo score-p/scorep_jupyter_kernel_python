@@ -42,10 +42,10 @@ jobs:
           pip install pyyaml dill cloudpickle numpy pandas
           pip install ipywidgets itables matplotlib pynvml
 
-      - name: Build Score-P Python kernel
+      - name: Build JUmPER kernel
         run: |
           pip install .
-          python -m pyperf_jupyter.install
+          python -m jumper.install
         
       - name: Run userpersistence tests
         run: |
