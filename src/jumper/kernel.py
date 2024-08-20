@@ -881,10 +881,13 @@ class JumperKernel(IPythonKernel):
                 )
             return self.standard_reply()
         elif code.startswith("%%display_graph_for_all"):
+            data, time_indices = (
+                self.perfdata_handler.get_perfdata_aggregated())
             perfvis.draw_performance_graph(
                 self.nodelist,
-                self.perfdata_handler.get_perfdata_aggregated(),
+                data,
                 self.gpu_avail,
+                time_indices,
             )
             return self.standard_reply()
 

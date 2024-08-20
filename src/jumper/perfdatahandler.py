@@ -100,7 +100,9 @@ class PerformanceDataHandler:
              GPU Util Mean across nodes,
              GPU Mem Mean across nodes]
         """
+        time_indices = []
         for node in range(0, len(self.performance_data_history[0]) - 8):
+            time_indices.append([])
             perfdata_init = self.performance_data_history[0][node]
             # for each cpu and gpu, we need an empty list to be filled
             cpu_util = (
@@ -131,7 +133,7 @@ class PerformanceDataHandler:
             )
 
         # for each cell/code (called perfdata)...
-        for perfdata in self.performance_data_history:
+        for idx, perfdata in enumerate(self.performance_data_history):
             # for each node in this cell/code
             for node in range(0, len(perfdata) - 8):
                 for cpu_index in range(0, len(perfdata[node][0])):
@@ -152,7 +154,12 @@ class PerformanceDataHandler:
                         perfdata[node][7][gpu_index]
                     )
 
-        return perfdata_aggregated
+                # add cell index and the number of measurements
+                # we will use that in the visualization to generate
+                # a color transition in the graphs and add the cell index
+                time_indices[node].append((idx, len(perfdata[node][2])))
+
+        return perfdata_aggregated, time_indices
 
     def parse_perfdata_from_stdout(self, stdout_data_node):
         # might be that parent process pushes to stdout and that output gets
