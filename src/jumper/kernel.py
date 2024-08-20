@@ -145,7 +145,7 @@ class JumperKernel(IPythonKernel):
                     )
 
             self.cell_output(
-                f"Kernel uses '{self.pershelper.marshaller}' marshaller in"
+                f"Kernel uses '{self.pershelper.marshaller}' marshaller in "
                 f"'{self.pershelper.mode}' mode."
             )
         else:

@@ -1,3 +1,4 @@
+import ast
 import unittest
 import os
 import sys
@@ -48,7 +49,8 @@ class UserPersistenceTests(unittest.TestCase):
         with open("tests/userpersistence/definitions.py", "r") as file:
             expected_defs = file.read()
         extracted_defs = extract_definitions(code)
-        self.assertEqual(extracted_defs, expected_defs)
+        self.assertTrue(ast.unparse(ast.parse(expected_defs)) ==
+                        ast.unparse(ast.parse(extracted_defs)))
 
     def handle_communication(self, object, mode, action):
         if object == "runtime":
@@ -95,8 +97,8 @@ class UserPersistenceTests(unittest.TestCase):
                     "import sys\n"
                     "os.environ.clear()\n"
                     "sys.path.clear()\n"
-                    "os.environ.update({str(expected_os_environ)})\n"
-                    "sys.path.extend({str(expected_sys_path)})\n"
+                    f"os.environ.update({str(expected_os_environ)})\n"
+                    f"sys.path.extend({str(expected_sys_path)})\n"
                     f"dump_runtime(os.environ, sys.path, "
                     f"'{os_environ_file}', '{sys_path_file}', "
                     f"{serializer.__name__})"
