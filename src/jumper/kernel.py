@@ -626,7 +626,8 @@ class JumperKernel(IPythonKernel):
         # Transmit user persistence and updated sys.path from Jupyter
         # notebook to subprocess After running the code, transmit subprocess
         # persistence back to Jupyter notebook
-        with os.fdopen(os.open(scorep_script_name, os.O_WRONLY | os.O_CREAT), 'w') as file:
+        with os.fdopen(os.open(scorep_script_name, os.O_WRONLY | os.O_CREAT),
+                       'w') as file:
             file.write(self.pershelper.subprocess_wrapper(code))
 
         # For disk mode use implicit synchronization between kernel and
@@ -720,7 +721,7 @@ class JumperKernel(IPythonKernel):
                     self.cell_output(line)
 
         performance_data_nodes, duration = (
-            self.perfdata_handler.end_perfmonitor(code)
+            self.perfdata_handler.end_perfmonitor()
         )
 
         # In disk mode, subprocess already terminated
@@ -810,6 +811,7 @@ class JumperKernel(IPythonKernel):
         self.pershelper.postprocess()
         if performance_data_nodes:
             self.report_perfdata(performance_data_nodes, duration)
+            self.perfdata_handler.append_code(datetime.datetime.now(), code)
         return self.standard_reply()
 
     async def do_execute(
@@ -921,7 +923,8 @@ class JumperKernel(IPythonKernel):
                 pd.DataFrame(
                     self.perfdata_handler.get_code_history(),
                     columns=["timestamp", "code"],
-                ).reset_index()
+                ).reset_index(), layout={"topStart": "search", "topEnd": None},
+                columnDefs=[{"className": 'dt-left', "targets": 2}],
             )
             return self.standard_reply()
         elif code.startswith("%%perfdata_to_variable"):
@@ -1060,10 +1063,12 @@ class JumperKernel(IPythonKernel):
                     cell_id=cell_id,
                 )
                 performance_data_nodes, duration = (
-                    self.perfdata_handler.end_perfmonitor(code)
+                    self.perfdata_handler.end_perfmonitor()
                 )
                 if performance_data_nodes:
                     self.report_perfdata(performance_data_nodes, duration)
+                    self.perfdata_handler.append_code(datetime.datetime.now(),
+                                                      code)
                 return parent_ret
             elif self.mode == KernelMode.MULTICELL:
                 return self.append_multicellmode(magics_cleanup(code))

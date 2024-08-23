@@ -3,7 +3,6 @@ from statistics import mean
 import pickle
 import codecs
 import time
-from datetime import datetime
 import os
 import subprocess
 import sys
@@ -326,7 +325,7 @@ class PerformanceDataHandler:
 
         self.starttime = time.perf_counter()
 
-    def end_perfmonitor(self, code):
+    def end_perfmonitor(self):
         duration = time.perf_counter() - self.starttime
 
         if self.monitor_module:
@@ -352,6 +351,4 @@ class PerformanceDataHandler:
         performance_data_nodes = self.parse_perfdata_from_stdout(
             stdout_data_node
         )
-        if performance_data_nodes:
-            self.append_code(datetime.now(), code)
         return performance_data_nodes, duration
