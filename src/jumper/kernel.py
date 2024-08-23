@@ -604,6 +604,7 @@ class JumperKernel(IPythonKernel):
     async def scorep_execute(
         self,
         code,
+        code4history,
         silent,
         store_history=True,
         user_expressions=None,
@@ -856,8 +857,8 @@ class JumperKernel(IPythonKernel):
         self.pershelper.postprocess()
         if performance_data_nodes:
             self.report_perfdata(performance_data_nodes, duration)
-            self.perfdata_handler.append_code(datetime.datetime.now(), code,
-                                              time_indices)
+            self.perfdata_handler.append_code(datetime.datetime.now(),
+                                              code4history, time_indices)
         return self.standard_reply()
 
     async def do_execute(
@@ -911,7 +912,7 @@ class JumperKernel(IPythonKernel):
                 sub_idxs = [x[0] for x in time_indices[0]]
                 self.cell_output(f"Cell seemed to be tracked in multi cell"
                                  " mode. Got performance data for the"
-                                 f"following sub cells: {sub_idxs}")
+                                 f" following sub cells: {sub_idxs}")
             perfvis.draw_performance_graph(
                 self.nodelist,
                 self.perfdata_handler.get_perfdata_history()[-1],
@@ -938,7 +939,7 @@ class JumperKernel(IPythonKernel):
                     sub_idxs = [x[0] for x in time_indices[0]]
                     self.cell_output(f"Cell seemed to be tracked in multi cell"
                                      " mode. Got performance data for the"
-                                     f"following sub cells: {sub_idxs}")
+                                     f" following sub cells: {sub_idxs}")
                 perfvis.draw_performance_graph(
                     self.nodelist,
                     self.perfdata_handler.get_perfdata_history()[index],
@@ -1067,7 +1068,9 @@ class JumperKernel(IPythonKernel):
             if self.mode == KernelMode.MULTICELL:
                 self.mode = KernelMode.DEFAULT
                 try:
+                    # second multicell_code should be cleaned for code history
                     reply_status = await self.scorep_execute(
+                        self.multicell_code,
                         self.multicell_code,
                         silent,
                         store_history,
@@ -1098,8 +1101,11 @@ class JumperKernel(IPythonKernel):
             return self.end_writefile()
         elif code.startswith("%%execute_with_scorep"):
             if self.mode == KernelMode.DEFAULT:
+                # second code argument is for history purposes, we want to keep
+                # everything
                 return await self.scorep_execute(
                     code.split("\n", 1)[1],
+                    code,
                     silent,
                     store_history,
                     user_expressions,
