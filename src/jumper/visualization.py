@@ -158,11 +158,12 @@ def plot_graph(ax, metric, perfdata, time_indices=None, color=None):
         start_offset = 0
         last_idx = time_indices[0][-1][0]
 
-        for cell_idx, n_ms in time_indices[0]:
-
+        # for multi cell mode, we might have sub indices
+        for cell_idx, values in enumerate(time_indices[0]):
+            sub_idx, n_ms = values
             target_index = target_index + n_ms
             # don't use offset for last cell
-            if cell_idx == last_idx:
+            if sub_idx == last_idx:
                 transition_offset = 0
             ax.axvspan(x_scale[current_index] + start_offset,
                        x_scale[target_index] +
@@ -175,7 +176,7 @@ def plot_graph(ax, metric, perfdata, time_indices=None, color=None):
             text_y_pos = ax.get_ylim()[0] + (ax.get_ylim()[1] * 0.05)
 
             # add cell index to plot
-            ax.text(text_x_pos, text_y_pos, "#" + str(cell_idx), style='italic',
+            ax.text(text_x_pos, text_y_pos, "#" + str(sub_idx), style='italic',
                     bbox={
                         'facecolor': 'lightgrey', 'alpha': 0.5, 'pad': 2}
                     )

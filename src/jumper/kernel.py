@@ -80,8 +80,8 @@ class JumperKernel(IPythonKernel):
 
         self.mode = KernelMode.DEFAULT
 
-        self.multicell_cellcount = 0
-        self.multicell_code = ""
+        self.multicell_cellcount = -1
+        self.multicell_code = "import time\n"
 
         self.writefile_base_name = "jupyter_to_script"
         self.writefile_bash_name = ""
@@ -198,8 +198,9 @@ class JumperKernel(IPythonKernel):
         """
         if self.mode == KernelMode.DEFAULT:
             for scorep_param in code.split("\n")[1:]:
-                key, val = scorep_param.split("=")
-                self.scorep_env[key] = val
+                if not scorep_param == "":
+                    key, val = scorep_param.split("=")
+                    self.scorep_env[key] = val
             self.cell_output(
                 "Score-P environment set successfully: " + str(self.scorep_env)
             )
@@ -264,6 +265,7 @@ class JumperKernel(IPythonKernel):
                 f"print('Executing cell {self.multicell_cellcount}')\n"
                 + f"print('''{code}''')\n"
                 + f"print('-' * {max_line_len})\n"
+                + f"print('MCM_TS'+str(time.time()))\n"
                 + f"{code}\n"
                 + "print('''\n''')\n"
             )
@@ -279,8 +281,8 @@ class JumperKernel(IPythonKernel):
         """
         if self.mode == KernelMode.MULTICELL:
             self.mode = KernelMode.DEFAULT
-            self.multicell_code = ""
-            self.multicell_cellcount = 0
+            self.multicell_code = "import time\n"
+            self.multicell_cellcount = -1
             self.cell_output("Multicell mode aborted.")
         else:
             self.cell_output(
@@ -705,6 +707,8 @@ class JumperKernel(IPythonKernel):
         # Empty cell output, required for interactive output
         # e.g. tqdm for-loop progress bar
         self.cell_output("\0")
+
+        multicellmode_timestamps = []
         while True:
             chunk = b"" + proc.stdout.read(READ_CHUNK_SIZE)
             if chunk == b"":
@@ -718,7 +722,48 @@ class JumperKernel(IPythonKernel):
                 else:
                     incomplete_line = ""
                 for line in lines:
+                    if "MCM_TS" in line:
+                        multicellmode_timestamps.append(line)
+                        continue
                     self.cell_output(line)
+
+        # for multiple nodes, we have to add more lists here, one list per node
+        # this is required to be in line with the performance data aggregation
+        # for the %%display_graph_for_all magic command, which does not have
+        # explicit timestamps, but aligns the colorization of the plot based
+        # on the number of perf measurements we have, which is individual per
+        # node
+        time_indices = None
+        if len(multicellmode_timestamps):
+            # retrieve the index this cell will have in the global history
+            sub_idx = len(self.perfdata_handler.get_code_history())
+            # append to have end of last code fragment
+            multicellmode_timestamps.append("MCM_TS"+str(time.time()))
+            time_indices = [[]]
+            nb_ms = 0.0
+            for idx, ts_string in enumerate(multicellmode_timestamps[:-1]):
+                secs = (float(multicellmode_timestamps[idx+1][6:]) -
+                        float(ts_string[6:]))
+                nb_ms += (secs /
+                          int(os.environ.get("JUMPER_REPORT_FREQUENCY", 2)))
+                if nb_ms >= 1.0:
+                    # only consider if we have measurements
+                    time_indices[0].append((str(sub_idx)+"_"+str(idx), nb_ms))
+                    nb_ms %= 1.0
+            # add time for last to last measurement
+            if nb_ms >= 0.0:
+                sub_idx, val = time_indices[0][-1]
+                time_indices[0][-1] = (sub_idx, val + nb_ms)
+
+            nb_ms = 0.0
+            for idx, val in enumerate(time_indices[0]):
+                sub_idx, ms = val
+                nb_ms += ms % 1.0
+                ms = int(ms)
+                if nb_ms >= 1.0:
+                    ms += 1
+                    nb_ms %= 1.0
+                time_indices[0][idx] = (sub_idx, ms)
 
         performance_data_nodes, duration = (
             self.perfdata_handler.end_perfmonitor()
@@ -811,7 +856,8 @@ class JumperKernel(IPythonKernel):
         self.pershelper.postprocess()
         if performance_data_nodes:
             self.report_perfdata(performance_data_nodes, duration)
-            self.perfdata_handler.append_code(datetime.datetime.now(), code)
+            self.perfdata_handler.append_code(datetime.datetime.now(), code,
+                                              time_indices)
         return self.standard_reply()
 
     async def do_execute(
@@ -856,10 +902,21 @@ class JumperKernel(IPythonKernel):
             return self.standard_reply()
         """
         if code.startswith("%%display_graph_for_last"):
+            if not len(self.perfdata_handler.get_perfdata_history()):
+                self.cell_output(
+                    "No performance data available."
+                )
+            time_indices = self.perfdata_handler.get_time_indices()[-1]
+            if time_indices:
+                sub_idxs = [x[0] for x in time_indices[0]]
+                self.cell_output(f"Cell seemed to be tracked in multi cell"
+                                 " mode. Got performance data for the"
+                                 f"following sub cells: {sub_idxs}")
             perfvis.draw_performance_graph(
                 self.nodelist,
                 self.perfdata_handler.get_perfdata_history()[-1],
                 self.gpu_avail,
+                time_indices
             )
             return self.standard_reply()
         elif code.startswith("%%display_graph_for_index"):
@@ -876,10 +933,17 @@ class JumperKernel(IPythonKernel):
                     + " cells. This index is not available."
                 )
             else:
+                time_indices = self.perfdata_handler.get_time_indices()[index]
+                if time_indices:
+                    sub_idxs = [x[0] for x in time_indices[0]]
+                    self.cell_output(f"Cell seemed to be tracked in multi cell"
+                                     " mode. Got performance data for the"
+                                     f"following sub cells: {sub_idxs}")
                 perfvis.draw_performance_graph(
                     self.nodelist,
                     self.perfdata_handler.get_perfdata_history()[index],
                     self.gpu_avail,
+                    time_indices
                 )
             return self.standard_reply()
         elif code.startswith("%%display_graph_for_all"):
@@ -986,7 +1050,8 @@ class JumperKernel(IPythonKernel):
             return self.set_scorep_pythonargs(code)
         elif code.startswith("%%serializer_settings"):
             self.cell_output(
-                "Deprecated. Use: %%marshalling_settings\n[MARSHALLER=]\n[MODE=]",
+                "Deprecated. Use: %%marshalling_settings\n[MARSHALLER=]\n["
+                "MODE=]",
                 "stdout",
             )
             return self.standard_reply()
@@ -1015,8 +1080,8 @@ class JumperKernel(IPythonKernel):
                         "KernelError: Multicell execution failed.", "stderr"
                     )
                     return self.standard_reply()
-                self.multicell_code = ""
-                self.multicell_cellcount = 0
+                self.multicell_code = "import time\n"
+                self.multicell_cellcount = -1
                 return reply_status
             elif self.mode == KernelMode.WRITEFILE:
                 self.writefile_multicell = False

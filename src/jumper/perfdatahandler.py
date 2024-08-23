@@ -27,8 +27,9 @@ class PerformanceDataHandler:
     def __init__(self):
         self.code_history = []
         self.performance_data_history = []
+        self.time_indices = []
         self.nodelist = None
-        # for local it's none, otherwise points to slurm/ssh/... monitor
+        # for local, it's none, otherwise points to slurm/ssh/... monitor
         self.monitor_module = None
         # the object from the monitor module
         self.monitor = None
@@ -77,8 +78,12 @@ class PerformanceDataHandler:
     def get_code_history(self):
         return self.code_history
 
-    def append_code(self, time, code):
-        self.code_history.append([time, code])
+    def get_time_indices(self):
+        return self.time_indices
+
+    def append_code(self, time_, code, time_indices=None):
+        self.code_history.append([time_, code])
+        self.time_indices.append(time_indices)
 
     def get_perfdata_aggregated(self):
         perfdata_aggregated = []
@@ -156,7 +161,12 @@ class PerformanceDataHandler:
                 # add cell index and the number of measurements
                 # we will use that in the visualization to generate
                 # a color transition in the graphs and add the cell index
-                time_indices[node].append((idx, len(perfdata[node][2])))
+                if self.time_indices[idx]:
+                    # for cells tracked in multi cell mode, we can use the sub
+                    # indices created
+                    time_indices[node].extend(self.time_indices[idx][node])
+                else:
+                    time_indices[node].append((idx, len(perfdata[node][2])))
 
         return perfdata_aggregated, time_indices
 
