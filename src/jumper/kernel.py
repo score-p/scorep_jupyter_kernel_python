@@ -82,6 +82,7 @@ class JumperKernel(IPythonKernel):
 
         self.multicell_cellcount = -1
         self.multicell_code = "import time\n"
+        self.multicell_code_history = ""
 
         self.writefile_base_name = "jupyter_to_script"
         self.writefile_bash_name = ""
@@ -269,6 +270,10 @@ class JumperKernel(IPythonKernel):
                 + f"{code}\n"
                 + "print('''\n''')\n"
             )
+            self.multicell_code_history += (
+                f"###User code for sub cell {self.multicell_cellcount}\n"
+                + f"print('''{code}''')\n"
+            )
             self.cell_output(
                 f"Cell marked for multicell mode. It will be executed at "
                 f"position {self.multicell_cellcount}"
@@ -282,6 +287,7 @@ class JumperKernel(IPythonKernel):
         if self.mode == KernelMode.MULTICELL:
             self.mode = KernelMode.DEFAULT
             self.multicell_code = "import time\n"
+            self.multicell_code_history = ""
             self.multicell_cellcount = -1
             self.cell_output("Multicell mode aborted.")
         else:
@@ -604,7 +610,7 @@ class JumperKernel(IPythonKernel):
     async def scorep_execute(
         self,
         code,
-        code4history,
+        code_for_history,
         silent,
         store_history=True,
         user_expressions=None,
@@ -858,7 +864,7 @@ class JumperKernel(IPythonKernel):
         if performance_data_nodes:
             self.report_perfdata(performance_data_nodes, duration)
             self.perfdata_handler.append_code(datetime.datetime.now(),
-                                              code4history, time_indices)
+                                              code_for_history, time_indices)
         return self.standard_reply()
 
     async def do_execute(
@@ -889,8 +895,8 @@ class JumperKernel(IPythonKernel):
         %%display_graphs_for_last cpu_util, ...
         # displays one graph for all cell, arguments: cpu_util etc.
         %%display_graphs_for_all cpu_util, ...
-        # -> would be cool if we can hover the graph and per timepoint,
-        we see the index of the cell
+        # -> displays performance data aggregated, indicates different cells
+        # by color
         # displays graph for index cell, arguments: cpu_util etc.
         %%display_graphs_for_index i cpu_util, ...
         """
@@ -995,23 +1001,45 @@ class JumperKernel(IPythonKernel):
         elif code.startswith("%%perfdata_to_variable"):
             if len(code.split(" ")) == 1:
                 self.cell_output(
-                    "No variable to export specified. Use: "
+                    "No variable for export specified. Use: "
                     "%%perfdata_to_variable myvar",
                     "stdout",
                 )
             else:
                 varname = code.split(" ")[1]
-                await super().do_execute(
-                    f"{varname}="
-                    f"{self.perfdata_handler.get_perfdata_history()}",
-                    silent=True,
-                )
+                # for multi cell mode, we might have time indices which we want
+                # to communicate to the user, each time_index has the index of
+                # the overall mult cell and the sub index within this cell.
+                # In addition, it has a counter for the number of measurements
+                # each sub cell corresponds to in the list of performance data
+                # measurements, e.g. (2_0, 5), (2_1, 3), (2_2, 7)
+                mcm_time_indices = self.perfdata_handler.get_time_indices()
+                mcm_time_indices = list(
+                    filter(lambda item: item is not None, mcm_time_indices))
+
+                code = (f"{varname}="
+                        f"{self.perfdata_handler.get_perfdata_history()}")
+
+                if mcm_time_indices:
+                    code += f"\n{varname}.append({mcm_time_indices})"
+
+                await super().do_execute(code,silent=True)
                 self.cell_output(
                     "Exported performance data to "
                     + str(varname)
-                    + " variable",
+                    + " variable. ",
                     "stdout",
                 )
+                if mcm_time_indices:
+                    self.cell_output(
+                        "Detected that cells were executed in multi cell mode."
+                        + f"Last entry in {varname} is a list that contains "
+                          f"the sub indices per cell that were executed in "
+                          f"in multi cell mode and a counter for the number of"
+                          f" performance measurements within this sub cell, "
+                          f"e.g. f{mcm_time_indices[-1]}",
+                        "stdout",
+                    )
             return self.standard_reply()
         elif code.startswith("%%perfdata_to_json"):
             if len(code.split(" ")) == 1:
@@ -1071,7 +1099,7 @@ class JumperKernel(IPythonKernel):
                     # second multicell_code should be cleaned for code history
                     reply_status = await self.scorep_execute(
                         self.multicell_code,
-                        self.multicell_code,
+                        self.multicell_code_history,
                         silent,
                         store_history,
                         user_expressions,
@@ -1084,6 +1112,7 @@ class JumperKernel(IPythonKernel):
                     )
                     return self.standard_reply()
                 self.multicell_code = "import time\n"
+                self.multicell_code_history = ""
                 self.multicell_cellcount = -1
                 return reply_status
             elif self.mode == KernelMode.WRITEFILE:
