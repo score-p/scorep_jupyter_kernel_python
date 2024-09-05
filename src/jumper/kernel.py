@@ -196,13 +196,13 @@ class JumperKernel(IPythonKernel):
         Read and record Score-P Python binding arguments from the cell.
         """
         if self.mode == KernelMode.DEFAULT:
-            self.scorep_binding_args += code.split("\n")[1:]
+            self.scorep_binding_args = code.split("\n")[1].replace(' ', '\n').split("\n")
             self.cell_output(
                 "Score-P Python binding arguments set successfully: "
                 + str(self.scorep_binding_args)
             )
         elif self.mode == KernelMode.WRITEFILE:
-            self.writefile_scorep_binding_args += code.split("\n")[1:]
+            self.writefile_scorep_binding_args = code.split("\n")[1].replace(' ', '\n').split("\n")
             self.cell_output("Score-P bindings arguments recorded.")
         else:
             self.cell_output(
@@ -387,6 +387,31 @@ class JumperKernel(IPythonKernel):
                 )
             #self.cell_output(f"{''.join(self.writefile_scorep_env)}\n")
             self.cell_output("Finished converting to Python script.")
+        else:
+            self.cell_output(
+                f"KernelWarning: Currently in {self.mode}, command ignored.",
+                "stderr",
+            )
+        return self.standard_reply()
+
+    def abort_writefile(self):
+        """
+        Cancel writefile mode.
+        """
+        if self.mode == KernelMode.WRITEFILE:
+            self.mode = KernelMode.DEFAULT
+
+            if os.path.exists(self.writefile_bash_name):
+                os.remove(self.writefile_bash_name)
+            if os.path.exists(self.writefile_python_name):
+                os.remove(self.writefile_python_name)
+
+            self.writefile_base_name = "jupyter_to_script"
+            self.writefile_bash_name = ""
+            self.writefile_python_name = ""
+            self.writefile_scorep_binding_args = []
+            self.writefile_multicell = False
+            self.cell_output("Writefile mode aborted.")
         else:
             self.cell_output(
                 f"KernelWarning: Currently in {self.mode}, command ignored.",
@@ -1010,6 +1035,8 @@ class JumperKernel(IPythonKernel):
                 return self.standard_reply()
         elif code.startswith("%%start_writefile"):
             return self.start_writefile(code)
+        elif code.startswith("%%abort_writefile"):
+            return self.abort_writefile()
         elif code.startswith("%%end_writefile"):
             return self.end_writefile()
         elif code.startswith("%%execute_with_scorep"):
