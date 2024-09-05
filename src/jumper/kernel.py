@@ -119,9 +119,9 @@ class JumperKernel(IPythonKernel):
             self.pershelper.postprocess()
 
             marshaller_match = re.search(
-                r"MARSHALLER=(\w+)", code.split("\n", 1)[1]
+                r"MARSHALLER=([\w-]+)", code.split("\n", 1)[1]
             )
-            mode_match = re.search(r"MODE=(\w+)", code.split("\n", 1)[1])
+            mode_match = re.search(r"MODE=([\w-]+)", code.split("\n", 1)[1])
             marshaller = (
                 marshaller_match.group(1) if marshaller_match else None
             )
@@ -130,11 +130,10 @@ class JumperKernel(IPythonKernel):
             if marshaller:
                 if not self.pershelper.set_marshaller(marshaller):
                     self.cell_output(
-                        f"Marshaller '{marshaller}' is not recognized, "
+                        f"Marshaller '{marshaller}' is not available or compatible, "
                         f"kernel will use '{self.pershelper.marshaller}'.",
                         "stderr",
                     )
-                    return self.standard_reply()
             if mode:
                 if not self.pershelper.set_mode(mode):
                     self.cell_output(
