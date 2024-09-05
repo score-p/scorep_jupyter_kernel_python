@@ -209,7 +209,7 @@ def dump_runtime(
     filtered_os_environ_ = {
         k: v
         for k, v in os_environ_.items()
-        if not k.startswith("SCOREP_PYTHON_BINDINGS_")
+        if not k.startswith("SCOREP_")
     }
 
     with os.fdopen(os.open(os_environ_dump_, os.O_WRONLY | os.O_CREAT), 'wb') as file:
@@ -327,6 +327,18 @@ def magics_cleanup(code):
     Remove IPython magics from the code. Return only "persistent" code,
     which is executed with whitelisted magics.
     """
+    lines = code.splitlines(True)
+    for i, line in enumerate(lines):
+        if line.startswith("%env"):
+            env_line = line.strip().split(' ', 1)[1]
+            if '=' in env_line:
+                key, val = env_line.split('=', 1)
+                lines[i] = f'os.environ["{key}"]="{val}"\n'
+            else:
+                key = env_line
+                lines[i] = f'print("env: {key}=os.environ[\'{key}\']")\n'
+    code = ''.join(lines)
+
     whitelist_prefixes_cell = ["%%prun", "%%capture"]
     whitelist_prefixes_line = ["%prun", "%time"]
 

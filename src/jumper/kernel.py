@@ -73,7 +73,6 @@ class JumperKernel(IPythonKernel):
         self.blacklist_prefixes = ["%lsmagic"]
 
         self.scorep_binding_args = []
-        self.scorep_env = {}
 
         os.environ["SCOREP_KERNEL_PERSISTENCE_DIR"] = "./"
         self.pershelper = PersHelper("dill", "memory")
@@ -86,7 +85,6 @@ class JumperKernel(IPythonKernel):
         self.writefile_base_name = "jupyter_to_script"
         self.writefile_bash_name = ""
         self.writefile_python_name = ""
-        self.writefile_scorep_env = []
         self.writefile_scorep_binding_args = []
         self.writefile_multicell = False
 
@@ -185,27 +183,6 @@ class JumperKernel(IPythonKernel):
                         )
                 except Exception:
                     self.cell_output("Error setting monitor", "stderr")
-        else:
-            self.cell_output(
-                f"KernelWarning: Currently in {self.mode}, command ignored.",
-                "stderr",
-            )
-        return self.standard_reply()
-
-    def set_scorep_env(self, code):
-        """
-        Read and record Score-P environment variables from the cell.
-        """
-        if self.mode == KernelMode.DEFAULT:
-            for scorep_param in code.split("\n")[1:]:
-                key, val = scorep_param.split("=")
-                self.scorep_env[key] = val
-            self.cell_output(
-                "Score-P environment set successfully: " + str(self.scorep_env)
-            )
-        elif self.mode == KernelMode.WRITEFILE:
-            self.writefile_scorep_env += code.split("\n")[1:]
-            self.cell_output("Environment variables recorded.")
         else:
             self.cell_output(
                 f"KernelWarning: Currently in {self.mode}, command ignored.",
@@ -338,6 +315,7 @@ class JumperKernel(IPythonKernel):
                         # The script can be run with proper settings using
                         # bash script {self.writefile_bash_name}
                         import scorep
+                        import os
                         """
                     )
                 )
@@ -394,7 +372,6 @@ class JumperKernel(IPythonKernel):
             self.mode = KernelMode.DEFAULT
             with os.fdopen(os.open(self.writefile_bash_name, os.O_WRONLY | os.O_APPEND), 'a') as bash_script:
                 bash_script.write(
-                    f"{' '.join(self.writefile_scorep_env)} "
                     f"{PYTHON_EXECUTABLE} -m scorep "
                     f"{' '.join(self.writefile_scorep_binding_args)} "
                     f"{self.writefile_python_name}"
@@ -655,13 +632,12 @@ class JumperKernel(IPythonKernel):
             + self.scorep_binding_args
             + [scorep_script_name]
         )
-        proc_env = self.scorep_env.copy()
-        proc_env.update({'PATH': os.environ.get('PATH', ''),
-                         'LD_LIBRARY_PATH':
-                             os.environ.get('LD_LIBRARY_PATH', ''),
-                         'PYTHONPATH':
-                             os.environ.get('PYTHONPATH', ''),
-                         'PYTHONUNBUFFERED': 'x'})
+        scorep_env = {key: os.environ[key] for key in os.environ if key.startswith('SCOREP_')}
+        proc_env = {'PATH': os.environ.get('PATH', ''),
+                    'LD_LIBRARY_PATH': os.environ.get('LD_LIBRARY_PATH', ''),
+                    'PYTHONPATH': os.environ.get('PYTHONPATH', ''),
+                    'PYTHONUNBUFFERED': 'x'}
+        proc_env.update(scorep_env)
         # scorep path, subprocess observation
 
         # determine datetime for figuring out scorep path after execution
@@ -770,8 +746,8 @@ class JumperKernel(IPythonKernel):
 
         # Determine directory to which trace files were saved by Score-P
         scorep_folder = ""
-        if "SCOREP_EXPERIMENT_DIRECTORY" in self.scorep_env:
-            scorep_folder = self.scorep_env["SCOREP_EXPERIMENT_DIRECTORY"]
+        if "SCOREP_EXPERIMENT_DIRECTORY" in os.environ:
+            scorep_folder = os.environ["SCOREP_EXPERIMENT_DIRECTORY"]
             self.cell_output(
                 f"Instrumentation results can be found in {scorep_folder}"
             )
@@ -977,8 +953,6 @@ class JumperKernel(IPythonKernel):
             return self.standard_reply()
         elif code.startswith("%%set_perfmonitor"):
             return self.set_perfmonitor(code)
-        elif code.startswith("%%scorep_env"):
-            return self.set_scorep_env(code)
         elif code.startswith("%%scorep_python_binding_arguments"):
             return self.set_scorep_pythonargs(code)
         elif code.startswith("%%serializer_settings"):

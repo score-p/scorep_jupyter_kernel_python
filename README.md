@@ -20,18 +20,23 @@ For binding to Score-P, the kernel uses the [Score-P Python bindings](https://gi
 
 # Table of Content
 
-- [Installation](#Installation)
-- [Usage](#Usage)
-  * [Monitoring](#Monitoring)
-  * [Score-P Instrumentation](#Score-P-Instrumentation)
-  * [Multi-Cell Mode](#Multi-Cell-Mode)
-  * [Write Mode](#Write-Mode)
-- [Presentation of Performance Data](#Presentation-of-Performance-Data)
-- [Limitations](#Limitations)
-- [Future Work](#Future-Work)
-- [Citing](#Citing)
-- [Contact](#Contact)
-- [Acknowledgments](#Acknowledgments)
+- [A Jupyter Kernel for Performance Engineering](#a-jupyter-kernel-for-performance-engineering)
+- [Table of Content](#table-of-content)
+- [Installation](#installation)
+- [Usage](#usage)
+  - [Monitoring](#monitoring)
+  - [Score-P Instrumentation](#score-p-instrumentation)
+    - [Configuring Score-P in Jupyter](#configuring-score-p-in-jupyter)
+  - [Multi-Cell Mode](#multi-cell-mode)
+  - [Write Mode](#write-mode)
+- [Presentation of Performance Data](#presentation-of-performance-data)
+- [Limitations](#limitations)
+  - [Serialization Type Support](#serialization-type-support)
+  - [Overhead](#overhead)
+- [Future Work](#future-work)
+- [Citing](#citing)
+- [Contact](#contact)
+- [Acknowledgments](#acknowledgments)
 
 # Installation
 
@@ -123,9 +128,7 @@ Exports the performance data and the code to json files.
 
 ### Configuring Score-P in Jupyter
 
-`%%scorep_env`
-
-Set up your Score-P environment. For a documentation of Score-P environment variables, see: [Score-P Measurement Configuration](https://perftools.pages.jsc.fz-juelich.de/cicd/scorep/tags/latest/html/scorepmeasurementconfig.html).
+Set up your Score-P environment with `%env`. For a documentation of Score-P environment variables, see: [Score-P Measurement Configuration](https://perftools.pages.jsc.fz-juelich.de/cicd/scorep/tags/latest/html/scorepmeasurementconfig.html).
 
 ![](doc/scorep_setup.png)
 
@@ -198,7 +201,7 @@ Enables the write mode and starts the marking process. Subsequently, "running" c
 Stops the marking process and writes the marked cells in a Python script. Additionally, a bash script will be created for setting the Score-P environment variables, Pyhton bindings arguments and executing the Python script.
 
 **Hints**:
-- Recording a cell containing `%%scorep_env` or `%%scorep_python_binding_arguments` will add the environment variables/Score-P Python bindings to the bash script.
+- Recording a cell containing `%%scorep_python_binding_arguments` will add the Score-P Python bindings to the bash script.
 
 - Code of a cell which is not to be executed with Score-P (not inside the multicell mode and without `%%execute_with_scorep`) will be framed with `with scorep.instrumenter.disable()` in the Python script to prevent instrumentation.
 
