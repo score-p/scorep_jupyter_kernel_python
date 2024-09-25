@@ -328,14 +328,21 @@ def magics_cleanup(code):
     which is executed with whitelisted magics.
     """
     lines = code.splitlines(True)
+    scorep_env = []
     for i, line in enumerate(lines):
         if line.startswith("%env"):
-            env_line = line.strip().split(' ', 1)[1]
-            if '=' in env_line:
-                key, val = env_line.split('=', 1)
-                lines[i] = f'os.environ["{key}"]="{val}"\n'
+            env_var = line.strip().split(' ', 1)[1]
+            if '=' in env_var:
+                # Assign environment variable value
+                if env_var.startswith('SCOREP'):
+                    # For writefile mode, extract SCOREP env vars separately
+                    scorep_env.append('export ' + env_var + '\n')
+                else:
+                    key, val = env_var.split('=', 1)
+                    lines[i] = f'os.environ["{key}"]="{val}"\n'
             else:
-                key = env_line
+                # Print environment variable value
+                key = env_var
                 lines[i] = f'print("env: {key}=os.environ[\'{key}\']")\n'
     code = ''.join(lines)
 
@@ -355,4 +362,4 @@ def magics_cleanup(code):
         tuple(whitelist_prefixes_line)
     ):  # Line magic & executed cell, remove first word
         nomagic_code = code.split(" ", 1)[1]
-    return nomagic_code
+    return scorep_env, nomagic_code

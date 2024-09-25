@@ -85,6 +85,7 @@ class JumperKernel(IPythonKernel):
         self.writefile_base_name = "jupyter_to_script"
         self.writefile_bash_name = ""
         self.writefile_python_name = ""
+        self.writefile_scorep_env = []
         self.writefile_scorep_binding_args = []
         self.writefile_multicell = False
 
@@ -344,7 +345,9 @@ class JumperKernel(IPythonKernel):
         Append cell to writefile.
         """
         if self.mode == KernelMode.WRITEFILE:
-            if explicit_scorep or self.writefile_multicell:
+            if not code:
+                pass
+            elif explicit_scorep or self.writefile_multicell:
                 with os.fdopen(os.open(self.writefile_python_name, os.O_WRONLY | os.O_APPEND), 'a') as python_script:
                     python_script.write(code + "\n")
                 self.cell_output(
@@ -361,6 +364,11 @@ class JumperKernel(IPythonKernel):
                 self.cell_output(
                     "Python commands without instrumentation recorded."
                 )
+        else:
+            self.cell_output(
+                f"KernelWarning: Currently in {self.mode}, command ignored.",
+                "stderr",
+            )
         return self.standard_reply()
 
     def end_writefile(self):
@@ -372,10 +380,12 @@ class JumperKernel(IPythonKernel):
             self.mode = KernelMode.DEFAULT
             with os.fdopen(os.open(self.writefile_bash_name, os.O_WRONLY | os.O_APPEND), 'a') as bash_script:
                 bash_script.write(
+                    f"{''.join(self.writefile_scorep_env)}\n"
                     f"{PYTHON_EXECUTABLE} -m scorep "
                     f"{' '.join(self.writefile_scorep_binding_args)} "
                     f"{self.writefile_python_name}"
                 )
+            #self.cell_output(f"{''.join(self.writefile_scorep_env)}\n")
             self.cell_output("Finished converting to Python script.")
         else:
             self.cell_output(
@@ -1014,16 +1024,18 @@ class JumperKernel(IPythonKernel):
                 )
             elif self.mode == KernelMode.MULTICELL:
                 return self.append_multicellmode(
-                    magics_cleanup(code.split("\n", 1)[1])
+                    magics_cleanup(code.split("\n", 1)[1])[1]
                 )
             elif self.mode == KernelMode.WRITEFILE:
+                scorep_env, nomagic_code = magics_cleanup(code.split("\n", 1)[1])
+                self.writefile_scorep_env.extend(scorep_env)
                 return self.append_writefile(
-                    magics_cleanup(code.split("\n", 1)[1]),
+                    nomagic_code,
                     explicit_scorep=True,
                 )
         else:
             if self.mode == KernelMode.DEFAULT:
-                self.pershelper.parse(magics_cleanup(code), "jupyter")
+                self.pershelper.parse(magics_cleanup(code)[1], "jupyter")
                 self.perfdata_handler.start_perfmonitor(os.getpid())
                 parent_ret = await super().do_execute(
                     code,
@@ -1040,10 +1052,13 @@ class JumperKernel(IPythonKernel):
                     self.report_perfdata(performance_data_nodes, duration)
                 return parent_ret
             elif self.mode == KernelMode.MULTICELL:
-                return self.append_multicellmode(magics_cleanup(code))
+                return self.append_multicellmode(magics_cleanup(code)[1])
             elif self.mode == KernelMode.WRITEFILE:
+                scorep_env, nomagic_code = magics_cleanup(code)
+                self.writefile_scorep_env.extend(scorep_env)
                 return self.append_writefile(
-                    magics_cleanup(code), explicit_scorep=False
+                    nomagic_code,
+                    explicit_scorep=False,
                 )
 
     def do_shutdown(self, restart):
