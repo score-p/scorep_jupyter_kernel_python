@@ -209,7 +209,7 @@ def dump_runtime(
     filtered_os_environ_ = {
         k: v
         for k, v in os_environ_.items()
-        if not k.startswith("SCOREP_PYTHON_BINDINGS_")
+        if not k.startswith("SCOREP_")
     }
 
     with os.fdopen(os.open(os_environ_dump_, os.O_WRONLY | os.O_CREAT), 'wb') as file:
@@ -327,6 +327,25 @@ def magics_cleanup(code):
     Remove IPython magics from the code. Return only "persistent" code,
     which is executed with whitelisted magics.
     """
+    lines = code.splitlines(True)
+    scorep_env = []
+    for i, line in enumerate(lines):
+        if line.startswith("%env"):
+            env_var = line.strip().split(' ', 1)[1]
+            if '=' in env_var:
+                # Assign environment variable value
+                if env_var.startswith('SCOREP'):
+                    # For writefile mode, extract SCOREP env vars separately
+                    scorep_env.append('export ' + env_var + '\n')
+                else:
+                    key, val = env_var.split('=', 1)
+                    lines[i] = f'os.environ["{key}"]="{val}"\n'
+            else:
+                # Print environment variable value
+                key = env_var
+                lines[i] = f'print("env: {key}=os.environ[\'{key}\']")\n'
+    code = ''.join(lines)
+
     whitelist_prefixes_cell = ["%%prun", "%%capture"]
     whitelist_prefixes_line = ["%prun", "%time"]
 
@@ -343,4 +362,4 @@ def magics_cleanup(code):
         tuple(whitelist_prefixes_line)
     ):  # Line magic & executed cell, remove first word
         nomagic_code = code.split(" ", 1)[1]
-    return nomagic_code
+    return scorep_env, nomagic_code

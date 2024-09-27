@@ -1,8 +1,7 @@
 - 
   - |-
-    import os
-    os.environ['JUPYTER_VAR'] = 'JUPYTER'
-  - - ""
+    %env JUPYTER_VAR=JUPYTER
+  - - "env: JUPYTER_VAR=JUPYTER\n"
 -
   - |-
     import numpy as np
@@ -64,8 +63,8 @@
       4    36
       Name: a*b, dtype: int64
 -
-  - "print('SUBPROCESS_VAR =', os.environ['SUBPROCESS_VAR'])"
-  - - "SUBPROCESS_VAR = SUBPROCESS\n"
+  - "%env SUBPROCESS_VAR"
+  - - "'SUBPROCESS'"
 -
   - |-
     if '/new/subprocess/path' in sys.path:
