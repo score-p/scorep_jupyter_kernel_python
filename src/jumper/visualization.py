@@ -32,7 +32,6 @@ def plot_graph(ax, metric, perfdata, time_indices=None, color=None):
             int(os.environ.get("JUMPER_REPORT_FREQUENCY", 2)),
         )
     ]
-    print(time_indices)
     if metric == perfmetrics["cpu_agg"]:
         ax.plot(
             x_scale, perfdata[0][0][-3], label="Mean", color=(0.20, 0.47, 1.00)
