@@ -229,7 +229,7 @@ For the execution of a cell, the kernel uses the default IPython kernel. For a c
 > `dill` cannot yet pickle these standard types:
 > frame, generator, traceback
 
-Similar yields for cloudpickle. Use the `%%serializer_settings` magic command to switch between both depending on your needs.
+Similar yields for cloudpickle. Use the `%%marshalling_settings` magic command to switch between both depending on your needs.
 
 ## Overhead
 
@@ -239,9 +239,8 @@ When dealing with big data structures, there might be a big runtime overhead at 
 
 The kernel is still under development. The following is on the agenda:
  
- - Check alternative Python implementations (Stackless/PyPy) for better serialization support
- - Performance data visualizations
- - Overhead reduction (we already implemented in-memory communication for persistence handling and plan to have a parallel serializer)
+ - Provide perfmonitors for multi node setups
+ - Config for default perfmonitor to define collected metrics
  
 PRs are welcome.
 
