@@ -128,9 +128,12 @@ Exports the performance data and the code to json files.
 
 ### Configuring Score-P in Jupyter
 
-Set up your Score-P environment with `%env`. For a documentation of Score-P environment variables, see: [Score-P Measurement Configuration](https://perftools.pages.jsc.fz-juelich.de/cicd/scorep/tags/latest/html/scorepmeasurementconfig.html).
-
-![](doc/scorep_setup.png)
+Set up your Score-P environment with `%env` line magic, e.g.:
+```
+%env SCOREP_ENABLE_TRACING=1
+%env SCOREP_TOTAL_MEMORY=3g
+```
+For a documentation of Score-P environment variables, see: [Score-P Measurement Configuration](https://perftools.pages.jsc.fz-juelich.de/cicd/scorep/tags/latest/html/scorepmeasurementconfig.html).
 
 
 `%%scorep_python_binding_arguments`
