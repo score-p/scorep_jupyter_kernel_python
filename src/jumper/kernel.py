@@ -276,6 +276,9 @@ class JumperKernel(IPythonKernel):
         # TODO: Edge cases processing, similar to multicellmode
         if self.mode == KernelMode.DEFAULT:
             self.mode = KernelMode.WRITEFILE
+            # init writefile_scorep_env and python binding args
+            self.writefile_scorep_env = []
+            self.writefile_scorep_binding_args = []
             writefile_cmd = code.split("\n")[0].split(" ")
             if len(writefile_cmd) > 1:
                 if writefile_cmd[1].endswith(".py"):
@@ -292,24 +295,24 @@ class JumperKernel(IPythonKernel):
                 os.path.realpath("") + "/" + self.writefile_base_name + ".py"
             )
 
-            with os.fdopen(os.open(self.writefile_bash_name, os.O_WRONLY | os.O_CREAT), 'w') as bash_script:
+            with os.fdopen(os.open(self.writefile_bash_name, os.O_WRONLY | os.O_CREAT | os.O_TRUNC), 'w') as bash_script:
                 bash_script.write(
                     dedent(
                         f"""
                         # This bash script is generated automatically to run
                         # Jupyter Notebook -> Python script conversion
-                        # by Jumper kernel
+                        # by JUmPER kernel
                         # {self.writefile_python_name}
                         # !/bin/bash
                         """
                     )
                 )
-            with os.fdopen(os.open(self.writefile_python_name, os.O_WRONLY | os.O_CREAT), 'w') as python_script:
+            with os.fdopen(os.open(self.writefile_python_name, os.O_WRONLY | os.O_CREAT | os.O_TRUNC), 'w') as python_script:
                 python_script.write(
                     dedent(
                         f"""
                         # This is the automatic conversion of
-                        # Jupyter Notebook -> Python script by Jumper kernel.
+                        # Jupyter Notebook -> Python script by JUmPER kernel.
                         # Code corresponding to the cells not marked for
                         # Score-P instrumentation is framed by
                         # "with scorep.instrumenter.disable()
