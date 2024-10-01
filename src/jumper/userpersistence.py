@@ -4,8 +4,7 @@ import ast
 import astunparse
 from pathlib import Path
 import uuid
-
-import dill
+import importlib
 
 scorep_script_name = "scorep_script.py"
 
@@ -83,12 +82,13 @@ class PersHelper:
             os.remove(scorep_script_name)
 
     def set_marshaller(self, marshaller):
-        # TODO: valid marshallers should not be configured in code but via an
-        # environment variable
-        valid_marshallers = {"dill", "cloudpickle", "parallel_marshall"}
-        return marshaller in valid_marshallers and (
-            setattr(self, "marshaller", marshaller) or True
-        )
+        try:
+            marshaller_module = importlib.import_module(marshaller)
+        except ImportError:
+            return False
+        if not hasattr(marshaller_module, 'dump') or not hasattr(marshaller_module, 'load'):
+            return False
+        return (setattr(self, "marshaller", marshaller) or True)
 
     def set_mode(self, mode):
         valid_modes = {"disk", "memory"}
@@ -213,10 +213,10 @@ def dump_runtime(
     }
 
     with os.fdopen(os.open(os_environ_dump_, os.O_WRONLY | os.O_CREAT), 'wb') as file:
-        dill.dump(filtered_os_environ_, file)
+        marshaller.dump(filtered_os_environ_, file)
 
     with os.fdopen(os.open(sys_path_dump_, os.O_WRONLY | os.O_CREAT), 'wb') as file:
-        dill.dump(sys_path_, file)
+        marshaller.dump(sys_path_, file)
 
 
 def dump_variables(variables_names, globals_, var_dump_, marshaller):
@@ -243,10 +243,10 @@ def load_runtime(
     loaded_sys_path_ = []
 
     with os.fdopen(os.open(os_environ_dump_, os.O_RDONLY), 'rb') as file:
-        loaded_os_environ_ = dill.load(file)
+        loaded_os_environ_ = marshaller.load(file)
 
     with os.fdopen(os.open(sys_path_dump_, os.O_RDONLY), 'rb') as file:
-        loaded_sys_path_ = dill.load(file)
+        loaded_sys_path_ = marshaller.load(file)
 
     # os_environ_.clear()
     os_environ_.update(loaded_os_environ_)
