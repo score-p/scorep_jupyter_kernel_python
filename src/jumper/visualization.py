@@ -153,32 +153,33 @@ def plot_graph(ax, metric, perfdata, time_indices=None, color=None):
     target_index = -1
     transition_offset = (x_scale[1] - x_scale[0]) / 2
     start_offset = 0
-    last_idx = time_indices[0][-1][0]
+    if time_indices:
+        last_idx = time_indices[0][-1][0]
 
-    for cell_idx, n_ms in time_indices[0]:
+        for cell_idx, n_ms in time_indices[0]:
 
-        target_index = target_index + n_ms
-        # don't use offset for last cell
-        if cell_idx == last_idx:
-            transition_offset = 0
-        ax.axvspan(x_scale[current_index] + start_offset,
-                   x_scale[target_index] +
-                   transition_offset,
-                   facecolor=color[cell_idx], alpha=0.3)
+            target_index = target_index + n_ms
+            # don't use offset for last cell
+            if cell_idx == last_idx:
+                transition_offset = 0
+            ax.axvspan(x_scale[current_index] + start_offset,
+                       x_scale[target_index] +
+                       transition_offset,
+                       facecolor=color[cell_idx], alpha=0.3)
 
-        text_x_pos = x_scale[current_index] + start_offset + (
-                (x_scale[target_index] + transition_offset -
-                 x_scale[current_index] + start_offset) / 2)
-        text_y_pos = ax.get_ylim()[0] + (ax.get_ylim()[1]*0.05)
+            text_x_pos = x_scale[current_index] + start_offset + (
+                    (x_scale[target_index] + transition_offset -
+                     x_scale[current_index] + start_offset) / 2)
+            text_y_pos = ax.get_ylim()[0] + (ax.get_ylim()[1]*0.05)
 
-        # add cell index to plot
-        ax.text(text_x_pos, text_y_pos, "#" + str(cell_idx), style='italic',
-                bbox={
-                    'facecolor': 'lightgrey', 'alpha': 0.5, 'pad': 2}
-                )
+            # add cell index to plot
+            ax.text(text_x_pos, text_y_pos, "#" + str(cell_idx), style='italic',
+                    bbox={
+                        'facecolor': 'lightgrey', 'alpha': 0.5, 'pad': 2}
+                    )
 
-        current_index = target_index
-        start_offset = transition_offset
+            current_index = target_index
+            start_offset = transition_offset
 
 
 
@@ -187,10 +188,11 @@ def plot_with_dropdowns(metrics, perfdata, metric_start, time_indices=None):
     # Create subplots in a 1x2 grid
     fig, axes = plt.subplots(1, 2, figsize=(10, 3))
     dropdowns = []
-
-    color = [
-        "#" + ''.join([random.choice('0123456789ABCDEF') for j in range(6)])
-        for i in range(len(time_indices[0]))]
+    color = None
+    if time_indices:
+        color = [
+            "#" + ''.join([random.choice('0123456789ABCDEF') for j in range(6)])
+            for i in range(len(time_indices[0]))]
 
     # Plot data and create dropdowns for each subplot
     for i, ax in enumerate(axes):
@@ -205,7 +207,7 @@ def plot_with_dropdowns(metrics, perfdata, metric_start, time_indices=None):
         )
         dropdown.observe(
             lambda change, ax=ax: plot_graph(ax, change["new"], perfdata,
-                                             time_indices),
+                                             time_indices, color),
             names="value",
         )
 
