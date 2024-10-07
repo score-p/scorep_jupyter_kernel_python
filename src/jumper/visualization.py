@@ -162,26 +162,39 @@ def plot_graph(ax, metric, perfdata, time_indices=None, color=None):
             # don't use offset for last cell
             if cell_idx == last_idx:
                 transition_offset = 0
-            ax.axvspan(x_scale[current_index] + start_offset,
-                       x_scale[target_index] +
-                       transition_offset,
-                       facecolor=color[cell_idx], alpha=0.3)
+            ax.axvspan(
+                x_scale[current_index] + start_offset,
+                x_scale[target_index] + transition_offset,
+                facecolor=color[cell_idx],
+                alpha=0.3,
+            )
 
-            text_x_pos = x_scale[current_index] + start_offset + (
-                    (x_scale[target_index] + transition_offset -
-                     x_scale[current_index] + start_offset) / 2)
-            text_y_pos = ax.get_ylim()[0] + (ax.get_ylim()[1]*0.05)
+            text_x_pos = (
+                x_scale[current_index]
+                + start_offset
+                + (
+                    (
+                        x_scale[target_index]
+                        + transition_offset
+                        - x_scale[current_index]
+                        + start_offset
+                    )
+                    / 2
+                )
+            )
+            text_y_pos = ax.get_ylim()[0] + (ax.get_ylim()[1] * 0.05)
 
             # add cell index to plot
-            ax.text(text_x_pos, text_y_pos, "#" + str(cell_idx), style='italic',
-                    bbox={
-                        'facecolor': 'lightgrey', 'alpha': 0.5, 'pad': 2}
-                    )
+            ax.text(
+                text_x_pos,
+                text_y_pos,
+                "#" + str(cell_idx),
+                style="italic",
+                bbox={"facecolor": "lightgrey", "alpha": 0.5, "pad": 2},
+            )
 
             current_index = target_index
             start_offset = transition_offset
-
-
 
 
 def plot_with_dropdowns(metrics, perfdata, metric_start, time_indices=None):
@@ -191,13 +204,16 @@ def plot_with_dropdowns(metrics, perfdata, metric_start, time_indices=None):
     color = None
     if time_indices:
         color = [
-            "#" + ''.join([random.choice('0123456789ABCDEF') for j in range(6)])
-            for i in range(len(time_indices[0]))]
+            "#"
+            + "".join([random.choice("0123456789ABCDEF") for j in range(6)])
+            for i in range(len(time_indices[0]))
+        ]
 
     # Plot data and create dropdowns for each subplot
     for i, ax in enumerate(axes):
-        plot_graph(ax, metrics[i + metric_start], perfdata,
-                   time_indices, color)
+        plot_graph(
+            ax, metrics[i + metric_start], perfdata, time_indices, color
+        )
 
         # Create dropdown widget for the current subplot
         dropdown = widgets.Dropdown(
@@ -206,8 +222,9 @@ def plot_with_dropdowns(metrics, perfdata, metric_start, time_indices=None):
             value=metrics[i + metric_start],
         )
         dropdown.observe(
-            lambda change, ax=ax: plot_graph(ax, change["new"], perfdata,
-                                             time_indices, color),
+            lambda change, ax=ax: plot_graph(
+                ax, change["new"], perfdata, time_indices, color
+            ),
             names="value",
         )
 
@@ -224,8 +241,9 @@ def plot_with_dropdowns(metrics, perfdata, metric_start, time_indices=None):
     plt.show()
 
 
-def draw_performance_graph(slurm_nodelist: None, perfdata, gpu_avail: False,
-                           time_indices=None):
+def draw_performance_graph(
+    slurm_nodelist: None, perfdata, gpu_avail: False, time_indices=None
+):
     if slurm_nodelist:
         nodelist = slurm_nodelist
         nodelist.insert(0, "All")

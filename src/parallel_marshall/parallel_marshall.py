@@ -60,8 +60,7 @@ def dump(obj, file):
     logger.debug("Writer communicated paths")
 
     if workers == 1:
-        with os.fdopen(os.open(paths[0], os.O_WRONLY | os.O_CREAT),
-                       "wb") as f:
+        with os.fdopen(os.open(paths[0], os.O_WRONLY | os.O_CREAT), "wb") as f:
             serializer_backend.dump(obj, f)
         return
 

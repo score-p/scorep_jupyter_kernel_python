@@ -86,9 +86,11 @@ class PersHelper:
             marshaller_module = importlib.import_module(marshaller)
         except ImportError:
             return False
-        if not hasattr(marshaller_module, 'dump') or not hasattr(marshaller_module, 'load'):
+        if not hasattr(marshaller_module, "dump") or not hasattr(
+            marshaller_module, "load"
+        ):
             return False
-        return (setattr(self, "marshaller", marshaller) or True)
+        return setattr(self, "marshaller", marshaller) or True
 
     def set_mode(self, mode):
         valid_modes = {"disk", "memory"}
@@ -207,15 +209,17 @@ def dump_runtime(
     # Don't dump environment variables set by Score-P bindings.
     # Will force it to re-initialize instead of calling reset_preload()
     filtered_os_environ_ = {
-        k: v
-        for k, v in os_environ_.items()
-        if not k.startswith("SCOREP_")
+        k: v for k, v in os_environ_.items() if not k.startswith("SCOREP_")
     }
 
-    with os.fdopen(os.open(os_environ_dump_, os.O_WRONLY | os.O_CREAT), 'wb') as file:
+    with os.fdopen(
+        os.open(os_environ_dump_, os.O_WRONLY | os.O_CREAT), "wb"
+    ) as file:
         marshaller.dump(filtered_os_environ_, file)
 
-    with os.fdopen(os.open(sys_path_dump_, os.O_WRONLY | os.O_CREAT), 'wb') as file:
+    with os.fdopen(
+        os.open(sys_path_dump_, os.O_WRONLY | os.O_CREAT), "wb"
+    ) as file:
         marshaller.dump(sys_path_, file)
 
 
@@ -232,7 +236,7 @@ def dump_variables(variables_names, globals_, var_dump_, marshaller):
         if non_persistent_class in globals().keys():
             user_variables[el].__class__ = globals()[non_persistent_class]
 
-    with os.fdopen(os.open(var_dump_, os.O_WRONLY | os.O_CREAT), 'wb') as file:
+    with os.fdopen(os.open(var_dump_, os.O_WRONLY | os.O_CREAT), "wb") as file:
         marshaller.dump(user_variables, file)
 
 
@@ -242,10 +246,10 @@ def load_runtime(
     loaded_os_environ_ = {}
     loaded_sys_path_ = []
 
-    with os.fdopen(os.open(os_environ_dump_, os.O_RDONLY), 'rb') as file:
+    with os.fdopen(os.open(os_environ_dump_, os.O_RDONLY), "rb") as file:
         loaded_os_environ_ = marshaller.load(file)
 
-    with os.fdopen(os.open(sys_path_dump_, os.O_RDONLY), 'rb') as file:
+    with os.fdopen(os.open(sys_path_dump_, os.O_RDONLY), "rb") as file:
         loaded_sys_path_ = marshaller.load(file)
 
     # os_environ_.clear()
@@ -256,7 +260,7 @@ def load_runtime(
 
 
 def load_variables(globals_, var_dump_, marshaller):
-    with os.fdopen(os.open(var_dump_, os.O_RDONLY), 'rb') as file:
+    with os.fdopen(os.open(var_dump_, os.O_RDONLY), "rb") as file:
         obj = marshaller.load(file)
     globals_.update(obj)
 
@@ -331,20 +335,20 @@ def magics_cleanup(code):
     scorep_env = []
     for i, line in enumerate(lines):
         if line.startswith("%env"):
-            env_var = line.strip().split(' ', 1)[1]
-            if '=' in env_var:
+            env_var = line.strip().split(" ", 1)[1]
+            if "=" in env_var:
                 # Assign environment variable value
-                if env_var.startswith('SCOREP'):
+                if env_var.startswith("SCOREP"):
                     # For writefile mode, extract SCOREP env vars separately
-                    scorep_env.append('export ' + env_var + '\n')
+                    scorep_env.append("export " + env_var + "\n")
                 else:
-                    key, val = env_var.split('=', 1)
+                    key, val = env_var.split("=", 1)
                     lines[i] = f'os.environ["{key}"]="{val}"\n'
             else:
                 # Print environment variable value
                 key = env_var
-                lines[i] = f'print("env: {key}=os.environ[\'{key}\']")\n'
-    code = ''.join(lines)
+                lines[i] = f"print(\"env: {key}=os.environ['{key}']\")\n"
+    code = "".join(lines)
 
     whitelist_prefixes_cell = ["%%prun", "%%capture"]
     whitelist_prefixes_line = ["%prun", "%time"]
