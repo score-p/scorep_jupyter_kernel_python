@@ -1,7 +1,7 @@
 import unittest
 import jupyter_kernel_test as jkt
-import os
-import yaml
+import yaml, re, os
+
 
 tmp_dir = "test_kernel_tmp/"
 
@@ -28,6 +28,8 @@ class KernelTests(jkt.KernelTests):
         self.flush_channels()
         reply, output_msgs = self.execute_helper(code=code)
         for msg, expected_msg in zip(output_msgs, expected_output):
+            # replace env vars
+            expected_msg = os.path.expandvars(expected_msg)
             # self.assertEqual(msg["header"]["msg_type"], "stream")
             # some messages can be of type 'execute_result'
             # type instead of stdout
@@ -41,8 +43,10 @@ class KernelTests(jkt.KernelTests):
                 )
 
     def check_from_file(self, filename):
+
         with open(filename, "r") as file:
             cells = yaml.safe_load(file)
+
         for code, expected_output in cells:
             self.check_stream_output(code, expected_output)
 
