@@ -2,8 +2,8 @@
   - "%%start_writefile"
   - - |
       Started converting to Python script. See files:
-      /home/runner/work/scorep_jupyter_kernel_python/scorep_jupyter_kernel_python/test_kernel_tmp/my_jupyter_to_script_run.sh
-      /home/runner/work/scorep_jupyter_kernel_python/scorep_jupyter_kernel_python/test_kernel_tmp/my_jupyter_to_script.py
+      ${PWD}/jupyter_to_script_run.sh
+      ${PWD}/jupyter_to_script.py
 -
   - |-
     %env SCOREP_ENABLE_TRACING=1
@@ -18,8 +18,8 @@
   - "%%start_writefile test_kernel_tmp/my_jupyter_to_script"
   - - |
       Started converting to Python script. See files:
-      /home/carthage/Documents/scorep_jupyter_kernel_python/test_kernel_tmp/my_jupyter_to_script_run.sh
-      /home/carthage/Documents/scorep_jupyter_kernel_python/test_kernel_tmp/my_jupyter_to_script.py
+      ${PWD}/test_kernel_tmp/my_jupyter_to_script_run.sh
+      ${PWD}/test_kernel_tmp/my_jupyter_to_script.py
 -
   - |-
     %env SCOREP_ENABLE_TRACING=1
