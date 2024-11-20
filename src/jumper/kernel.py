@@ -5,6 +5,7 @@ import re
 import subprocess
 import sys
 import time
+import shutil
 
 from enum import Enum
 from textwrap import dedent
@@ -73,7 +74,6 @@ class JumperKernel(IPythonKernel):
         self.blacklist_prefixes = ["%lsmagic"]
 
         self.scorep_binding_args = []
-        self.scorep_env = {}
 
         os.environ["SCOREP_KERNEL_PERSISTENCE_DIR"] = "./"
         self.pershelper = PersHelper("dill", "memory")
@@ -96,6 +96,8 @@ class JumperKernel(IPythonKernel):
         self.perfdata_handler = PerformanceDataHandler()
         self.nodelist = self.perfdata_handler.get_nodelist()
 
+        self.scorep_available_ = shutil.which("scorep")
+
     def cell_output(self, string, stream="stdout"):
         """
         Display string as cell output.
@@ -111,6 +113,13 @@ class JumperKernel(IPythonKernel):
             "payload": [],
             "user_expressions": {},
         }
+    
+    def scorep_not_available(self):
+        if not self.scorep_available_:
+            self.cell_output("Score-P not available, cell ignored.", "stderr")
+            return self.standard_reply()
+        else:
+            return None
 
     def marshaller_settings(self, code):
         """
@@ -121,9 +130,9 @@ class JumperKernel(IPythonKernel):
             self.pershelper.postprocess()
 
             marshaller_match = re.search(
-                r"MARSHALLER=(\w+)", code.split("\n", 1)[1]
+                r"MARSHALLER=([\w-]+)", code.split("\n", 1)[1]
             )
-            mode_match = re.search(r"MODE=(\w+)", code.split("\n", 1)[1])
+            mode_match = re.search(r"MODE=([\w-]+)", code.split("\n", 1)[1])
             marshaller = (
                 marshaller_match.group(1) if marshaller_match else None
             )
@@ -132,11 +141,10 @@ class JumperKernel(IPythonKernel):
             if marshaller:
                 if not self.pershelper.set_marshaller(marshaller):
                     self.cell_output(
-                        f"Marshaller '{marshaller}' is not recognized, "
+                        f"Marshaller '{marshaller}' is not available or compatible, "
                         f"kernel will use '{self.pershelper.marshaller}'.",
                         "stderr",
                     )
-                    return self.standard_reply()
             if mode:
                 if not self.pershelper.set_mode(mode):
                     self.cell_output(
@@ -193,40 +201,18 @@ class JumperKernel(IPythonKernel):
             )
         return self.standard_reply()
 
-    def set_scorep_env(self, code):
-        """
-        Read and record Score-P environment variables from the cell.
-        """
-        if self.mode == KernelMode.DEFAULT:
-            for scorep_param in code.split("\n")[1:]:
-                if not scorep_param == "":
-                    key, val = scorep_param.split("=")
-                    self.scorep_env[key] = val
-            self.cell_output(
-                "Score-P environment set successfully: " + str(self.scorep_env)
-            )
-        elif self.mode == KernelMode.WRITEFILE:
-            self.writefile_scorep_env += code.split("\n")[1:]
-            self.cell_output("Environment variables recorded.")
-        else:
-            self.cell_output(
-                f"KernelWarning: Currently in {self.mode}, command ignored.",
-                "stderr",
-            )
-        return self.standard_reply()
-
     def set_scorep_pythonargs(self, code):
         """
         Read and record Score-P Python binding arguments from the cell.
         """
         if self.mode == KernelMode.DEFAULT:
-            self.scorep_binding_args += code.split("\n")[1:]
+            self.scorep_binding_args = code.split("\n")[1].replace(' ', '\n').split("\n")
             self.cell_output(
                 "Score-P Python binding arguments set successfully: "
                 + str(self.scorep_binding_args)
             )
         elif self.mode == KernelMode.WRITEFILE:
-            self.writefile_scorep_binding_args += code.split("\n")[1:]
+            self.writefile_scorep_binding_args = code.split("\n")[1].replace(' ', '\n').split("\n")
             self.cell_output("Score-P bindings arguments recorded.")
         else:
             self.cell_output(
@@ -306,6 +292,9 @@ class JumperKernel(IPythonKernel):
         # TODO: Edge cases processing, similar to multicellmode
         if self.mode == KernelMode.DEFAULT:
             self.mode = KernelMode.WRITEFILE
+            # init writefile_scorep_env and python binding args
+            self.writefile_scorep_env = []
+            self.writefile_scorep_binding_args = []
             writefile_cmd = code.split("\n")[0].split(" ")
             if len(writefile_cmd) > 1:
                 if writefile_cmd[1].endswith(".py"):
@@ -322,30 +311,31 @@ class JumperKernel(IPythonKernel):
                 os.path.realpath("") + "/" + self.writefile_base_name + ".py"
             )
 
-            with os.fdopen(os.open(self.writefile_bash_name, os.O_WRONLY | os.O_CREAT), 'w') as bash_script:
+            with os.fdopen(os.open(self.writefile_bash_name, os.O_WRONLY | os.O_CREAT | os.O_TRUNC), 'w') as bash_script:
                 bash_script.write(
                     dedent(
                         f"""
                         # This bash script is generated automatically to run
                         # Jupyter Notebook -> Python script conversion
-                        # by Jumper kernel
+                        # by JUmPER kernel
                         # {self.writefile_python_name}
                         # !/bin/bash
                         """
                     )
                 )
-            with os.fdopen(os.open(self.writefile_python_name, os.O_WRONLY | os.O_CREAT), 'w') as python_script:
+            with os.fdopen(os.open(self.writefile_python_name, os.O_WRONLY | os.O_CREAT | os.O_TRUNC), 'w') as python_script:
                 python_script.write(
                     dedent(
                         f"""
                         # This is the automatic conversion of
-                        # Jupyter Notebook -> Python script by Jumper kernel.
+                        # Jupyter Notebook -> Python script by JUmPER kernel.
                         # Code corresponding to the cells not marked for
                         # Score-P instrumentation is framed by
                         # "with scorep.instrumenter.disable()
                         # The script can be run with proper settings using
                         # bash script {self.writefile_bash_name}
                         import scorep
+                        import os
                         """
                     )
                 )
@@ -374,7 +364,9 @@ class JumperKernel(IPythonKernel):
         Append cell to writefile.
         """
         if self.mode == KernelMode.WRITEFILE:
-            if explicit_scorep or self.writefile_multicell:
+            if not code:
+                pass
+            elif explicit_scorep or self.writefile_multicell:
                 with os.fdopen(os.open(self.writefile_python_name, os.O_WRONLY | os.O_APPEND), 'a') as python_script:
                     python_script.write(code + "\n")
                 self.cell_output(
@@ -391,6 +383,11 @@ class JumperKernel(IPythonKernel):
                 self.cell_output(
                     "Python commands without instrumentation recorded."
                 )
+        else:
+            self.cell_output(
+                f"KernelWarning: Currently in {self.mode}, command ignored.",
+                "stderr",
+            )
         return self.standard_reply()
 
     def end_writefile(self):
@@ -402,12 +399,37 @@ class JumperKernel(IPythonKernel):
             self.mode = KernelMode.DEFAULT
             with os.fdopen(os.open(self.writefile_bash_name, os.O_WRONLY | os.O_APPEND), 'a') as bash_script:
                 bash_script.write(
-                    f"{' '.join(self.writefile_scorep_env)} "
+                    f"{''.join(self.writefile_scorep_env)}\n"
                     f"{PYTHON_EXECUTABLE} -m scorep "
                     f"{' '.join(self.writefile_scorep_binding_args)} "
                     f"{self.writefile_python_name}"
                 )
             self.cell_output("Finished converting to Python script.")
+        else:
+            self.cell_output(
+                f"KernelWarning: Currently in {self.mode}, command ignored.",
+                "stderr",
+            )
+        return self.standard_reply()
+
+    def abort_writefile(self):
+        """
+        Cancel writefile mode.
+        """
+        if self.mode == KernelMode.WRITEFILE:
+            self.mode = KernelMode.DEFAULT
+
+            if os.path.exists(self.writefile_bash_name):
+                os.remove(self.writefile_bash_name)
+            if os.path.exists(self.writefile_python_name):
+                os.remove(self.writefile_python_name)
+
+            self.writefile_base_name = "jupyter_to_script"
+            self.writefile_bash_name = ""
+            self.writefile_python_name = ""
+            self.writefile_scorep_binding_args = []
+            self.writefile_multicell = False
+            self.cell_output("Writefile mode aborted.")
         else:
             self.cell_output(
                 f"KernelWarning: Currently in {self.mode}, command ignored.",
@@ -612,7 +634,6 @@ class JumperKernel(IPythonKernel):
         code,
         code_for_history,
         silent,
-        store_history=True,
         user_expressions=None,
         allow_stdin=False,
         *,
@@ -652,6 +673,7 @@ class JumperKernel(IPythonKernel):
                 allow_stdin=allow_stdin,
                 cell_id=cell_id,
             )
+
             if reply_status_dump["status"] != "ok":
                 self.ghost_cell_error(
                     reply_status_dump,
@@ -665,13 +687,12 @@ class JumperKernel(IPythonKernel):
             + self.scorep_binding_args
             + [scorep_script_name]
         )
-        proc_env = self.scorep_env.copy()
-        proc_env.update({'PATH': os.environ.get('PATH', ''),
-                         'LD_LIBRARY_PATH':
-                             os.environ.get('LD_LIBRARY_PATH', ''),
-                         'PYTHONPATH':
-                             os.environ.get('PYTHONPATH', ''),
-                         'PYTHONUNBUFFERED': 'x'})
+        scorep_env = {key: os.environ[key] for key in os.environ if key.startswith('SCOREP_')}
+        proc_env = {'PATH': os.environ.get('PATH', ''),
+                    'LD_LIBRARY_PATH': os.environ.get('LD_LIBRARY_PATH', ''),
+                    'PYTHONPATH': os.environ.get('PYTHONPATH', ''),
+                    'PYTHONUNBUFFERED': 'x'}
+        proc_env.update(scorep_env)
         # scorep path, subprocess observation
 
         # determine datetime for figuring out scorep path after execution
@@ -823,8 +844,8 @@ class JumperKernel(IPythonKernel):
 
         # Determine directory to which trace files were saved by Score-P
         scorep_folder = ""
-        if "SCOREP_EXPERIMENT_DIRECTORY" in self.scorep_env:
-            scorep_folder = self.scorep_env["SCOREP_EXPERIMENT_DIRECTORY"]
+        if "SCOREP_EXPERIMENT_DIRECTORY" in os.environ:
+            scorep_folder = os.environ["SCOREP_EXPERIMENT_DIRECTORY"]
             self.cell_output(
                 f"Instrumentation results can be found in {scorep_folder}"
             )
@@ -867,16 +888,9 @@ class JumperKernel(IPythonKernel):
                                               code_for_history, time_indices)
         return self.standard_reply()
 
-    async def do_execute(
-        self,
-        code,
-        silent,
-        store_history=False,
-        user_expressions=None,
-        allow_stdin=False,
-        *,
-        cell_id=None,
-    ):
+    async def do_execute(self, code, silent, store_history=False,
+                         user_expressions=None, allow_stdin=False, *,
+                         cell_id=None, **kwargs):
         """
         Override of do_execute() method of IPythonKernel. If no custom magic
         commands specified, execute cell with super().do_execute(),
@@ -1073,10 +1087,9 @@ class JumperKernel(IPythonKernel):
             return self.standard_reply()
         elif code.startswith("%%set_perfmonitor"):
             return self.set_perfmonitor(code)
-        elif code.startswith("%%scorep_env"):
-            return self.set_scorep_env(code)
         elif code.startswith("%%scorep_python_binding_arguments"):
-            return self.set_scorep_pythonargs(code)
+            return (self.scorep_not_available() or
+                    self.set_scorep_pythonargs(code))
         elif code.startswith("%%serializer_settings"):
             self.cell_output(
                 "Deprecated. Use: %%marshalling_settings\n[MARSHALLER=]\n["
@@ -1085,74 +1098,83 @@ class JumperKernel(IPythonKernel):
             )
             return self.standard_reply()
         elif code.startswith("%%marshalling_settings"):
-            return self.marshaller_settings(code)
+            return (self.scorep_not_available() or
+                    self.marshaller_settings(code))
         elif code.startswith("%%enable_multicellmode"):
-            return self.enable_multicellmode()
+            return self.scorep_not_available() or self.enable_multicellmode()
         elif code.startswith("%%abort_multicellmode"):
-            return self.abort_multicellmode()
+            return self.scorep_not_available() or self.abort_multicellmode()
         elif code.startswith("%%finalize_multicellmode"):
             # Cannot be put into a separate function due to tight coupling
             # between do_execute and scorep_execute
-            if self.mode == KernelMode.MULTICELL:
-                self.mode = KernelMode.DEFAULT
-                try:
-                    # second multicell_code should be cleaned for code history
-                    reply_status = await self.scorep_execute(
-                        self.multicell_code,
-                        self.multicell_code_history,
+            if not self.scorep_available_:
+                self.cell_output("Score-P not available, cell ignored.",
+                                 "stderr")
+                return self.standard_reply()
+            else:
+                if self.mode == KernelMode.MULTICELL:
+                    self.mode = KernelMode.DEFAULT
+                    try:
+                        reply_status = await self.scorep_execute(
+                            self.multicell_code,
+                            silent,
+                            store_history,
+                            user_expressions,
+                            allow_stdin,
+                            cell_id=cell_id,
+                        )
+                    except Exception:
+                        self.cell_output(
+                            "KernelError: Multicell execution failed.",
+                            "stderr"
+                        )
+                        return self.standard_reply()
+                    self.multicell_code = ""
+                    self.multicell_cellcount = 0
+                    return reply_status
+                elif self.mode == KernelMode.WRITEFILE:
+                    self.writefile_multicell = False
+                    return self.standard_reply()
+                else:
+                    self.cell_output(
+                        f"KernelWarning: Currently in {self.mode}, ignore command",
+                        "stderr",
+                    )
+                    return self.standard_reply()
+        elif code.startswith("%%start_writefile"):
+            return self.scorep_not_available() or self.start_writefile(code)
+        elif code.startswith("%%abort_writefile"):
+            return self.scorep_not_available() or self.abort_writefile()
+        elif code.startswith("%%end_writefile"):
+            return self.scorep_not_available() or self.end_writefile()
+        elif code.startswith("%%execute_with_scorep"):
+            if not self.scorep_available_:
+                self.cell_output("Score-P not available, cell ignored.", "stderr")
+                return self.standard_reply()
+            else:
+                if self.mode == KernelMode.DEFAULT:
+                    return await self.scorep_execute(
+                        code.split("\n", 1)[1],
                         silent,
                         store_history,
                         user_expressions,
                         allow_stdin,
                         cell_id=cell_id,
                     )
-                except Exception:
-                    self.cell_output(
-                        "KernelError: Multicell execution failed.", "stderr"
+                elif self.mode == KernelMode.MULTICELL:
+                    return self.append_multicellmode(
+                        magics_cleanup(code.split("\n", 1)[1])[1]
                     )
-                    return self.standard_reply()
-                self.multicell_code = "import time\n"
-                self.multicell_code_history = ""
-                self.multicell_cellcount = -1
-                return reply_status
-            elif self.mode == KernelMode.WRITEFILE:
-                self.writefile_multicell = False
-                return self.standard_reply()
-            else:
-                self.cell_output(
-                    f"KernelWarning: Currently in {self.mode}, ignore command",
-                    "stderr",
-                )
-                return self.standard_reply()
-        elif code.startswith("%%start_writefile"):
-            return self.start_writefile(code)
-        elif code.startswith("%%end_writefile"):
-            return self.end_writefile()
-        elif code.startswith("%%execute_with_scorep"):
-            if self.mode == KernelMode.DEFAULT:
-                # second code argument is for history purposes, we want to keep
-                # everything
-                return await self.scorep_execute(
-                    code.split("\n", 1)[1],
-                    code,
-                    silent,
-                    store_history,
-                    user_expressions,
-                    allow_stdin,
-                    cell_id=cell_id,
-                )
-            elif self.mode == KernelMode.MULTICELL:
-                return self.append_multicellmode(
-                    magics_cleanup(code.split("\n", 1)[1])
-                )
-            elif self.mode == KernelMode.WRITEFILE:
-                return self.append_writefile(
-                    magics_cleanup(code.split("\n", 1)[1]),
-                    explicit_scorep=True,
-                )
+                elif self.mode == KernelMode.WRITEFILE:
+                    scorep_env, nomagic_code = magics_cleanup(code.split("\n", 1)[1])
+                    self.writefile_scorep_env.extend(scorep_env)
+                    return self.append_writefile(
+                        nomagic_code,
+                        explicit_scorep=True,
+                    )
         else:
             if self.mode == KernelMode.DEFAULT:
-                self.pershelper.parse(magics_cleanup(code), "jupyter")
+                self.pershelper.parse(magics_cleanup(code)[1], "jupyter")
                 self.perfdata_handler.start_perfmonitor(os.getpid())
                 parent_ret = await super().do_execute(
                     code,
@@ -1171,10 +1193,13 @@ class JumperKernel(IPythonKernel):
                                                       code)
                 return parent_ret
             elif self.mode == KernelMode.MULTICELL:
-                return self.append_multicellmode(magics_cleanup(code))
+                return self.append_multicellmode(magics_cleanup(code)[1])
             elif self.mode == KernelMode.WRITEFILE:
+                scorep_env, nomagic_code = magics_cleanup(code)
+                self.writefile_scorep_env.extend(scorep_env)
                 return self.append_writefile(
-                    magics_cleanup(code), explicit_scorep=False
+                    nomagic_code,
+                    explicit_scorep=False,
                 )
 
     def do_shutdown(self, restart):

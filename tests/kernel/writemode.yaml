@@ -1,17 +1,32 @@
 -
-  - "%%start_writefile test_kernel_tmp/my_jupyter_to_script"
+  - "%%start_writefile"
   - - |
       Started converting to Python script. See files:
       /home/runner/work/scorep_jupyter_kernel_python/scorep_jupyter_kernel_python/test_kernel_tmp/my_jupyter_to_script_run.sh
       /home/runner/work/scorep_jupyter_kernel_python/scorep_jupyter_kernel_python/test_kernel_tmp/my_jupyter_to_script.py
 -
   - |-
-    %%scorep_env
-    SCOREP_ENABLE_TRACING=1
-    SCOREP_ENABLE_PROFILING=0
-    SCOREP_TOTAL_MEMORY=3g
-    SCOREP_EXPERIMENT_DIRECTORY=test_kernel_tmp/scorep-traces
-  - - "Environment variables recorded."
+    %env SCOREP_ENABLE_TRACING=1
+    %env SCOREP_ENABLE_PROFILING=0
+    %env SCOREP_TOTAL_MEMORY=3g
+    %env SCOREP_EXPERIMENT_DIRECTORY=test_kernel_tmp/scorep-traces
+  - - "Python commands without instrumentation recorded."
+-
+  - "%%abort_writefile"
+  - - "Writefile mode aborted."
+-
+  - "%%start_writefile test_kernel_tmp/my_jupyter_to_script"
+  - - |
+      Started converting to Python script. See files:
+      /home/carthage/Documents/scorep_jupyter_kernel_python/test_kernel_tmp/my_jupyter_to_script_run.sh
+      /home/carthage/Documents/scorep_jupyter_kernel_python/test_kernel_tmp/my_jupyter_to_script.py
+-
+  - |-
+    %env SCOREP_ENABLE_TRACING=1
+    %env SCOREP_ENABLE_PROFILING=0
+    %env SCOREP_TOTAL_MEMORY=3g
+    %env SCOREP_EXPERIMENT_DIRECTORY=test_kernel_tmp/scorep-traces
+  - - "Python commands without instrumentation recorded."
 -
   - |-
     %%scorep_python_binding_arguments
