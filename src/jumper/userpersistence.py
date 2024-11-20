@@ -101,6 +101,7 @@ class PersHelper:
         Generate code for kernel ghost cell to dump notebook persistence for
         subprocess.
         """
+
         jupyter_dump_ = (
             "import sys\n"
             "import os\n"
@@ -111,7 +112,7 @@ class PersHelper:
             f"'{self.paths['jupyter']['sys_path']}',{self.marshaller})\n"
             f"dump_variables({str(self.jupyter_variables)},globals(),"
             f"'{self.paths['jupyter']['var']}',"
-            f"{self.marshaller})"
+            f"{self.marshaller})\n"
         )
 
         return jupyter_dump_
@@ -238,7 +239,6 @@ def dump_variables(variables_names, globals_, var_dump_, marshaller):
 
     with os.fdopen(os.open(var_dump_, os.O_WRONLY | os.O_CREAT), "wb") as file:
         marshaller.dump(user_variables, file)
-
 
 def load_runtime(
     os_environ_, sys_path_, os_environ_dump_, sys_path_dump_, marshaller
