@@ -49,8 +49,10 @@ class UserPersistenceTests(unittest.TestCase):
         with open("tests/userpersistence/definitions.py", "r") as file:
             expected_defs = file.read()
         extracted_defs = extract_definitions(code)
-        self.assertTrue(ast.unparse(ast.parse(expected_defs)) ==
-                        ast.unparse(ast.parse(extracted_defs)))
+        self.assertTrue(
+            ast.unparse(ast.parse(expected_defs))
+            == ast.unparse(ast.parse(extracted_defs))
+        )
 
     def handle_communication(self, object, mode, action):
         if object == "runtime":

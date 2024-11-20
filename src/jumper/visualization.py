@@ -189,17 +189,19 @@ def plot_with_dropdowns(metrics, perfdata, metric_start, time_indices=None):
     # Create subplots in a 1x2 grid
     fig, axes = plt.subplots(1, 2, figsize=(10, 3))
     dropdowns = []
-    color=None
+    color = None
     if time_indices:
         color = [
-            "#" + ''.join(
-                [random.choice('0123456789ABCDEF') for j in range(6)])
-            for i in range(len(time_indices[0]))]
+            "#"
+            + "".join([random.choice("0123456789ABCDEF") for j in range(6)])
+            for i in range(len(time_indices[0]))
+        ]
 
     # Plot data and create dropdowns for each subplot
     for i, ax in enumerate(axes):
-        plot_graph(ax, metrics[i + metric_start], perfdata,
-                   time_indices, color)
+        plot_graph(
+            ax, metrics[i + metric_start], perfdata, time_indices, color
+        )
 
         # Create dropdown widget for the current subplot
         dropdown = widgets.Dropdown(
@@ -208,8 +210,9 @@ def plot_with_dropdowns(metrics, perfdata, metric_start, time_indices=None):
             value=metrics[i + metric_start],
         )
         dropdown.observe(
-            lambda change, ax=ax: plot_graph(ax, change["new"], perfdata,
-                                             time_indices),
+            lambda change, ax=ax: plot_graph(
+                ax, change["new"], perfdata, time_indices, color
+            ),
             names="value",
         )
 
@@ -226,8 +229,9 @@ def plot_with_dropdowns(metrics, perfdata, metric_start, time_indices=None):
     plt.show()
 
 
-def draw_performance_graph(slurm_nodelist: None, perfdata, gpu_avail: False,
-                           time_indices=None):
+def draw_performance_graph(
+    slurm_nodelist: None, perfdata, gpu_avail: False, time_indices=None
+):
     if slurm_nodelist:
         nodelist = slurm_nodelist
         nodelist.insert(0, "All")
