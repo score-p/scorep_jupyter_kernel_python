@@ -97,6 +97,11 @@ class JumperKernel(IPythonKernel):
         self.nodelist = self.perfdata_handler.get_nodelist()
 
         self.scorep_available_ = shutil.which("scorep")
+        self.scorep_python_available_ = True
+        try:
+            import scorep
+        except ModuleNotFoundError:
+            self.scorep_python_available_ = False
 
     def cell_output(self, string, stream="stdout"):
         """
@@ -116,7 +121,13 @@ class JumperKernel(IPythonKernel):
 
     def scorep_not_available(self):
         if not self.scorep_available_:
-            self.cell_output("Score-P not available, cell ignored.", "stderr")
+            self.cell_output("Score-P not available, cell ignored.",
+                             "stderr")
+            return self.standard_reply()
+        if not self.scorep_python_available_:
+            self.cell_output("Score-P Python not available, cell ignored. "
+                             "Consider installing it via `pip install scorep`",
+                             "stderr")
             return self.standard_reply()
         else:
             return None
@@ -1188,12 +1199,8 @@ class JumperKernel(IPythonKernel):
         elif code.startswith("%%end_writefile"):
             return self.scorep_not_available() or self.end_writefile()
         elif code.startswith("%%execute_with_scorep"):
-            if not self.scorep_available_:
-                self.cell_output(
-                    "Score-P not available, cell ignored.", "stderr"
-                )
-                return self.standard_reply()
-            else:
+            scorep_missing = self.scorep_not_available()
+            if scorep_missing is None:
                 if self.mode == KernelMode.DEFAULT:
                     return await self.scorep_execute(
                         code.split("\n", 1)[1],
@@ -1216,6 +1223,8 @@ class JumperKernel(IPythonKernel):
                         nomagic_code,
                         explicit_scorep=True,
                     )
+            else:
+                return scorep_missing
         else:
             if self.mode == KernelMode.DEFAULT:
                 self.pershelper.parse(magics_cleanup(code)[1], "jupyter")
