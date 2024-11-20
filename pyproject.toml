@@ -21,13 +21,14 @@ classifiers=[
 
 dependencies = [
   "ipykernel",
+  "ipywidgets",
+  "ipympl",
   "jupyter-client",
   "astunparse",
   "dill",
   "itables",
   "matplotlib",
   "pandas",
-  "ipywidgets",
   "pynvml" # we need that only for Nvidia GPU systems
 ]
 
