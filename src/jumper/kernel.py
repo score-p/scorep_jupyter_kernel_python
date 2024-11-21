@@ -674,7 +674,6 @@ class JumperKernel(IPythonKernel):
     async def scorep_execute(
         self,
         code,
-        code_for_history,
         silent,
         user_expressions=None,
         allow_stdin=False,
@@ -702,7 +701,6 @@ class JumperKernel(IPythonKernel):
             os.open(scorep_script_name, os.O_WRONLY | os.O_CREAT), "w"
         ) as file:
             file.write(self.pershelper.subprocess_wrapper(code))
-
         # For disk mode use implicit synchronization between kernel and
         # subprocess: await jupyter_dump, subprocess.wait(),
         # await jupyter_update Ghost cell - dump current Jupyter session for
@@ -752,6 +750,7 @@ class JumperKernel(IPythonKernel):
         proc = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=proc_env
         )
+
         self.perfdata_handler.start_perfmonitor(proc.pid)
         # For memory mode jupyter_dump and jupyter_update must be awaited
         # concurrently to the running subprocess
@@ -810,6 +809,7 @@ class JumperKernel(IPythonKernel):
         # explicit timestamps, but aligns the colorization of the plot based
         # on the number of perf measurements we have, which is individual per
         # node
+
         time_indices = None
         if len(multicellmode_timestamps):
             # retrieve the index this cell will have in the global history
@@ -832,9 +832,15 @@ class JumperKernel(IPythonKernel):
                     )
                     nb_ms %= 1.0
             # add time for last to last measurement
+
             if nb_ms >= 0.0:
-                sub_idx, val = time_indices[0][-1]
-                time_indices[0][-1] = (sub_idx, val + nb_ms)
+                if len(time_indices[0]):
+                    sub_idx, val = time_indices[0][-1]
+                    time_indices[0][-1] = (sub_idx, val + nb_ms)
+                else:
+                    time_indices[0].append(
+                        (str(sub_idx) + "_" + str(0), nb_ms)
+                    )
 
             nb_ms = 0.0
             for idx, val in enumerate(time_indices[0]):
@@ -903,7 +909,7 @@ class JumperKernel(IPythonKernel):
                 f"Instrumentation results can be found in {scorep_folder}"
             )
         else:
-            # Find last creasted directory with scorep* name
+            # Find last created directory with scorep* name
             # TODO: Directory isn't created local when running scorep-collector
             max_iterations = 5
             while max_iterations > 0:
@@ -938,7 +944,7 @@ class JumperKernel(IPythonKernel):
         if performance_data_nodes:
             self.report_perfdata(performance_data_nodes, duration)
             self.perfdata_handler.append_code(
-                datetime.datetime.now(), code_for_history, time_indices
+                datetime.datetime.now(), code, time_indices
             )
         return self.standard_reply()
 
@@ -1178,42 +1184,35 @@ class JumperKernel(IPythonKernel):
         elif code.startswith("%%finalize_multicellmode"):
             # Cannot be put into a separate function due to tight coupling
             # between do_execute and scorep_execute
-            if not self.scorep_available_:
-                self.cell_output(
-                    "Score-P not available, cell ignored.", "stderr"
-                )
-                return self.standard_reply()
-            else:
-                if self.mode == KernelMode.MULTICELL:
-                    self.mode = KernelMode.DEFAULT
-                    try:
-                        reply_status = await self.scorep_execute(
-                            self.multicell_code,
-                            silent,
-                            store_history,
-                            user_expressions,
-                            allow_stdin,
-                            cell_id=cell_id,
-                        )
-                    except Exception:
-                        self.cell_output(
-                            "KernelError: Multicell execution failed.",
-                            "stderr",
-                        )
-                        return self.standard_reply()
-                    self.multicell_code = ""
-                    self.multicell_cellcount = 0
-                    return reply_status
-                elif self.mode == KernelMode.WRITEFILE:
-                    self.writefile_multicell = False
-                    return self.standard_reply()
-                else:
+            if self.mode == KernelMode.MULTICELL:
+                self.mode = KernelMode.DEFAULT
+                try:
+                    reply_status = await self.scorep_execute(
+                        self.multicell_code,
+                        silent,
+                        user_expressions,
+                        allow_stdin,
+                        cell_id=cell_id,
+                    )
+                except Exception as e:
                     self.cell_output(
-                        f"KernelWarning: Currently in {self.mode},"
-                        f" ignore command",
+                        "KernelError: Multicell execution failed.",
                         "stderr",
                     )
                     return self.standard_reply()
+                self.multicell_code = ""
+                self.multicell_cellcount = -1
+                return reply_status
+            elif self.mode == KernelMode.WRITEFILE:
+                self.writefile_multicell = False
+                return self.standard_reply()
+            else:
+                self.cell_output(
+                    f"KernelWarning: Currently in {self.mode},"
+                    f" ignore command",
+                    "stderr",
+                )
+                return self.standard_reply()
         elif code.startswith("%%start_writefile"):
             return self.scorep_not_available() or self.start_writefile(code)
         elif code.startswith("%%abort_writefile"):
@@ -1227,7 +1226,6 @@ class JumperKernel(IPythonKernel):
                     return await self.scorep_execute(
                         code.split("\n", 1)[1],
                         silent,
-                        store_history,
                         user_expressions,
                         allow_stdin,
                         cell_id=cell_id,
