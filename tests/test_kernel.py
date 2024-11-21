@@ -34,6 +34,7 @@ class KernelTests(jkt.KernelTests):
             # some messages can be of type 'execute_result'
             # type instead of stdout
             # self.assertEqual(msg["content"]["name"], stream)
+
             if msg["header"]["msg_type"] == "stream":
                 self.assertEqual(msg["content"]["name"], stream)
                 self.assertEqual(msg["content"]["text"], expected_msg)
@@ -41,6 +42,7 @@ class KernelTests(jkt.KernelTests):
                 self.assertEqual(
                     msg["content"]["data"]["text/plain"], expected_msg
                 )
+
 
     def check_from_file(self, filename):
 

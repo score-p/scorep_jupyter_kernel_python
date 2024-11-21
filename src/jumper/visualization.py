@@ -150,8 +150,8 @@ def plot_graph(ax, metric, perfdata, time_indices=None, color=None):
 
     # colorization of the plot in case of multiple cells
     if time_indices:
-        # in multi node case, we have to iterate over the indices (time_indices)
-        # and not only 0 here
+        # in multi node case, we have to iterate over the indices (
+        # time_indices) and not only 0 here
         current_index = 0
         target_index = -1
         transition_offset = (x_scale[1] - x_scale[0]) / 2
@@ -165,21 +165,36 @@ def plot_graph(ax, metric, perfdata, time_indices=None, color=None):
             # don't use offset for last cell
             if sub_idx == last_idx:
                 transition_offset = 0
-            ax.axvspan(x_scale[current_index] + start_offset,
-                       x_scale[target_index] +
-                       transition_offset,
-                       facecolor=color[cell_idx], alpha=0.3)
+            ax.axvspan(
+                x_scale[current_index] + start_offset,
+                x_scale[target_index] + transition_offset,
+                facecolor=color[cell_idx],
+                alpha=0.3,
+            )
 
-            text_x_pos = x_scale[current_index] + start_offset + (
-                    (x_scale[target_index] + transition_offset -
-                     x_scale[current_index] + start_offset) / 2)
+            text_x_pos = (
+                x_scale[current_index]
+                + start_offset
+                + (
+                    (
+                        x_scale[target_index]
+                        + transition_offset
+                        - x_scale[current_index]
+                        + start_offset
+                    )
+                    / 2
+                )
+            )
             text_y_pos = ax.get_ylim()[0] + (ax.get_ylim()[1] * 0.05)
 
             # add cell index to plot
-            ax.text(text_x_pos, text_y_pos, "#" + str(sub_idx), style='italic',
-                    bbox={
-                        'facecolor': 'lightgrey', 'alpha': 0.5, 'pad': 2}
-                    )
+            ax.text(
+                text_x_pos,
+                text_y_pos,
+                "#" + str(sub_idx),
+                style="italic",
+                bbox={"facecolor": "lightgrey", "alpha": 0.5, "pad": 2},
+            )
 
             current_index = target_index
             start_offset = transition_offset
