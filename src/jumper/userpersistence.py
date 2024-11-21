@@ -240,6 +240,7 @@ def dump_variables(variables_names, globals_, var_dump_, marshaller):
     with os.fdopen(os.open(var_dump_, os.O_WRONLY | os.O_CREAT), "wb") as file:
         marshaller.dump(user_variables, file)
 
+
 def load_runtime(
     os_environ_, sys_path_, os_environ_dump_, sys_path_dump_, marshaller
 ):

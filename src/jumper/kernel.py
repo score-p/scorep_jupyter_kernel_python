@@ -1194,7 +1194,7 @@ class JumperKernel(IPythonKernel):
                         allow_stdin,
                         cell_id=cell_id,
                     )
-                except Exception as e:
+                except Exception:
                     self.cell_output(
                         "KernelError: Multicell execution failed.",
                         "stderr",
