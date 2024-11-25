@@ -153,7 +153,7 @@ def plot_graph(ax, metric, perfdata, time_indices=None, color=None):
         # in multi node case, we have to iterate over the indices (
         # time_indices) and not only 0 here
         current_index = 0
-        target_index = -1
+        target_index = 0
         transition_offset = (x_scale[1] - x_scale[0]) / 2
         start_offset = 0
         last_idx = time_indices[0][-1][0]
@@ -167,7 +167,7 @@ def plot_graph(ax, metric, perfdata, time_indices=None, color=None):
                 transition_offset = 0
             ax.axvspan(
                 x_scale[current_index] + start_offset,
-                x_scale[target_index] + transition_offset,
+                x_scale[min(target_index, len(x_scale)-1)] + transition_offset,
                 facecolor=color[cell_idx],
                 alpha=0.3,
             )
@@ -177,7 +177,7 @@ def plot_graph(ax, metric, perfdata, time_indices=None, color=None):
                 + start_offset
                 + (
                     (
-                        x_scale[target_index]
+                        x_scale[min(target_index, len(x_scale)-1)]
                         + transition_offset
                         - x_scale[current_index]
                         + start_offset
