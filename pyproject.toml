@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta:__legacy__"
 
 [project]
 name='jumper-kernel'
-version='1.0.0'
+version='1.1.0'
 authors=[
   {name='Elias Werner',email='elias.werner@tu-dresden.de'},
 ]
@@ -21,13 +21,14 @@ classifiers=[
 
 dependencies = [
   "ipykernel",
+  "ipywidgets",
+  "ipympl",
   "jupyter-client",
   "astunparse",
   "dill",
   "itables",
   "matplotlib",
   "pandas",
-  "ipywidgets",
   "pynvml" # we need that only for Nvidia GPU systems
 ]
 

@@ -32,6 +32,7 @@ def plot_graph(ax, metric, perfdata, time_indices=None, color=None):
             int(os.environ.get("JUMPER_REPORT_FREQUENCY", 2)),
         )
     ]
+
     if metric == perfmetrics["cpu_agg"]:
         ax.plot(
             x_scale, perfdata[0][0][-3], label="Mean", color=(0.20, 0.47, 1.00)
@@ -147,24 +148,26 @@ def plot_graph(ax, metric, perfdata, time_indices=None, color=None):
     ax.legend()
     ax.grid(True)
 
-    # in multi node case, we have to iterate over the indices (time_indices)
-    # and not only 0 here
-    current_index = 0
-    target_index = -1
-    transition_offset = (x_scale[1] - x_scale[0]) / 2
-    start_offset = 0
+    # colorization of the plot in case of multiple cells
     if time_indices:
+        # in multi node case, we have to iterate over the indices (
+        # time_indices) and not only 0 here
+        current_index = 0
+        target_index = 0
+        transition_offset = (x_scale[1] - x_scale[0]) / 2
+        start_offset = 0
         last_idx = time_indices[0][-1][0]
 
-        for cell_idx, n_ms in time_indices[0]:
-
+        # for multi cell mode, we might have sub indices
+        for cell_idx, values in enumerate(time_indices[0]):
+            sub_idx, n_ms = values
             target_index = target_index + n_ms
             # don't use offset for last cell
-            if cell_idx == last_idx:
+            if sub_idx == last_idx:
                 transition_offset = 0
             ax.axvspan(
                 x_scale[current_index] + start_offset,
-                x_scale[target_index] + transition_offset,
+                x_scale[min(target_index, len(x_scale)-1)] + transition_offset,
                 facecolor=color[cell_idx],
                 alpha=0.3,
             )
@@ -174,7 +177,7 @@ def plot_graph(ax, metric, perfdata, time_indices=None, color=None):
                 + start_offset
                 + (
                     (
-                        x_scale[target_index]
+                        x_scale[min(target_index, len(x_scale)-1)]
                         + transition_offset
                         - x_scale[current_index]
                         + start_offset
@@ -188,7 +191,7 @@ def plot_graph(ax, metric, perfdata, time_indices=None, color=None):
             ax.text(
                 text_x_pos,
                 text_y_pos,
-                "#" + str(cell_idx),
+                "#" + str(sub_idx),
                 style="italic",
                 bbox={"facecolor": "lightgrey", "alpha": 0.5, "pad": 2},
             )
