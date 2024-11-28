@@ -737,6 +737,7 @@ class JumperKernel(IPythonKernel):
             "PATH": os.environ.get("PATH", ""),
             "LD_LIBRARY_PATH": os.environ.get("LD_LIBRARY_PATH", ""),
             "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
+            "EBPYTHONPREFIXES": os.environ.get("EBPYTHONPREFIXES", ""),
             "PYTHONUNBUFFERED": "x",
         }
         proc_env.update(scorep_env)
