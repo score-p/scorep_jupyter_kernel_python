@@ -2,6 +2,7 @@ import datetime
 import json
 import os
 import re
+import selectors
 import subprocess
 import sys
 import time
@@ -20,6 +21,13 @@ from jumper.perfdatahandler import PerformanceDataHandler
 import jumper.visualization as perfvis
 
 # import jumper.multinode_monitor.slurm_monitor as slurm_monitor
+
+
+import logging
+import logging.config
+from logging_config import LOGGING
+
+logging.config.dictConfig(LOGGING)
 
 PYTHON_EXECUTABLE = sys.executable
 READ_CHUNK_SIZE = 8
@@ -102,6 +110,8 @@ class JumperKernel(IPythonKernel):
             importlib.import_module("scorep")
         except ModuleNotFoundError:
             self.scorep_python_available_ = False
+
+        self.log = logging.getLogger('kernel')
 
     def cell_output(self, string, stream="stdout"):
         """
@@ -749,7 +759,7 @@ class JumperKernel(IPythonKernel):
         minute = dt.strftime("%M")
 
         proc = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=proc_env
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=proc_env
         )
 
         self.perfdata_handler.start_perfmonitor(proc.pid)
@@ -785,24 +795,32 @@ class JumperKernel(IPythonKernel):
         # e.g. tqdm for-loop progress bar
         self.cell_output("\0")
 
-        multicellmode_timestamps = []
-        while True:
-            chunk = b"" + proc.stdout.read(READ_CHUNK_SIZE)
-            if chunk == b"":
-                break
-            chunk = chunk.decode(sys.getdefaultencoding(), errors="ignore")
-            lines = endline_pattern.findall(chunk)
-            if len(lines) > 0:
-                lines[0] = incomplete_line + lines[0]
-                if lines[-1][-1] not in ["\n", "\r"]:
-                    incomplete_line = lines.pop(-1)
-                else:
-                    incomplete_line = ""
-                for line in lines:
-                    if "MCM_TS" in line:
-                        multicellmode_timestamps.append(line)
-                        continue
-                    self.cell_output(line)
+        # multicellmode_timestamps = []
+        # while proc.poll() is None:
+        #     chunk = b"" + proc.stdout.read(READ_CHUNK_SIZE)
+        #     stderr_chunk = b"" + proc.stderr.read(READ_CHUNK_SIZE)
+        #     if chunk == b"" and stderr_chunk == b"":
+        #         break
+        #     chunk = chunk.decode(sys.getdefaultencoding(), errors="ignore")
+        #     stderr_chunk = stderr_chunk.decode(sys.getdefaultencoding(), errors="ignore")
+        #     if stderr_chunk:
+        #         self.log.warning(f'READ_CHUNK: {stderr_chunk}')
+        #     lines = endline_pattern.findall(chunk)
+        #     if len(lines) > 0:
+        #         lines[0] = incomplete_line + lines[0]
+        #         if lines[-1][-1] not in ["\n", "\r"]:
+        #             incomplete_line = lines.pop(-1)
+        #         else:
+        #             incomplete_line = ""
+        #         for line in lines:
+        #             if "MCM_TS" in line:
+        #                 multicellmode_timestamps.append(line)
+        #                 self.log.warning(f'{line=}')
+        #                 continue
+        #             self.cell_output(line)
+        multicellmode_timestamps = self.read_scorep_process_pipe(proc)
+
+
 
         # for multiple nodes, we have to add more lists here, one list per node
         # this is required to be in line with the performance data aggregation
@@ -948,6 +966,47 @@ class JumperKernel(IPythonKernel):
                 datetime.datetime.now(), code, time_indices
             )
         return self.standard_reply()
+
+
+    def read_scorep_process_pipe(self, proc: subprocess.Popen[bytes]) -> list:
+        """
+        Reads and processes the output of a subprocess running with Score-P instrumentation.
+        Args:
+            proc (subprocess.Popen[bytes]): The subprocess whose output is being read.
+
+        Returns:
+            list: A list of decoded strings containing "MCM_TS" timestamps.
+        """
+        multicellmode_timestamps = []
+        sel = selectors.DefaultSelector()
+
+        sel.register(proc.stdout, selectors.EVENT_READ)
+        sel.register(proc.stderr, selectors.EVENT_READ)
+
+        while True:
+            # Select between stdout and stderr
+            for key, val in sel.select():
+                line = key.fileobj.readline()
+                if not line:
+                    sel.unregister(key.fileobj)
+                    continue
+
+                decoded_line = line.decode(sys.getdefaultencoding(), errors='ignore')
+
+                if key.fileobj is proc.stderr:
+                    self.log.warning(f'{decoded_line.strip()}')
+                elif 'MCM_TS' in decoded_line:
+                    multicellmode_timestamps.append(decoded_line)
+                else:
+                    self.cell_output(decoded_line)
+
+            # If both stdout and stderr empty -> out of loop
+            if not sel.get_map():
+                self.log.info('OUT OF LOOP')
+                break
+
+        return multicellmode_timestamps
+
 
     async def do_execute(
         self,
