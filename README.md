@@ -152,6 +152,7 @@ MODE=[disk,memory]
 ```
 
 When using persistence in `disk` mode, user can also define directory to which serializer output will be saved with `SCOREP_KERNEL_PERSISTENCE_DIR` environment variable.
+To see the detailed report for marshalling steps - `MARSHALLING_DETAILED_REPORT=1` environment variable can be set.
 
 `%%execute_with_scorep`
 
@@ -234,6 +235,11 @@ Similar yields for cloudpickle. Use the `%%marshalling_settings` magic command t
 ## Overhead
 
 When dealing with big data structures, there might be a big runtime overhead at the beginning and the end of a Score-P cell. This is due to additional data saving and loading processes for persistency in the background. However this does not affect the actual user code and the Score-P measurements.
+
+## Logging Configuration
+To adjust logging and obtain more detailed output about the behavior of the JUmPER kernel, refer to the `src/logging_config.py` file.
+
+This file contains configuration options for controlling the verbosity, format, and destination of log messages. You can customize it to suit your debugging or monitoring needs.
 
 # Future Work
 

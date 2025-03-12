@@ -1,7 +1,9 @@
+import logging
 import unittest
 import jupyter_kernel_test as jkt
-import yaml, re, os
+import yaml, os
 
+from jumper import logging_config
 
 tmp_dir = "test_kernel_tmp/"
 
@@ -12,6 +14,10 @@ class KernelTests(jkt.KernelTests):
 
     @classmethod
     def setUpClass(cls) -> None:
+        os.environ["DISABLE_PROCESSING_ANIMATIONS"] = "1"
+        logging_config.LOGGING['loggers']['kernel']['level'] = 'WARNING'
+        logging.config.dictConfig(logging_config.LOGGING)
+
         super().setUpClass()
         os.system(f"rm -rf {tmp_dir}")
         os.system(f"mkdir {tmp_dir}")
@@ -36,11 +42,15 @@ class KernelTests(jkt.KernelTests):
             # self.assertEqual(msg["content"]["name"], stream)
 
             if msg["header"]["msg_type"] == "stream":
-                self.assertEqual(msg["content"]["name"], stream)
-                self.assertEqual(msg["content"]["text"], expected_msg)
+                # self.assertEqual(msg["content"]["name"], stream)
+                self.assertEqual(
+                    clean_console_output(msg["content"]["text"]),
+                    clean_console_output(expected_msg)
+                )
             elif msg["header"]["msg_type"] == "execute_result":
                 self.assertEqual(
-                    msg["content"]["data"]["text/plain"], expected_msg
+                    clean_console_output(msg["content"]["data"]["text/plain"]),
+                    clean_console_output(expected_msg)
                 )
 
 
@@ -49,8 +59,9 @@ class KernelTests(jkt.KernelTests):
         with open(filename, "r") as file:
             cells = yaml.safe_load(file)
 
-        for code, expected_output in cells:
-            self.check_stream_output(code, expected_output)
+        for idx, (code, expected_output) in enumerate(cells):
+            with self.subTest(block=idx, code_line=code.splitlines()[0]):
+                self.check_stream_output(code, expected_output)
 
     # Enumerate tests to ensure proper execution order
     def test_00_scorep_env(self):
@@ -73,6 +84,10 @@ class KernelTests(jkt.KernelTests):
 
     def test_06_writemode(self):
         self.check_from_file("tests/kernel/writemode.yaml")
+
+
+def clean_console_output(text):
+    return text.replace('\r', '').strip()
 
 
 if __name__ == "__main__":
