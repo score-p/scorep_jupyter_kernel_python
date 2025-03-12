@@ -7,6 +7,8 @@ import subprocess
 import sys
 import time
 import shutil
+import logging
+import logging.config
 
 from enum import Enum
 from textwrap import dedent
@@ -22,12 +24,7 @@ import jumper.visualization as perfvis
 
 # import jumper.multinode_monitor.slurm_monitor as slurm_monitor
 
-
-import logging
-import logging.config
 from logging_config import LOGGING
-
-logging.config.dictConfig(LOGGING)
 
 PYTHON_EXECUTABLE = sys.executable
 READ_CHUNK_SIZE = 8
@@ -110,7 +107,7 @@ class JumperKernel(IPythonKernel):
             importlib.import_module("scorep")
         except ModuleNotFoundError:
             self.scorep_python_available_ = False
-
+        logging.config.dictConfig(LOGGING)
         self.log = logging.getLogger('kernel')
 
     def cell_output(self, string, stream="stdout"):
@@ -781,45 +778,12 @@ class JumperKernel(IPythonKernel):
                 )
                 return reply_status_dump
 
-        # Redirect process stderr to stdout and observe the latter
-        # Observing two stream with two threads causes interference in
-        # cell_output in Jupyter notebook
-        # stdout is read in chunks, which are split into lines using
-        # \r or \n as delimiter
-        # Last element in the list might be "incomplete line",
-        # not ending with \n or \r, it is saved
-        # and merged with the first line in the next chunk
-        incomplete_line = ""
-        endline_pattern = re.compile(r"(.*?[\r\n]|.+$)")
         # Empty cell output, required for interactive output
         # e.g. tqdm for-loop progress bar
         self.cell_output("\0")
 
-        # multicellmode_timestamps = []
-        # while proc.poll() is None:
-        #     chunk = b"" + proc.stdout.read(READ_CHUNK_SIZE)
-        #     stderr_chunk = b"" + proc.stderr.read(READ_CHUNK_SIZE)
-        #     if chunk == b"" and stderr_chunk == b"":
-        #         break
-        #     chunk = chunk.decode(sys.getdefaultencoding(), errors="ignore")
-        #     stderr_chunk = stderr_chunk.decode(sys.getdefaultencoding(), errors="ignore")
-        #     if stderr_chunk:
-        #         self.log.warning(f'READ_CHUNK: {stderr_chunk}')
-        #     lines = endline_pattern.findall(chunk)
-        #     if len(lines) > 0:
-        #         lines[0] = incomplete_line + lines[0]
-        #         if lines[-1][-1] not in ["\n", "\r"]:
-        #             incomplete_line = lines.pop(-1)
-        #         else:
-        #             incomplete_line = ""
-        #         for line in lines:
-        #             if "MCM_TS" in line:
-        #                 multicellmode_timestamps.append(line)
-        #                 self.log.warning(f'{line=}')
-        #                 continue
-        #             self.cell_output(line)
+        #
         multicellmode_timestamps = self.read_scorep_process_pipe(proc)
-
 
 
         # for multiple nodes, we have to add more lists here, one list per node
@@ -1002,7 +966,6 @@ class JumperKernel(IPythonKernel):
 
             # If both stdout and stderr empty -> out of loop
             if not sel.get_map():
-                self.log.info('OUT OF LOOP')
                 break
 
         return multicellmode_timestamps
