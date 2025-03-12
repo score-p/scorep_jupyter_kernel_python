@@ -369,13 +369,13 @@ def magics_cleanup(code):
     """
     lines = code.splitlines(True)
     scorep_env = []
-    
+
     # Cell magics that should skip entire cell content for persistence
     non_persistent_cell_magics = ["%%bash"]  # Non-Python content
     # Cell magics that should keep Python content but skip magic line
     python_cell_magics = ["%%prun", "%%capture"]
     whitelist_prefixes_line = ["%prun", "%time"]
-    
+
     # Check if this is a cell magic
     if lines and lines[0].strip().startswith("%%"):
         first_line = lines[0].strip()
@@ -388,17 +388,17 @@ def magics_cleanup(code):
             # Skip only the magic line, keep the Python content for persistence
             filtered_lines = lines[1:]  # Skip first line (the magic)
             return scorep_env, "".join(filtered_lines)
-    
+
     # Process line by line for non-cell magics or non-whitelisted cell magics
     filtered_lines = []
-    
+
     for line in lines:
         stripped_line = line.strip()
-        
+
         # Keep empty lines and comments
         if not stripped_line or stripped_line.startswith("#"):
             filtered_lines.append(line)
-            
+
         # Handle %env specially
         elif stripped_line.startswith("%env"):
             env_var = stripped_line.split(" ", 1)[1]
@@ -411,21 +411,21 @@ def magics_cleanup(code):
             else:
                 key = env_var
                 filtered_lines.append(f"print(\"env: {key}=os.environ['{key}']\")\n")
-                
+
         # Handle whitelisted line magics - keep the command part
         elif any(stripped_line.startswith(prefix) for prefix in whitelist_prefixes_line):
             parts = line.split(" ", 1)
             if len(parts) > 1:
                 filtered_lines.append(parts[1])
-                
+
         # Remove all other magic commands and shell commands
         elif stripped_line.startswith("%") or stripped_line.startswith("!"):
             continue
-            
+
         # Keep regular Python code
         else:
             filtered_lines.append(line)
-    
+
     nomagic_code = "".join(filtered_lines)
     return scorep_env, nomagic_code
 

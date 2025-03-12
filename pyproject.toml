@@ -24,6 +24,7 @@ dependencies = [
   "jupyter-client",
   "astunparse",
   "dill",
+  "nbformat",
   "scorep"
 ]
 
