@@ -837,26 +837,22 @@ class JumperKernel(IPythonKernel):
         performance_data_nodes, duration = (
             self.perfdata_handler.end_perfmonitor()
         )
-        self.log.warning('it is okay before disk')
-        # In disk mode, subprocess already terminated
-        # after dumping persistence to file
-        if self.pershelper.mode == "disk":
-            if proc.returncode:
-                self.pershelper.postprocess()
-                self.cell_output(
-                    "KernelError: Cell execution failed, cell persistence "
-                    "was not recorded.",
-                    "stderr",
-                )
-                return self.standard_reply()
+
+
+        if proc.poll():
+            self.pershelper.postprocess()
+            self.cell_output(
+                "KernelError: Cell execution failed, cell persistence "
+                "was not recorded.",
+                "stderr",
+            )
+            return self.standard_reply()
 
         # os_environ_.clear()
         # sys_path_.clear()
-        self.log.warning('it is okay before do_execute')
-        self.log.warning(f'{proc.returncode=}')
-        self.log.warning(f'{proc.poll()=}')
-        self.log.warning(f'{psutil.pid_exists(proc.pid)=}')
 
+        # In disk mode, subprocess already terminated
+        # after dumping persistence to file
         # Ghost cell - load subprocess persistence back to Jupyter notebook
         # Run in a "silent" way to not increase cells counter
         reply_status_update = await super().do_execute(
@@ -875,15 +871,10 @@ class JumperKernel(IPythonKernel):
             )
             return reply_status_update
 
-        self.log.warning('it is okay before memory')
-        self.log.warning(f'{proc.returncode=}')
-        self.log.warning(f'{proc.poll()=}')
-        self.log.warning(f'{psutil.pid_exists(proc.pid)=}')
-
         # In memory mode, subprocess terminates once jupyter_update is
         # executed and pipe is closed
         if self.pershelper.mode == "memory":
-            if proc.returncode:
+            if proc.poll():
                 self.pershelper.postprocess()
                 self.cell_output(
                     "KernelError: Cell execution failed, cell persistence "
@@ -891,11 +882,6 @@ class JumperKernel(IPythonKernel):
                     "stderr",
                 )
                 return self.standard_reply()
-
-        self.log.warning('it is okay after memory')
-        self.log.warning(f'{proc.returncode=}')
-        self.log.warning(f'{proc.poll()=}')
-        self.log.warning(f'{psutil.pid_exists(proc.pid)=}')
 
         # Determine directory to which trace files were saved by Score-P
         scorep_folder = ""
@@ -937,11 +923,6 @@ class JumperKernel(IPythonKernel):
                 )
 
         self.pershelper.postprocess()
-
-        self.log.warning('it is okay after last postprocess call')
-        self.log.warning(f'{proc.returncode=}')
-        self.log.warning(f'{proc.poll()=}')
-        self.log.warning(f'{psutil.pid_exists(proc.pid)=}')
 
         if performance_data_nodes:
             self.report_perfdata(performance_data_nodes, duration)
