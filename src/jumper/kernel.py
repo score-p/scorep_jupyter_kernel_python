@@ -838,7 +838,9 @@ class JumperKernel(IPythonKernel):
             self.perfdata_handler.end_perfmonitor()
         )
 
-
+        # Check if the score-p process is running.
+        # This prevents jupyter_update() from getting stuck while reading non-existent temporary files
+        # if something goes wrong during process execution.
         if proc.poll():
             self.pershelper.postprocess()
             self.cell_output(
