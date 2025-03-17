@@ -14,6 +14,7 @@ from enum import Enum
 from textwrap import dedent
 from statistics import mean
 import pandas as pd
+import psutil
 from ipykernel.ipkernel import IPythonKernel
 from itables import show
 from jumper.userpersistence import PersHelper, scorep_script_name
@@ -782,9 +783,7 @@ class JumperKernel(IPythonKernel):
         # e.g. tqdm for-loop progress bar
         self.cell_output("\0")
 
-        #
         multicellmode_timestamps = self.read_scorep_process_pipe(proc)
-
 
         # for multiple nodes, we have to add more lists here, one list per node
         # this is required to be in line with the performance data aggregation
@@ -838,7 +837,7 @@ class JumperKernel(IPythonKernel):
         performance_data_nodes, duration = (
             self.perfdata_handler.end_perfmonitor()
         )
-
+        self.log.warning('it is okay before disk')
         # In disk mode, subprocess already terminated
         # after dumping persistence to file
         if self.pershelper.mode == "disk":
@@ -853,6 +852,10 @@ class JumperKernel(IPythonKernel):
 
         # os_environ_.clear()
         # sys_path_.clear()
+        self.log.warning('it is okay before do_execute')
+        self.log.warning(f'{proc.returncode=}')
+        self.log.warning(f'{proc.poll()=}')
+        self.log.warning(f'{psutil.pid_exists(proc.pid)=}')
 
         # Ghost cell - load subprocess persistence back to Jupyter notebook
         # Run in a "silent" way to not increase cells counter
@@ -872,6 +875,11 @@ class JumperKernel(IPythonKernel):
             )
             return reply_status_update
 
+        self.log.warning('it is okay before memory')
+        self.log.warning(f'{proc.returncode=}')
+        self.log.warning(f'{proc.poll()=}')
+        self.log.warning(f'{psutil.pid_exists(proc.pid)=}')
+
         # In memory mode, subprocess terminates once jupyter_update is
         # executed and pipe is closed
         if self.pershelper.mode == "memory":
@@ -883,6 +891,11 @@ class JumperKernel(IPythonKernel):
                     "stderr",
                 )
                 return self.standard_reply()
+
+        self.log.warning('it is okay after memory')
+        self.log.warning(f'{proc.returncode=}')
+        self.log.warning(f'{proc.poll()=}')
+        self.log.warning(f'{psutil.pid_exists(proc.pid)=}')
 
         # Determine directory to which trace files were saved by Score-P
         scorep_folder = ""
@@ -924,6 +937,12 @@ class JumperKernel(IPythonKernel):
                 )
 
         self.pershelper.postprocess()
+
+        self.log.warning('it is okay after last postprocess call')
+        self.log.warning(f'{proc.returncode=}')
+        self.log.warning(f'{proc.poll()=}')
+        self.log.warning(f'{psutil.pid_exists(proc.pid)=}')
+
         if performance_data_nodes:
             self.report_perfdata(performance_data_nodes, duration)
             self.perfdata_handler.append_code(
