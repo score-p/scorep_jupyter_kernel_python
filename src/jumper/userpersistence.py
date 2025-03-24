@@ -1,6 +1,11 @@
+import logging
 import os
 import shutil
 import ast
+import threading
+import time
+import sys
+
 import astunparse
 from pathlib import Path
 import uuid
@@ -105,14 +110,19 @@ class PersHelper:
         jupyter_dump_ = (
             "import sys\n"
             "import os\n"
+            "import threading\n"
             f"import {self.marshaller}\n"
-            "from jumper.userpersistence import dump_runtime,dump_variables\n"
+            "from jumper.userpersistence import dump_runtime, dump_variables, spinner_task, stop_spinner_event\n"
+            "spinner_thread = threading.Thread(target=spinner_task)\n"
+            "spinner_thread.start()\n"
             "dump_runtime(os.environ, sys.path,"
             f"'{self.paths['jupyter']['os_environ']}',"
             f"'{self.paths['jupyter']['sys_path']}',{self.marshaller})\n"
             f"dump_variables({str(self.jupyter_variables)},globals(),"
             f"'{self.paths['jupyter']['var']}',"
             f"{self.marshaller})\n"
+            "stop_spinner_event.set()\n"
+            "spinner_thread.join()\n"
         )
 
         return jupyter_dump_
@@ -368,3 +378,17 @@ def magics_cleanup(code):
     ):  # Line magic & executed cell, remove first word
         nomagic_code = code.split(" ", 1)[1]
     return scorep_env, nomagic_code
+
+
+stop_spinner_event = threading.Event()
+
+
+def spinner_task(message="Loading user input..."):
+    spinner = ['|', '/', '-', '\\']
+    i = 0
+    while not stop_spinner_event.is_set():
+        sys.stdout.write(f'\r{message} {spinner[i % len(spinner)]}')
+        sys.stdout.flush()
+        time.sleep(0.1)
+        i += 1
+    sys.stdout.write('\rUser input loaded!            \n')
