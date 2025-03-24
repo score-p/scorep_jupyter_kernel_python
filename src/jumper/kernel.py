@@ -691,15 +691,20 @@ class JumperKernel(IPythonKernel):
         """
         Execute given code with Score-P Python bindings instrumentation.
         """
+        self.log.info("Executing Score-P instrumented code...")
+
         # Set up files/pipes for persistence communication
         if not self.pershelper.preprocess():
             self.pershelper.postprocess()
+            error_message = "Failed to set up persistence communication files/pipes."
+            self.log.error(error_message)
             self.cell_output(
-                "KernelError: Failed to set up the persistence communication "
-                "files/pipes.",
+                f"KernelError: {error_message} ",
                 "stderr",
             )
             return self.standard_reply()
+
+        self.log.debug("Persistence communication set up successfully.")
 
         # Prepare code for the Score-P instrumented execution as subprocess
         # Transmit user persistence and updated sys.path from Jupyter
@@ -709,11 +714,14 @@ class JumperKernel(IPythonKernel):
             os.open(scorep_script_name, os.O_WRONLY | os.O_CREAT), "w"
         ) as file:
             file.write(self.pershelper.subprocess_wrapper(code))
+        self.log.debug(f"Code written to temporary script: {scorep_script_name}")
+
         # For disk mode use implicit synchronization between kernel and
         # subprocess: await jupyter_dump, subprocess.wait(),
         # await jupyter_update Ghost cell - dump current Jupyter session for
         # subprocess Run in a "silent" way to not increase cells counter
         if self.pershelper.mode == "disk":
+            self.log.debug("Executing Jupyter dump for disk mode.")
             reply_status_dump = await super().do_execute(
                 self.pershelper.jupyter_dump(),
                 silent,
@@ -724,18 +732,24 @@ class JumperKernel(IPythonKernel):
             )
 
             if reply_status_dump["status"] != "ok":
+                error_message = "Failed to pickle notebook's persistence."
+                self.log.error(error_message)
                 self.ghost_cell_error(
                     reply_status_dump,
-                    "KernelError: Failed to pickle notebook's persistence.",
+                    f"KernelError: {error_message}",
                 )
                 return reply_status_dump
 
         # Launch subprocess with Jupyter notebook environment
+        self.log.debug("Preparing subprocess execution.")
+
         cmd = (
             [PYTHON_EXECUTABLE, "-m", "scorep"]
             + self.scorep_binding_args
             + [scorep_script_name]
         )
+        self.log.debug(f"Subprocess command: {' '.join(cmd)}")
+
         scorep_env = {
             key: os.environ[key]
             for key in os.environ
@@ -759,11 +773,13 @@ class JumperKernel(IPythonKernel):
         proc = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=proc_env
         )
+        self.log.debug(f"Subprocess started with PID {proc.pid}")
 
         self.perfdata_handler.start_perfmonitor(proc.pid)
         # For memory mode jupyter_dump and jupyter_update must be awaited
         # concurrently to the running subprocess
         if self.pershelper.mode == "memory":
+            self.log.debug("Executing Jupyter dump for memory mode.")
             reply_status_dump = await super().do_execute(
                 self.pershelper.jupyter_dump(),
                 silent,
@@ -773,9 +789,11 @@ class JumperKernel(IPythonKernel):
                 cell_id=cell_id,
             )
             if reply_status_dump["status"] != "ok":
+                error_message = "Failed to pickle notebook's persistence."
+                self.log.error(error_message)
                 self.ghost_cell_error(
                     reply_status_dump,
-                    "KernelError: Failed to pickle notebook's persistence.",
+                    f"KernelError: {error_message}",
                 )
                 return reply_status_dump
 
@@ -843,9 +861,10 @@ class JumperKernel(IPythonKernel):
         # if something goes wrong during process execution.
         if proc.poll():
             self.pershelper.postprocess()
+            error_message = "Cell execution failed, cell persistence was not recorded."
+            self.log.error(error_message)
             self.cell_output(
-                "KernelError: Cell execution failed, cell persistence "
-                "was not recorded.",
+                f"KernelError: {error_message}",
                 "stderr",
             )
             return self.standard_reply()
@@ -866,10 +885,11 @@ class JumperKernel(IPythonKernel):
             cell_id=cell_id,
         )
         if reply_status_update["status"] != "ok":
+            error_message = "Failed to load cell's persistence to the notebook."
+            self.log.error(error_message)
             self.ghost_cell_error(
                 reply_status_update,
-                "KernelError: Failed to load cell's persistence to the "
-                "notebook.",
+                f"KernelError: {error_message}"
             )
             return reply_status_update
 
@@ -878,9 +898,10 @@ class JumperKernel(IPythonKernel):
         if self.pershelper.mode == "memory":
             if proc.poll():
                 self.pershelper.postprocess()
+                error_message = "Cell execution failed, cell persistence was not recorded."
+                self.log.error(error_message)
                 self.cell_output(
-                    "KernelError: Cell execution failed, cell persistence "
-                    "was not recorded.",
+                    f"KernelError: {error_message}",
                     "stderr",
                 )
                 return self.standard_reply()
@@ -888,6 +909,7 @@ class JumperKernel(IPythonKernel):
         # Determine directory to which trace files were saved by Score-P
         scorep_folder = ""
         if "SCOREP_EXPERIMENT_DIRECTORY" in os.environ:
+            self.log.warning(f'{os.environ["SCOREP_EXPERIMENT_DIRECTORY"]=}')
             scorep_folder = os.environ["SCOREP_EXPERIMENT_DIRECTORY"]
             self.cell_output(
                 f"Instrumentation results can be found in {scorep_folder}"

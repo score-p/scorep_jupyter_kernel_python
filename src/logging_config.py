@@ -1,8 +1,18 @@
+import logging
 import os
+import sys
 
 
 LOGGING_DIR = 'logging'
 os.makedirs(LOGGING_DIR, exist_ok=True)
+
+class JupyterLogFilter(logging.Filter):
+    def filter(self, record):
+        return False
+
+class IgnoreErrorFilter(logging.Filter):
+    def filter(self, record):
+        return record.levelno < logging.ERROR
 
 LOGGING = {
     'version': 1,
@@ -35,16 +45,26 @@ LOGGING = {
         'console': {
             'level': 'DEBUG',
             'class': 'logging.StreamHandler',
-            'formatter': 'verbose'
+            'stream': sys.stdout,
+            'filters': ['ignore_error_filter'] # prevents from writing to jupyter cell output twice
         },
+    },
+    'filters': {
+        'jupyter_filter': {
+            '()': JupyterLogFilter
+        },
+        'ignore_error_filter': {
+            '()': IgnoreErrorFilter
+        }
     },
     'root': {
         'handlers': ['console', 'debug_file'],
         'level': 'INFO',
     },
+
     'loggers': {
         'kernel': {
-            'handlers': ['console', 'debug_file', 'info_file'],
+            'handlers': ['console', 'debug_file', 'info_file', 'error_file'],
             'level': 'INFO',
             'propagate': False,
         },
