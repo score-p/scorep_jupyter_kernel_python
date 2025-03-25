@@ -121,7 +121,7 @@ class PersHelper:
             f"dump_variables({str(self.jupyter_variables)},globals(),"
             f"'{self.paths['jupyter']['var']}',"
             f"{self.marshaller})\n"
-            "spinner.stop('Data is loaded!')\n"
+            "spinner.stop('Data is loaded.')\n"
         )
 
         return jupyter_dump_
@@ -390,26 +390,9 @@ def magics_cleanup(code):
     return scorep_env, nomagic_code
 
 
-def start_busy_spinner():
-    pass
-
-def stop_busy_spinner():
-    pass
-
-
-def spinner_task(stop_event, message="Loading data..."):
-    spinner = ['|', '/', '-', '\\']
-    i = 0
-    while not stop_event.is_set():
-        sys.stdout.write(f'\r{message} {spinner[i % len(spinner)]}')
-        sys.stdout.flush()
-        time.sleep(0.1)
-        i += 1
-    sys.stdout.write('\rData is loaded to subprocess!            \n')
-
-
 class BusySpinner:
-    def __init__(self):
+    def __init__(self, lock=None):
+        self._lock = lock or threading.Lock()
         self._stop_event = threading.Event()
         self._thread = threading.Thread(target=self._spinner_task)
         self.working_message = ''
@@ -419,12 +402,14 @@ class BusySpinner:
         spinner_chars = "|/-\\"
         idx = 0
         while not self._stop_event.is_set():
-            sys.stdout.write(f"\r{self.working_message} {spinner_chars[idx % len(spinner_chars)]}")
-            sys.stdout.flush()
+            with self._lock:
+                sys.stdout.write(f"\r{self.working_message} {spinner_chars[idx % len(spinner_chars)]}")
+                sys.stdout.flush()
             time.sleep(0.1)
             idx += 1
-        sys.stdout.write(f"\r{self.done_message}")
-        sys.stdout.flush()
+        with self._lock:
+            sys.stdout.write(f"\r{self.done_message}{' ' * len(self.working_message)}\n")
+            sys.stdout.flush()
 
     def start(self, working_message='Working...'):
         self.working_message = working_message

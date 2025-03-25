@@ -802,10 +802,11 @@ class JumperKernel(IPythonKernel):
         # e.g. tqdm for-loop progress bar
         self.cell_output("\0")
 
-        process_busy_spinner = BusySpinner()
+        stdout_lock = threading.Lock()
+        process_busy_spinner = BusySpinner(stdout_lock)
         process_busy_spinner.start('Process is running...')
 
-        multicellmode_timestamps = self.read_scorep_process_pipe(proc)
+        multicellmode_timestamps = self.read_scorep_process_pipe(proc, stdout_lock)
 
         process_busy_spinner.stop()
 
@@ -962,11 +963,12 @@ class JumperKernel(IPythonKernel):
         return self.standard_reply()
 
 
-    def read_scorep_process_pipe(self, proc: subprocess.Popen[bytes]) -> list:
+    def read_scorep_process_pipe(self, proc: subprocess.Popen[bytes], stdout_lock: threading.Lock) -> list:
         """
         Reads and processes the output of a subprocess running with Score-P instrumentation.
         Args:
             proc (subprocess.Popen[bytes]): The subprocess whose output is being read.
+            stdout_lock (threading.Lock): Lock to avoid output overlapping
 
         Returns:
             list: A list of decoded strings containing "MCM_TS" timestamps.
@@ -976,6 +978,9 @@ class JumperKernel(IPythonKernel):
 
         sel.register(proc.stdout, selectors.EVENT_READ)
         sel.register(proc.stderr, selectors.EVENT_READ)
+
+        line_width = 50
+        clear_line = "\r" + " " * line_width + "\r"
 
         while True:
             # Select between stdout and stderr
@@ -988,11 +993,15 @@ class JumperKernel(IPythonKernel):
                 decoded_line = line.decode(sys.getdefaultencoding(), errors='ignore')
 
                 if key.fileobj is proc.stderr:
-                    self.log.warning(f'{decoded_line.strip()}')
+                    with stdout_lock:
+                        self.log.warning(f'{decoded_line.strip()}')
                 elif 'MCM_TS' in decoded_line:
                     multicellmode_timestamps.append(decoded_line)
                 else:
-                    self.cell_output(decoded_line)
+                    with stdout_lock:
+                        sys.stdout.write(clear_line)
+                        sys.stdout.flush()
+                        self.cell_output(decoded_line)
 
             # If both stdout and stderr empty -> out of loop
             if not sel.get_map():
