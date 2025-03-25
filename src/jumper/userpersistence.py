@@ -1,4 +1,3 @@
-import logging
 import os
 import shutil
 import ast
@@ -10,6 +9,7 @@ import astunparse
 from pathlib import Path
 import uuid
 import importlib
+from pympler import asizeof
 
 scorep_script_name = "scorep_script.py"
 
@@ -112,17 +112,16 @@ class PersHelper:
             "import os\n"
             "import threading\n"
             f"import {self.marshaller}\n"
-            "from jumper.userpersistence import dump_runtime, dump_variables, spinner_task, stop_spinner_event\n"
-            "spinner_thread = threading.Thread(target=spinner_task)\n"
-            "spinner_thread.start()\n"
+            "from jumper.userpersistence import dump_runtime, dump_variables, BusySpinner\n"
+            "spinner = BusySpinner()\n"
+            "spinner.start('Loading data...')\n"
             "dump_runtime(os.environ, sys.path,"
             f"'{self.paths['jupyter']['os_environ']}',"
             f"'{self.paths['jupyter']['sys_path']}',{self.marshaller})\n"
             f"dump_variables({str(self.jupyter_variables)},globals(),"
             f"'{self.paths['jupyter']['var']}',"
             f"{self.marshaller})\n"
-            "stop_spinner_event.set()\n"
-            "spinner_thread.join()\n"
+            "spinner.stop('Data is loaded!')\n"
         )
 
         return jupyter_dump_
@@ -207,11 +206,15 @@ class PersHelper:
             self.subprocess_variables.clear()
             self.subprocess_definitions += user_definitions
             self.subprocess_variables.extend(user_variables)
+            # print(f'subprocess {self.subprocess_variables=}')
+            # print(f'subprocess {self.subprocess_definitions=}')
         elif mode == "jupyter":
             # Update aggregated storage of definitions and user variables
             # for entire notebook.
             self.jupyter_definitions += user_definitions
             self.jupyter_variables.extend(user_variables)
+            # print(f'jupyter {self.jupyter_definitions=}')
+            # print(f'jupyter {self.jupyter_variables=}')
 
 
 def dump_runtime(
@@ -235,6 +238,7 @@ def dump_runtime(
 
 
 def dump_variables(variables_names, globals_, var_dump_, marshaller):
+    # print(f"dump_variables {variables_names=}")
     user_variables = {
         k: v for k, v in globals_.items() if k in variables_names
     }
@@ -247,8 +251,14 @@ def dump_variables(variables_names, globals_, var_dump_, marshaller):
         if non_persistent_class in globals().keys():
             user_variables[el].__class__ = globals()[non_persistent_class]
 
+    # estimated_size = sum(asizeof.asizeof(v) for v in user_variables.values())
+    # print("Estimated size:", variables_names)
+
     with os.fdopen(os.open(var_dump_, os.O_WRONLY | os.O_CREAT), "wb") as file:
+        # wrapped_file = ProgressWriter(file, total_estimated=estimated_size)
         marshaller.dump(user_variables, file)
+        # marshaller.dump(user_variables, wrapped_file)
+        # wrapped_file.write(b'')
 
 
 def load_runtime(
@@ -380,15 +390,48 @@ def magics_cleanup(code):
     return scorep_env, nomagic_code
 
 
-stop_spinner_event = threading.Event()
+def start_busy_spinner():
+    pass
+
+def stop_busy_spinner():
+    pass
 
 
-def spinner_task(message="Loading user input..."):
+def spinner_task(stop_event, message="Loading data..."):
     spinner = ['|', '/', '-', '\\']
     i = 0
-    while not stop_spinner_event.is_set():
+    while not stop_event.is_set():
         sys.stdout.write(f'\r{message} {spinner[i % len(spinner)]}')
         sys.stdout.flush()
         time.sleep(0.1)
         i += 1
-    sys.stdout.write('\rUser input loaded!            \n')
+    sys.stdout.write('\rData is loaded to subprocess!            \n')
+
+
+class BusySpinner:
+    def __init__(self):
+        self._stop_event = threading.Event()
+        self._thread = threading.Thread(target=self._spinner_task)
+        self.working_message = ''
+        self.done_message = ''
+
+    def _spinner_task(self):
+        spinner_chars = "|/-\\"
+        idx = 0
+        while not self._stop_event.is_set():
+            sys.stdout.write(f"\r{self.working_message} {spinner_chars[idx % len(spinner_chars)]}")
+            sys.stdout.flush()
+            time.sleep(0.1)
+            idx += 1
+        sys.stdout.write(f"\r{self.done_message}")
+        sys.stdout.flush()
+
+    def start(self, working_message='Working...'):
+        self.working_message = working_message
+        if not self._thread.is_alive():
+            self._thread.start()
+
+    def stop(self, done_message='Done.'):
+        self.done_message = done_message
+        self._stop_event.set()
+        self._thread.join()

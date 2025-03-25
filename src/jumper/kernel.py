@@ -5,6 +5,7 @@ import re
 import selectors
 import subprocess
 import sys
+import threading
 import time
 import shutil
 import logging
@@ -18,7 +19,7 @@ import psutil
 from ipykernel.ipkernel import IPythonKernel
 from itables import show
 from jumper.userpersistence import PersHelper, scorep_script_name
-from jumper.userpersistence import magics_cleanup
+from jumper.userpersistence import magics_cleanup, BusySpinner
 import importlib
 from jumper.perfdatahandler import PerformanceDataHandler
 import jumper.visualization as perfvis
@@ -801,7 +802,12 @@ class JumperKernel(IPythonKernel):
         # e.g. tqdm for-loop progress bar
         self.cell_output("\0")
 
+        process_busy_spinner = BusySpinner()
+        process_busy_spinner.start('Process is running...')
+
         multicellmode_timestamps = self.read_scorep_process_pipe(proc)
+
+        process_busy_spinner.stop()
 
         # for multiple nodes, we have to add more lists here, one list per node
         # this is required to be in line with the performance data aggregation
