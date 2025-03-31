@@ -6,13 +6,20 @@ import sys
 LOGGING_DIR = 'logging'
 os.makedirs(LOGGING_DIR, exist_ok=True)
 
+
 class JupyterLogFilter(logging.Filter):
     def filter(self, record):
         return False
 
+
 class IgnoreErrorFilter(logging.Filter):
     def filter(self, record):
         return record.levelno < logging.ERROR
+
+
+class JumperKernelOnlyFilter(logging.Filter):
+    def filter(self, record):
+        return 'jumper' in record.pathname
 
 LOGGING = {
     'version': 1,
@@ -46,7 +53,10 @@ LOGGING = {
             'level': 'DEBUG',
             'class': 'logging.StreamHandler',
             'stream': sys.stdout,
-            'filters': ['ignore_error_filter'] # prevents from writing to jupyter cell output twice
+            'filters': [
+                'ignore_error_filter',  # prevents from writing to jupyter cell output twice
+                'jumper_kernel_only_filter',
+            ]
         },
     },
     'filters': {
@@ -55,11 +65,14 @@ LOGGING = {
         },
         'ignore_error_filter': {
             '()': IgnoreErrorFilter
+        },
+        'jumper_kernel_only_filter': {
+            '()': JumperKernelOnlyFilter
         }
     },
     'root': {
-        'handlers': ['console', 'debug_file'],
-        'level': 'INFO',
+        'handlers': [],
+        'level': 'WARNING',
     },
 
     'loggers': {
