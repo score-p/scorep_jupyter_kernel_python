@@ -4,6 +4,7 @@ import ast
 import threading
 import time
 import sys
+import types
 
 import astunparse
 from pathlib import Path
@@ -29,6 +30,7 @@ class PersHelper:
             "jupyter": {"os_environ": "", "sys_path": "", "var": ""},
             "subprocess": {"os_environ": "", "sys_path": "", "var": ""},
         }
+        self.is_dump_detailed_report = False
 
     def preprocess(self):
 
@@ -114,14 +116,23 @@ class PersHelper:
             f"import {self.marshaller}\n"
             "from jumper.userpersistence import dump_runtime, dump_variables, BusySpinner\n"
             "spinner = BusySpinner()\n"
-            "spinner.start('Loading data...')\n"
+            f"if {self.is_dump_detailed_report}:\n"
+            "    spinner.start('Dumping runtime environment and sys.path...')\n"
+            f"else:\n"
+            "    spinner.start('Loading data...')\n"
             "dump_runtime(os.environ, sys.path,"
             f"'{self.paths['jupyter']['os_environ']}',"
             f"'{self.paths['jupyter']['sys_path']}',{self.marshaller})\n"
+            f"if {self.is_dump_detailed_report}:\n"
+            "    spinner.report('Dumping runtime environment and sys.path done.')\n"
+            "    spinner.start('Dumping variables...')\n"
             f"dump_variables({str(self.jupyter_variables)},globals(),"
             f"'{self.paths['jupyter']['var']}',"
             f"{self.marshaller})\n"
-            "spinner.stop('Data is loaded.')\n"
+            f"if {self.is_dump_detailed_report}:\n"
+            "    spinner.stop('Dumping variables done.')\n"
+            f"else:\n"
+            "    spinner.stop('Data is loaded.')\n"
         )
 
         return jupyter_dump_
@@ -206,15 +217,14 @@ class PersHelper:
             self.subprocess_variables.clear()
             self.subprocess_definitions += user_definitions
             self.subprocess_variables.extend(user_variables)
-            # print(f'subprocess {self.subprocess_variables=}')
-            # print(f'subprocess {self.subprocess_definitions=}')
         elif mode == "jupyter":
             # Update aggregated storage of definitions and user variables
             # for entire notebook.
             self.jupyter_definitions += user_definitions
             self.jupyter_variables.extend(user_variables)
-            # print(f'jupyter {self.jupyter_definitions=}')
-            # print(f'jupyter {self.jupyter_variables=}')
+
+    def set_dump_report_level(self):
+        self.is_dump_detailed_report = int(os.getenv('MARSHALLING_DETAILED_REPORT', '0'))
 
 
 def dump_runtime(
@@ -238,9 +248,9 @@ def dump_runtime(
 
 
 def dump_variables(variables_names, globals_, var_dump_, marshaller):
-    # print(f"dump_variables {variables_names=}")
     user_variables = {
         k: v for k, v in globals_.items() if k in variables_names
+        and not isinstance(globals_[k], types.ModuleType)
     }
 
     for el in user_variables.keys():
@@ -251,14 +261,8 @@ def dump_variables(variables_names, globals_, var_dump_, marshaller):
         if non_persistent_class in globals().keys():
             user_variables[el].__class__ = globals()[non_persistent_class]
 
-    # estimated_size = sum(asizeof.asizeof(v) for v in user_variables.values())
-    # print("Estimated size:", variables_names)
-
     with os.fdopen(os.open(var_dump_, os.O_WRONLY | os.O_CREAT), "wb") as file:
-        # wrapped_file = ProgressWriter(file, total_estimated=estimated_size)
         marshaller.dump(user_variables, file)
-        # marshaller.dump(user_variables, wrapped_file)
-        # wrapped_file.write(b'')
 
 
 def load_runtime(
@@ -407,16 +411,18 @@ class BusySpinner:
                 sys.stdout.flush()
             time.sleep(0.1)
             idx += 1
-        with self._lock:
-            sys.stdout.write(f"\r{self.done_message}{' ' * len(self.working_message)}\n")
-            sys.stdout.flush()
 
     def start(self, working_message='Working...'):
         self.working_message = working_message
         if not self._thread.is_alive():
             self._thread.start()
 
+    def report(self, done_message='Done.'):
+        with self._lock:
+            sys.stdout.write(f"\r{done_message}{' ' * len(self.working_message)}\n")
+            sys.stdout.flush()
+
     def stop(self, done_message='Done.'):
-        self.done_message = done_message
+        self.report(done_message)
         self._stop_event.set()
         self._thread.join()

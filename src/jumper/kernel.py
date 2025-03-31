@@ -109,6 +109,7 @@ class JumperKernel(IPythonKernel):
             importlib.import_module("scorep")
         except ModuleNotFoundError:
             self.scorep_python_available_ = False
+
         logging.config.dictConfig(LOGGING)
         self.log = logging.getLogger('kernel')
 
@@ -693,7 +694,7 @@ class JumperKernel(IPythonKernel):
         Execute given code with Score-P Python bindings instrumentation.
         """
         self.log.info("Executing Score-P instrumented code...")
-
+        self.pershelper.set_dump_report_level()
         # Set up files/pipes for persistence communication
         if not self.pershelper.preprocess():
             self.pershelper.postprocess()
