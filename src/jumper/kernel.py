@@ -13,6 +13,8 @@ from statistics import mean
 import pandas as pd
 from ipykernel.ipkernel import IPythonKernel
 from itables import show
+
+from jumper.context import kernel_context
 from jumper.userpersistence import PersHelper, scorep_script_name
 from jumper.userpersistence import magics_cleanup
 import importlib
@@ -94,7 +96,7 @@ class JumperKernel(IPythonKernel):
         # will be set to True as soon as GPU data is received
         self.gpu_avail = False
         self.perfdata_handler = PerformanceDataHandler()
-        self.nodelist = self.perfdata_handler.get_nodelist()
+        kernel_context.nodelist = self.perfdata_handler.get_nodelist()
 
         self.scorep_available_ = shutil.which("scorep")
         self.scorep_python_available_ = True
@@ -170,43 +172,6 @@ class JumperKernel(IPythonKernel):
                 f"Kernel uses '{self.pershelper.marshaller}' marshaller in "
                 f"'{self.pershelper.mode}' mode."
             )
-        else:
-            self.cell_output(
-                f"KernelWarning: Currently in {self.mode}, command ignored.",
-                "stderr",
-            )
-        return self.standard_reply()
-
-    def set_perfmonitor(self, code):
-        """
-        Read the perfmonitor and try to select it.
-        """
-        if self.mode == KernelMode.DEFAULT:
-            monitor = code.split("\n")[1]
-            if monitor in {"local", "localhost", "LOCAL", "LOCALHOST"}:
-                self.cell_output(
-                    "Selected local monitor. No parallel monitoring."
-                )
-            else:
-                try:
-                    self.perfdata_handler.set_monitor(monitor)
-                    self.nodelist = self.perfdata_handler.get_nodelist()
-                    if len(self.nodelist) <= 1:
-                        self.nodelist = None
-                        self.cell_output(
-                            "Found monitor: "
-                            + str(monitor)
-                            + " but no nodelist, using local setup. "
-                        )
-                    else:
-                        self.cell_output(
-                            "Selected monitor: "
-                            + str(monitor)
-                            + " and got nodes: "
-                            + str(self.nodelist)
-                        )
-                except Exception:
-                    self.cell_output("Error setting monitor", "stderr")
         else:
             self.cell_output(
                 f"KernelWarning: Currently in {self.mode}, command ignored.",
@@ -520,9 +485,9 @@ class JumperKernel(IPythonKernel):
                 performance_data_nodes[:-8]
             ):
 
-                if self.nodelist:
+                if kernel_context.nodelist:
                     self.cell_output(
-                        "--NODE " + str(self.nodelist[idx]) + "--\n", "stdout"
+                        "--NODE " + str(kernel_context.nodelist[idx]) + "--\n", "stdout"
                     )
 
                 cpu_util = performance_data[0]
@@ -1003,7 +968,7 @@ class JumperKernel(IPythonKernel):
                     f" following sub cells: {sub_idxs}"
                 )
             perfvis.draw_performance_graph(
-                self.nodelist,
+                kernel_context.nodelist,
                 self.perfdata_handler.get_perfdata_history()[-1],
                 self.gpu_avail,
                 time_indices,
@@ -1032,7 +997,7 @@ class JumperKernel(IPythonKernel):
                         f" following sub cells: {sub_idxs}"
                     )
                 perfvis.draw_performance_graph(
-                    self.nodelist,
+                    kernel_context.nodelist,
                     self.perfdata_handler.get_perfdata_history()[index],
                     self.gpu_avail,
                     time_indices,
@@ -1043,7 +1008,7 @@ class JumperKernel(IPythonKernel):
                 self.perfdata_handler.get_perfdata_aggregated()
             )
             perfvis.draw_performance_graph(
-                self.nodelist,
+                kernel_context.nodelist,
                 data,
                 self.gpu_avail,
                 time_indices,
@@ -1161,8 +1126,6 @@ class JumperKernel(IPythonKernel):
                     "stdout",
                 )
             return self.standard_reply()
-        elif code.startswith("%%set_perfmonitor"):
-            return self.set_perfmonitor(code)
         elif code.startswith("%%scorep_python_binding_arguments"):
             return self.scorep_not_available() or self.set_scorep_pythonargs(
                 code
