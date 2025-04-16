@@ -70,7 +70,7 @@ class PerformanceDataHandler:
             self.nodelist = None
 
     def get_nodelist(self):
-        return self.nodelist
+        return self.nodelist if self.nodelist else []
 
     def get_perfdata_history(self):
         return self.performance_data_history
