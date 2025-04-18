@@ -5,7 +5,8 @@ from jumper.perfdatahandler import PerformanceDataHandler
 
 @dataclass
 class KernelContext:
-    nodelist: list = None
+    # will be set to True as soon as GPU data is received
+    gpu_avail = False
     perfdata_handler = PerformanceDataHandler()
 
 

@@ -16,8 +16,6 @@ class KernelMagics(Magics):
         super(KernelMagics, self).__init__(shell)
         self.mode = KernelMode.DEFAULT
 
-        # will be set to True as soon as GPU data is received
-        self.gpu_avail = False
         self.nodelist = kernel_context.perfdata_handler.get_nodelist()
 
     @cell_magic
@@ -32,13 +30,57 @@ class KernelMagics(Magics):
         perfvis.draw_performance_graph(
             self.nodelist,
             data,
-            self.gpu_avail,
+            kernel_context.gpu_avail,
             time_indices,
         )
 
     @line_magic
     def display_graph_for_index(self, line):
-        pass
+        """
+        Display performance graph for a given index.
+        Usage:
+            %display_graph_for_index 2
+        """
+
+        if not line.strip():
+            self.cell_output(
+                "No index specified. Use: %display_graph_for_index index",
+                "stderr"
+            )
+            return
+
+        try:
+            index = int(line.strip())
+        except ValueError:
+            self.cell_output(
+                "Invalid index. Please provide an integer.",
+                "stderr"
+            )
+            return
+
+        history = kernel_context.perfdata_handler.get_perfdata_history()
+        if index >= len(history):
+            self.cell_output(
+                f"Tracked only {len(history)} cells. This index is not available.",
+                "stderr"
+            )
+            return
+
+        time_indices = kernel_context.perfdata_handler.get_time_indices()[index]
+
+        if time_indices:
+            sub_idxs = [x[0] for x in time_indices[0]]
+            self.cell_output(
+                f"📈 Cell seemed to be tracked in multi-cell mode. "
+                f"Got performance data for the following sub-cells: {sub_idxs}"
+            )
+
+        perfvis.draw_performance_graph(
+            self.nodelist,
+            history[index],
+            kernel_context.gpu_avail,
+            time_indices,
+        )
 
 
     @cell_magic
@@ -71,7 +113,10 @@ class KernelMagics(Magics):
                             + str(self.nodelist)
                         )
                 except Exception as e:
-                    self.cell_output(f"Error setting monitor\n{e}", "stderr")
+                    self.cell_output(
+                        f"Error setting monitor\n{e}",
+                        "stderr"
+                    )
         else:
             self.cell_output(
                 f"KernelWarning: Currently in {self.mode}, command ignored.",
@@ -79,7 +124,7 @@ class KernelMagics(Magics):
             )
 
     @staticmethod
-    def cell_output(string, stream="stdout"):
+    def cell_output(string: str, stream="stdout"):
         if stream == "stderr":
             print(string, file=sys.stderr)
         else:

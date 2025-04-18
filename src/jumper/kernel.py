@@ -93,10 +93,6 @@ class JumperKernel(IPythonKernel):
         self.writefile_scorep_binding_args = []
         self.writefile_multicell = False
 
-        # will be set to True as soon as GPU data is received
-        self.gpu_avail = False
-        # TODO: Temporary share perfdata_handler instance with an ipython extension
-        #  as it contains data that should be shared with the extension.
         self.nodelist = kernel_context.perfdata_handler.get_nodelist()
 
         self.scorep_available_ = shutil.which("scorep")
@@ -558,7 +554,7 @@ class JumperKernel(IPythonKernel):
                     )
 
                 if gpu_util[0] and gpu_mem[0]:
-                    self.gpu_avail = True
+                    kernel_context.gpu_avail = True
                     self.cell_output(
                         "--GPU Util and Mem per GPU--\n", "stdout"
                     )
@@ -971,38 +967,9 @@ class JumperKernel(IPythonKernel):
             perfvis.draw_performance_graph(
                 self.nodelist,
                 kernel_context.perfdata_handler.get_perfdata_history()[-1],
-                self.gpu_avail,
+                kernel_context.gpu_avail,
                 time_indices,
             )
-            return self.standard_reply()
-        elif code.startswith("%%display_graph_for_index"):
-            if len(code.split(" ")) == 1:
-                self.cell_output(
-                    "No index specified. Use: %%display_graph_for_index index",
-                    "stdout",
-                )
-            index = int(code.split(" ")[1])
-            if index >= len(kernel_context.perfdata_handler.get_perfdata_history()):
-                self.cell_output(
-                    "Tracked only "
-                    + str(len(kernel_context.perfdata_handler.get_perfdata_history()))
-                    + " cells. This index is not available."
-                )
-            else:
-                time_indices = kernel_context.perfdata_handler.get_time_indices()[index]
-                if time_indices:
-                    sub_idxs = [x[0] for x in time_indices[0]]
-                    self.cell_output(
-                        f"Cell seemed to be tracked in multi cell"
-                        " mode. Got performance data for the"
-                        f" following sub cells: {sub_idxs}"
-                    )
-                perfvis.draw_performance_graph(
-                    self.nodelist,
-                    kernel_context.perfdata_handler.get_perfdata_history()[index],
-                    self.gpu_avail,
-                    time_indices,
-                )
             return self.standard_reply()
 
         elif code.startswith("%%display_code_for_index"):
