@@ -95,8 +95,10 @@ class JumperKernel(IPythonKernel):
 
         # will be set to True as soon as GPU data is received
         self.gpu_avail = False
-        self.perfdata_handler = PerformanceDataHandler()
-        kernel_context.nodelist = self.perfdata_handler.get_nodelist()
+        # TODO: Temporary share perfdata_handler instance with an ipython extension
+        #  as it contains data that should be shared with the extension.
+        kernel_context.perfdata_handler = PerformanceDataHandler()
+        kernel_context.nodelist = kernel_context.perfdata_handler.get_nodelist()
 
         self.scorep_available_ = shutil.which("scorep")
         self.scorep_python_available_ = True
@@ -717,7 +719,7 @@ class JumperKernel(IPythonKernel):
             cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=proc_env
         )
 
-        self.perfdata_handler.start_perfmonitor(proc.pid)
+        kernel_context.perfdata_handler.start_perfmonitor(proc.pid)
         # For memory mode jupyter_dump and jupyter_update must be awaited
         # concurrently to the running subprocess
         if self.pershelper.mode == "memory":
@@ -779,7 +781,7 @@ class JumperKernel(IPythonKernel):
         time_indices = None
         if len(multicellmode_timestamps):
             # retrieve the index this cell will have in the global history
-            sub_idx = len(self.perfdata_handler.get_code_history())
+            sub_idx = len(kernel_context.perfdata_handler.get_code_history())
             # append to have end of last code fragment
             multicellmode_timestamps.append("MCM_TS" + str(time.time()))
             time_indices = [[]]
@@ -819,7 +821,7 @@ class JumperKernel(IPythonKernel):
                 time_indices[0][idx] = (sub_idx, ms)
 
         performance_data_nodes, duration = (
-            self.perfdata_handler.end_perfmonitor()
+            kernel_context.perfdata_handler.end_perfmonitor()
         )
 
         # In disk mode, subprocess already terminated
@@ -909,7 +911,7 @@ class JumperKernel(IPythonKernel):
         self.pershelper.postprocess()
         if performance_data_nodes:
             self.report_perfdata(performance_data_nodes, duration)
-            self.perfdata_handler.append_code(
+            kernel_context.perfdata_handler.append_code(
                 datetime.datetime.now(), code, time_indices
             )
         return self.standard_reply()
@@ -957,9 +959,9 @@ class JumperKernel(IPythonKernel):
             return self.standard_reply()
         """
         if code.startswith("%%display_graph_for_last"):
-            if not len(self.perfdata_handler.get_perfdata_history()):
+            if not len(kernel_context.perfdata_handler.get_perfdata_history()):
                 self.cell_output("No performance data available.")
-            time_indices = self.perfdata_handler.get_time_indices()[-1]
+            time_indices = kernel_context.perfdata_handler.get_time_indices()[-1]
             if time_indices:
                 sub_idxs = [x[0] for x in time_indices[0]]
                 self.cell_output(
@@ -969,7 +971,7 @@ class JumperKernel(IPythonKernel):
                 )
             perfvis.draw_performance_graph(
                 kernel_context.nodelist,
-                self.perfdata_handler.get_perfdata_history()[-1],
+                kernel_context.perfdata_handler.get_perfdata_history()[-1],
                 self.gpu_avail,
                 time_indices,
             )
@@ -981,14 +983,14 @@ class JumperKernel(IPythonKernel):
                     "stdout",
                 )
             index = int(code.split(" ")[1])
-            if index >= len(self.perfdata_handler.get_perfdata_history()):
+            if index >= len(kernel_context.perfdata_handler.get_perfdata_history()):
                 self.cell_output(
                     "Tracked only "
-                    + str(len(self.perfdata_handler.get_perfdata_history()))
+                    + str(len(kernel_context.perfdata_handler.get_perfdata_history()))
                     + " cells. This index is not available."
                 )
             else:
-                time_indices = self.perfdata_handler.get_time_indices()[index]
+                time_indices = kernel_context.perfdata_handler.get_time_indices()[index]
                 if time_indices:
                     sub_idxs = [x[0] for x in time_indices[0]]
                     self.cell_output(
@@ -998,21 +1000,10 @@ class JumperKernel(IPythonKernel):
                     )
                 perfvis.draw_performance_graph(
                     kernel_context.nodelist,
-                    self.perfdata_handler.get_perfdata_history()[index],
+                    kernel_context.perfdata_handler.get_perfdata_history()[index],
                     self.gpu_avail,
                     time_indices,
                 )
-            return self.standard_reply()
-        elif code.startswith("%%display_graph_for_all"):
-            data, time_indices = (
-                self.perfdata_handler.get_perfdata_aggregated()
-            )
-            perfvis.draw_performance_graph(
-                kernel_context.nodelist,
-                data,
-                self.gpu_avail,
-                time_indices,
-            )
             return self.standard_reply()
 
         elif code.startswith("%%display_code_for_index"):
@@ -1022,28 +1013,28 @@ class JumperKernel(IPythonKernel):
                     "stdout",
                 )
             index = int(code.split(" ")[1])
-            if index >= len(self.perfdata_handler.get_perfdata_history()):
+            if index >= len(kernel_context.perfdata_handler.get_perfdata_history()):
                 self.cell_output(
                     "Tracked only "
-                    + str(len(self.perfdata_handler.get_perfdata_history()))
+                    + str(len(kernel_context.perfdata_handler.get_perfdata_history()))
                     + " cells. This index is not available."
                 )
             else:
                 self.cell_output(
                     "Cell timestamp: "
-                    + str(self.perfdata_handler.get_code_history()[index][0])
+                    + str(kernel_context.perfdata_handler.get_code_history()[index][0])
                     + "\n--\n",
                     "stdout",
                 )
                 self.cell_output(
-                    self.perfdata_handler.get_code_history()[index][1],
+                    kernel_context.perfdata_handler.get_code_history()[index][1],
                     "stdout",
                 )
             return self.standard_reply()
         elif code.startswith("%%display_code_history"):
             show(
                 pd.DataFrame(
-                    self.perfdata_handler.get_code_history(),
+                    kernel_context.perfdata_handler.get_code_history(),
                     columns=["timestamp", "code"],
                 ).reset_index(),
                 layout={"topStart": "search", "topEnd": None},
@@ -1065,14 +1056,14 @@ class JumperKernel(IPythonKernel):
                 # In addition, it has a counter for the number of measurements
                 # each sub cell corresponds to in the list of performance data
                 # measurements, e.g. (2_0, 5), (2_1, 3), (2_2, 7)
-                mcm_time_indices = self.perfdata_handler.get_time_indices()
+                mcm_time_indices = kernel_context.perfdata_handler.get_time_indices()
                 mcm_time_indices = list(
                     filter(lambda item: item is not None, mcm_time_indices)
                 )
 
                 code = (
                     f"{varname}="
-                    f"{self.perfdata_handler.get_perfdata_history()}"
+                    f"{kernel_context.perfdata_handler.get_perfdata_history()}"
                 )
 
                 if mcm_time_indices:
@@ -1107,13 +1098,13 @@ class JumperKernel(IPythonKernel):
                 filename = code.split(" ")[1]
                 with open(f"{filename}_perfdata.json", "w") as f:
                     json.dump(
-                        self.perfdata_handler.get_perfdata_history(),
+                        kernel_context.perfdata_handler.get_perfdata_history(),
                         default=str,
                         fp=f,
                     )
                 with open(f"{filename}_code.json", "w") as f:
                     json.dump(
-                        self.perfdata_handler.get_code_history(),
+                        kernel_context.perfdata_handler.get_code_history(),
                         default=str,
                         fp=f,
                     )
@@ -1212,7 +1203,7 @@ class JumperKernel(IPythonKernel):
         else:
             if self.mode == KernelMode.DEFAULT:
                 self.pershelper.parse(magics_cleanup(code)[1], "jupyter")
-                self.perfdata_handler.start_perfmonitor(os.getpid())
+                kernel_context.perfdata_handler.start_perfmonitor(os.getpid())
                 parent_ret = await super().do_execute(
                     code,
                     silent,
@@ -1222,11 +1213,11 @@ class JumperKernel(IPythonKernel):
                     cell_id=cell_id,
                 )
                 performance_data_nodes, duration = (
-                    self.perfdata_handler.end_perfmonitor()
+                    kernel_context.perfdata_handler.end_perfmonitor()
                 )
                 if performance_data_nodes:
                     self.report_perfdata(performance_data_nodes, duration)
-                    self.perfdata_handler.append_code(
+                    kernel_context.perfdata_handler.append_code(
                         datetime.datetime.now(), code
                     )
                 return parent_ret

@@ -7,18 +7,34 @@ from jumper.context import kernel_context
 from jumper.kernel import KernelMode
 
 from jumper.perfdatahandler import PerformanceDataHandler
+import jumper.visualization as perfvis
 
 
 @magics_class
 class KernelMagics(Magics):
     def __init__(self, shell):
         super(KernelMagics, self).__init__(shell)
-        self.perfdata_handler = PerformanceDataHandler()
         self.mode = KernelMode.DEFAULT
+
+        # will be set to True as soon as GPU data is received
+        self.gpu_avail = False
 
     @cell_magic
     def abra(self, line, cell):
         print('HELLO!\n', cell)
+
+    @line_magic
+    def display_graph_for_all(self, line):
+        data, time_indices = (
+            kernel_context.perfdata_handler.get_perfdata_aggregated()
+        )
+        perfvis.draw_performance_graph(
+            kernel_context.nodelist,
+            data,
+            self.gpu_avail,
+            time_indices,
+        )
+
 
     @cell_magic
     def set_perfmonitor(self, line, code):
@@ -33,8 +49,8 @@ class KernelMagics(Magics):
                 )
             else:
                 try:
-                    self.perfdata_handler.set_monitor(monitor)
-                    kernel_context.nodelist = self.perfdata_handler.get_nodelist()
+                    kernel_context.perfdata_handler.set_monitor(monitor)
+                    kernel_context.nodelist = kernel_context.perfdata_handler.get_nodelist()
                     if len(kernel_context.nodelist) <= 1:
                         kernel_context.nodelist = None
                         self.cell_output(
