@@ -97,8 +97,7 @@ class JumperKernel(IPythonKernel):
         self.gpu_avail = False
         # TODO: Temporary share perfdata_handler instance with an ipython extension
         #  as it contains data that should be shared with the extension.
-        kernel_context.perfdata_handler = PerformanceDataHandler()
-        kernel_context.nodelist = kernel_context.perfdata_handler.get_nodelist()
+        self.nodelist = kernel_context.perfdata_handler.get_nodelist()
 
         self.scorep_available_ = shutil.which("scorep")
         self.scorep_python_available_ = True
@@ -487,9 +486,9 @@ class JumperKernel(IPythonKernel):
                 performance_data_nodes[:-8]
             ):
 
-                if kernel_context.nodelist:
+                if self.nodelist:
                     self.cell_output(
-                        "--NODE " + str(kernel_context.nodelist[idx]) + "--\n", "stdout"
+                        "--NODE " + str(self.nodelist[idx]) + "--\n", "stdout"
                     )
 
                 cpu_util = performance_data[0]
@@ -970,7 +969,7 @@ class JumperKernel(IPythonKernel):
                     f" following sub cells: {sub_idxs}"
                 )
             perfvis.draw_performance_graph(
-                kernel_context.nodelist,
+                self.nodelist,
                 kernel_context.perfdata_handler.get_perfdata_history()[-1],
                 self.gpu_avail,
                 time_indices,
@@ -999,7 +998,7 @@ class JumperKernel(IPythonKernel):
                         f" following sub cells: {sub_idxs}"
                     )
                 perfvis.draw_performance_graph(
-                    kernel_context.nodelist,
+                    self.nodelist,
                     kernel_context.perfdata_handler.get_perfdata_history()[index],
                     self.gpu_avail,
                     time_indices,

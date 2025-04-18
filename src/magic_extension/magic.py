@@ -18,6 +18,7 @@ class KernelMagics(Magics):
 
         # will be set to True as soon as GPU data is received
         self.gpu_avail = False
+        self.nodelist = kernel_context.perfdata_handler.get_nodelist()
 
     @cell_magic
     def abra(self, line, cell):
@@ -29,11 +30,15 @@ class KernelMagics(Magics):
             kernel_context.perfdata_handler.get_perfdata_aggregated()
         )
         perfvis.draw_performance_graph(
-            kernel_context.nodelist,
+            self.nodelist,
             data,
             self.gpu_avail,
             time_indices,
         )
+
+    @line_magic
+    def display_graph_for_index(self, line):
+        pass
 
 
     @cell_magic
@@ -50,9 +55,9 @@ class KernelMagics(Magics):
             else:
                 try:
                     kernel_context.perfdata_handler.set_monitor(monitor)
-                    kernel_context.nodelist = kernel_context.perfdata_handler.get_nodelist()
-                    if len(kernel_context.nodelist) <= 1:
-                        kernel_context.nodelist = None
+                    self.nodelist = kernel_context.perfdata_handler.get_nodelist()
+                    if len(self.nodelist) <= 1:
+                        self.nodelist = None
                         self.cell_output(
                             "Found monitor: "
                             + str(monitor)
@@ -63,7 +68,7 @@ class KernelMagics(Magics):
                             "Selected monitor: "
                             + str(monitor)
                             + " and got nodes: "
-                            + str(kernel_context.nodelist)
+                            + str(self.nodelist)
                         )
                 except Exception as e:
                     self.cell_output(f"Error setting monitor\n{e}", "stderr")
