@@ -953,26 +953,8 @@ class JumperKernel(IPythonKernel):
                             self.get_perfdata_index(-1, metrics[1:]), nmetrics)
             return self.standard_reply()
         """
-        if code.startswith("%%display_graph_for_last"):
-            if not len(kernel_context.perfdata_handler.get_perfdata_history()):
-                self.cell_output("No performance data available.")
-            time_indices = kernel_context.perfdata_handler.get_time_indices()[-1]
-            if time_indices:
-                sub_idxs = [x[0] for x in time_indices[0]]
-                self.cell_output(
-                    f"Cell seemed to be tracked in multi cell"
-                    " mode. Got performance data for the"
-                    f" following sub cells: {sub_idxs}"
-                )
-            perfvis.draw_performance_graph(
-                self.nodelist,
-                kernel_context.perfdata_handler.get_perfdata_history()[-1],
-                kernel_context.gpu_avail,
-                time_indices,
-            )
-            return self.standard_reply()
 
-        elif code.startswith("%%display_code_for_index"):
+        if code.startswith("%%display_code_for_index"):
             if len(code.split(" ")) == 1:
                 self.cell_output(
                     "No index specified. Use: %%display_code_for_index index",

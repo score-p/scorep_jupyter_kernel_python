@@ -82,6 +82,25 @@ class KernelMagics(Magics):
             time_indices,
         )
 
+    @line_magic
+    def display_graph_for_last(self, line):
+        if not len(kernel_context.perfdata_handler.get_perfdata_history()):
+            self.cell_output("No performance data available.")
+        time_indices = kernel_context.perfdata_handler.get_time_indices()[-1]
+        if time_indices:
+            sub_idxs = [x[0] for x in time_indices[0]]
+            self.cell_output(
+                f"Cell seemed to be tracked in multi cell"
+                " mode. Got performance data for the"
+                f" following sub cells: {sub_idxs}"
+            )
+        perfvis.draw_performance_graph(
+            self.nodelist,
+            kernel_context.perfdata_handler.get_perfdata_history()[-1],
+            kernel_context.gpu_avail,
+            time_indices,
+        )
+
 
     @cell_magic
     def set_perfmonitor(self, line, code):
