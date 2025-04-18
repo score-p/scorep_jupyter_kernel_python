@@ -1,6 +1,17 @@
 from dataclasses import dataclass
+from enum import Enum
 
 from jumper.perfdatahandler import PerformanceDataHandler
+
+
+# kernel modes
+class KernelMode(Enum):
+    DEFAULT = (0, "default")
+    MULTICELL = (1, "multicell")
+    WRITEFILE = (2, "writefile")
+
+    def __str__(self):
+        return self.value[1]
 
 
 @dataclass

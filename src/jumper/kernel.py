@@ -10,16 +10,18 @@ import shutil
 from enum import Enum
 from textwrap import dedent
 from statistics import mean
+from typing import Type
+
 import pandas as pd
+from IPython.core.magic import Magics
 from ipykernel.ipkernel import IPythonKernel
 from itables import show
 
-from jumper.context import kernel_context
+from jumper.context import kernel_context, KernelMode
 from jumper.userpersistence import PersHelper, scorep_script_name
 from jumper.userpersistence import magics_cleanup
 import importlib
-from jumper.perfdatahandler import PerformanceDataHandler
-import jumper.visualization as perfvis
+from magic_extension.magic import KernelMagics
 
 # import jumper.multinode_monitor.slurm_monitor as slurm_monitor
 
@@ -28,16 +30,6 @@ READ_CHUNK_SIZE = 8
 userpersistence_token = "jumper.userpersistence"
 jupyter_dump = "jupyter_dump.pkl"
 subprocess_dump = "subprocess_dump.pkl"
-
-
-# kernel modes
-class KernelMode(Enum):
-    DEFAULT = (0, "default")
-    MULTICELL = (1, "multicell")
-    WRITEFILE = (2, "writefile")
-
-    def __str__(self):
-        return self.value[1]
 
 
 class JumperKernel(IPythonKernel):
@@ -953,8 +945,16 @@ class JumperKernel(IPythonKernel):
                             self.get_perfdata_index(-1, metrics[1:]), nmetrics)
             return self.standard_reply()
         """
-
-        if code.startswith("%%display_code_for_index"):
+        if self.is_magic_code(code, KernelMagics):
+            return await super().do_execute(
+                code,
+                silent,
+                store_history,
+                user_expressions,
+                allow_stdin,
+                cell_id=cell_id,
+            )
+        elif code.startswith("%%display_code_for_index"):
             if len(code.split(" ")) == 1:
                 self.cell_output(
                     "No index specified. Use: %%display_code_for_index index",
@@ -1178,6 +1178,44 @@ class JumperKernel(IPythonKernel):
                     nomagic_code,
                     explicit_scorep=False,
                 )
+
+    def is_magic_code(
+            self,
+            code: str,
+            magic_class: Type[Magics]
+    ) -> bool:
+        """
+        Determines whether the given code starts with a cell or line magic
+        defined in the specified magic class.
+
+        Args:
+            code (str): The source code of the cell.
+            magic_class (Type[Magics]): The magic class to filter against (e.g. JumperMagics).
+
+        Returns:
+            bool: True if the code starts with a magic defined in the given class, False otherwise.
+        """
+        code = code.strip()
+        if not code:
+            return False
+
+        first_token = code.split(maxsplit=1)[0]
+
+        mm = self.shell.magics_manager
+        target_magics = set()
+
+        # Collect magic names, which are registered in "magic_class"
+        for magic_type in ('cell', 'line'):
+            for name, func in mm.magics[magic_type].items():
+                if getattr(func, '__self__', None).__class__ == magic_class:
+                    target_magics.add((magic_type, name))
+
+        if first_token.startswith("%%"):
+            return ('cell', first_token[2:]) in target_magics
+        elif first_token.startswith("%"):
+            return ('line', first_token[1:]) in target_magics
+
+        return False
 
     def do_shutdown(self, restart):
         self.pershelper.postprocess()

@@ -1,12 +1,9 @@
 import sys
 
 from IPython.core.magic import (Magics, magics_class, line_magic, cell_magic)
-from IPython.display import display, Markdown
 
-from jumper.context import kernel_context
-from jumper.kernel import KernelMode
+from jumper.context import kernel_context, KernelMode
 
-from jumper.perfdatahandler import PerformanceDataHandler
 import jumper.visualization as perfvis
 
 
