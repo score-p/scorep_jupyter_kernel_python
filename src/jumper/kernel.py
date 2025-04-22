@@ -955,52 +955,6 @@ class JumperKernel(IPythonKernel):
                 cell_id=cell_id,
             )
 
-        elif code.startswith("%%perfdata_to_variable"):
-            if len(code.split(" ")) == 1:
-                self.cell_output(
-                    "No variable for export specified. Use: "
-                    "%%perfdata_to_variable myvar",
-                    "stdout",
-                )
-            else:
-                varname = code.split(" ")[1]
-                # for multi cell mode, we might have time indices which we want
-                # to communicate to the user, each time_index has the index of
-                # the overall mult cell and the sub index within this cell.
-                # In addition, it has a counter for the number of measurements
-                # each sub cell corresponds to in the list of performance data
-                # measurements, e.g. (2_0, 5), (2_1, 3), (2_2, 7)
-                mcm_time_indices = kernel_context.perfdata_handler.get_time_indices()
-                mcm_time_indices = list(
-                    filter(lambda item: item is not None, mcm_time_indices)
-                )
-
-                code = (
-                    f"{varname}="
-                    f"{kernel_context.perfdata_handler.get_perfdata_history()}"
-                )
-
-                if mcm_time_indices:
-                    code += f"\n{varname}.append({mcm_time_indices})"
-
-                await super().do_execute(code, silent=True)
-                self.cell_output(
-                    "Exported performance data to "
-                    + str(varname)
-                    + " variable. ",
-                    "stdout",
-                )
-                if mcm_time_indices:
-                    self.cell_output(
-                        "Detected that cells were executed in multi cell mode."
-                        + f"Last entry in {varname} is a list that contains "
-                        f"the sub indices per cell that were executed in "
-                        f"in multi cell mode and a counter for the number of"
-                        f" performance measurements within this sub cell, "
-                        f"e.g. f{mcm_time_indices[-1]}",
-                        "stdout",
-                    )
-            return self.standard_reply()
         elif code.startswith("%%perfdata_to_json"):
             if len(code.split(" ")) == 1:
                 self.cell_output(

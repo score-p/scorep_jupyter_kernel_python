@@ -141,6 +141,41 @@ class KernelMagics(Magics):
             columnDefs=[{"className": "dt-left", "targets": 2}],
         )
 
+    @line_magic
+    def perfdata_to_variable(self, line):
+        """
+        Export collected performance data into a notebook variable.
+        Usage:
+            %%perfdata_to_variable myvar
+        """
+        if not line.strip():
+            self.cell_output("No variable for export specified. Use: %%perfdata_to_variable myvar", stream="stdout")
+            return
+
+        varname = line.strip()
+        mcm_time_indices = kernel_context.perfdata_handler.get_time_indices()
+        mcm_time_indices = list(filter(None, mcm_time_indices))
+
+        code = (
+            f"{varname} = "
+            f"{kernel_context.perfdata_handler.get_perfdata_history()}"
+        )
+
+        if mcm_time_indices:
+            code += f"\n{varname}.append({mcm_time_indices})"
+
+        self.shell.run_cell(code, store_history=False)
+
+        self.cell_output(f"Exported performance data to variable `{varname}`.", stream="stdout")
+
+        if mcm_time_indices:
+            self.cell_output(
+                f"Detected that cells were executed in multi-cell mode.\n"
+                f"The last entry in `{varname}` contains sub-cell index info, "
+                f"e.g. {mcm_time_indices[-1]}.",
+                stream="stdout"
+            )
+
     @cell_magic
     def set_perfmonitor(self, line, code):
         """
