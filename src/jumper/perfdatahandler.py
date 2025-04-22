@@ -25,7 +25,7 @@ def compute_mean_across_nodes(key1, key2, metrics_across_nodes):
 class PerformanceDataHandler:
 
     def __init__(self):
-        self.code_history = []
+        self.code_history = []  # [timestamp, code]
         self.performance_data_history = []
         self.time_indices = []
         self.nodelist = None
