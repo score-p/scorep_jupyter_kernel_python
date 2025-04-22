@@ -954,41 +954,7 @@ class JumperKernel(IPythonKernel):
                 allow_stdin,
                 cell_id=cell_id,
             )
-        elif code.startswith("%%display_code_for_index"):
-            if len(code.split(" ")) == 1:
-                self.cell_output(
-                    "No index specified. Use: %%display_code_for_index index",
-                    "stdout",
-                )
-            index = int(code.split(" ")[1])
-            if index >= len(kernel_context.perfdata_handler.get_perfdata_history()):
-                self.cell_output(
-                    "Tracked only "
-                    + str(len(kernel_context.perfdata_handler.get_perfdata_history()))
-                    + " cells. This index is not available."
-                )
-            else:
-                self.cell_output(
-                    "Cell timestamp: "
-                    + str(kernel_context.perfdata_handler.get_code_history()[index][0])
-                    + "\n--\n",
-                    "stdout",
-                )
-                self.cell_output(
-                    kernel_context.perfdata_handler.get_code_history()[index][1],
-                    "stdout",
-                )
-            return self.standard_reply()
-        elif code.startswith("%%display_code_history"):
-            show(
-                pd.DataFrame(
-                    kernel_context.perfdata_handler.get_code_history(),
-                    columns=["timestamp", "code"],
-                ).reset_index(),
-                layout={"topStart": "search", "topEnd": None},
-                columnDefs=[{"className": "dt-left", "targets": 2}],
-            )
-            return self.standard_reply()
+
         elif code.startswith("%%perfdata_to_variable"):
             if len(code.split(" ")) == 1:
                 self.cell_output(

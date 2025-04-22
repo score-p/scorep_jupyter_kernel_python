@@ -1,9 +1,11 @@
 import sys
 
+import pandas as pd
+from itables import show
 from IPython.core.magic import (Magics, magics_class, line_magic, cell_magic)
 
-from jumper.context import kernel_context, KernelMode
 
+from jumper.context import kernel_context, KernelMode
 import jumper.visualization as perfvis
 
 
@@ -68,7 +70,7 @@ class KernelMagics(Magics):
         if time_indices:
             sub_idxs = [x[0] for x in time_indices[0]]
             self.cell_output(
-                f"📈 Cell seemed to be tracked in multi-cell mode. "
+                f"Cell seemed to be tracked in multi-cell mode. "
                 f"Got performance data for the following sub-cells: {sub_idxs}"
             )
 
@@ -98,6 +100,46 @@ class KernelMagics(Magics):
             time_indices,
         )
 
+
+    @line_magic
+    def display_code_for_index(self, line):
+        """
+         Display stored source code of a previously executed cell by index.
+         Usage:
+             %%display_code_for_index 2
+         """
+        if not line.strip():
+            self.cell_output("No index specified. Use: %%display_code_for_index <index>", stream="stdout")
+            return
+
+        try:
+            index = int(line.strip())
+        except ValueError:
+            self.cell_output("Invalid index format. Provide an integer.", stream="stderr")
+            return
+
+        history = kernel_context.perfdata_handler.get_perfdata_history()
+        if index >= len(history):
+            self.cell_output(
+                f"Tracked only {len(history)} cells. This index is not available.",
+                stream="stdout"
+            )
+            return
+
+        timestamp, code = kernel_context.perfdata_handler.get_code_history()[index]
+        self.cell_output(f"Cell timestamp: {timestamp}\n--", stream="stdout")
+        self.cell_output(code, stream="stdout")
+
+    @line_magic
+    def display_code_history(self, line):
+        show(
+            pd.DataFrame(
+                kernel_context.perfdata_handler.get_code_history(),
+                columns=["timestamp", "code"],
+            ).reset_index(),
+            layout={"topStart": "search", "topEnd": None},
+            columnDefs=[{"className": "dt-left", "targets": 2}],
+        )
 
     @cell_magic
     def set_perfmonitor(self, line, code):
