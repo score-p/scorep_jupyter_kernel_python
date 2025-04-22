@@ -1,3 +1,4 @@
+import json
 import sys
 
 import pandas as pd
@@ -106,10 +107,10 @@ class KernelMagics(Magics):
         """
          Display stored source code of a previously executed cell by index.
          Usage:
-             %%display_code_for_index 2
+             %display_code_for_index 2
          """
         if not line.strip():
-            self.cell_output("No index specified. Use: %%display_code_for_index <index>", stream="stdout")
+            self.cell_output("No index specified. Use: %display_code_for_index <index>", stream="stdout")
             return
 
         try:
@@ -146,10 +147,10 @@ class KernelMagics(Magics):
         """
         Export collected performance data into a notebook variable.
         Usage:
-            %%perfdata_to_variable myvar
+            %perfdata_to_variable myvar
         """
         if not line.strip():
-            self.cell_output("No variable for export specified. Use: %%perfdata_to_variable myvar", stream="stdout")
+            self.cell_output("No variable for export specified. Use: %perfdata_to_variable myvar", stream="stdout")
             return
 
         varname = line.strip()
@@ -176,11 +177,51 @@ class KernelMagics(Magics):
                 stream="stdout"
             )
 
+    @line_magic
+    def perfdata_to_json(self, line):
+        """
+        Export performance data and code history to JSON files.
+        Usage:
+            %perfdata_to_json myfilename
+        Creates:
+            myfilename_perfdata.json
+            myfilename_code.json
+        """
+        if not line.strip():
+            self.cell_output("No filename specified. Use: %perfdata_to_json <myfile>", stream="stdout")
+            return
+
+        filename = line.strip()
+
+        try:
+            with open(f"{filename}_perfdata.json", "w") as f:
+                json.dump(
+                    kernel_context.perfdata_handler.get_perfdata_history(),
+                    fp=f,
+                    default=str
+                )
+
+            with open(f"{filename}_code.json", "w") as f:
+                json.dump(
+                    kernel_context.perfdata_handler.get_code_history(),
+                    fp=f,
+                    default=str
+                )
+
+            self.cell_output(
+                f"Exported performance data to `{filename}_perfdata.json` "
+                f"and `{filename}_code.json`",
+                stream="stdout"
+            )
+        except Exception as e:
+            self.cell_output(f"Failed to export data: {e}", stream="stderr")
+
     @cell_magic
     def set_perfmonitor(self, line, code):
         """
         Read the perfmonitor and try to select it.
         """
+        # TODO fix modes (yet exist in kernel and extension)
         if self.mode == KernelMode.DEFAULT:
             monitor = code.split("\n")[1]
             if monitor in {"local", "localhost", "LOCAL", "LOCALHOST"}:

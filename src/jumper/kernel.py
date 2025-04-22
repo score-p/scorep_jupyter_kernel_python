@@ -955,36 +955,6 @@ class JumperKernel(IPythonKernel):
                 cell_id=cell_id,
             )
 
-        elif code.startswith("%%perfdata_to_json"):
-            if len(code.split(" ")) == 1:
-                self.cell_output(
-                    "No filename to export specified. Use: "
-                    "%%perfdata_to_variable myfile",
-                    "stdout",
-                )
-            else:
-                filename = code.split(" ")[1]
-                with open(f"{filename}_perfdata.json", "w") as f:
-                    json.dump(
-                        kernel_context.perfdata_handler.get_perfdata_history(),
-                        default=str,
-                        fp=f,
-                    )
-                with open(f"{filename}_code.json", "w") as f:
-                    json.dump(
-                        kernel_context.perfdata_handler.get_code_history(),
-                        default=str,
-                        fp=f,
-                    )
-                self.cell_output(
-                    "Exported performance data to "
-                    + str(filename)
-                    + "_perfdata.json and "
-                    + str(filename)
-                    + "_code.json",
-                    "stdout",
-                )
-            return self.standard_reply()
         elif code.startswith("%%scorep_python_binding_arguments"):
             return self.scorep_not_available() or self.set_scorep_pythonargs(
                 code
