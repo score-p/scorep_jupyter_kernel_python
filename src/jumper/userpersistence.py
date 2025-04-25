@@ -114,8 +114,8 @@ class PersHelper:
             "import os\n"
             "import threading\n"
             f"import {self.marshaller}\n"
-            "from jumper.userpersistence import dump_runtime, dump_variables, BusySpinner\n"
-            "spinner = BusySpinner()\n"
+            "from jumper.userpersistence import dump_runtime, dump_variables, create_busy_spinner\n"
+            "spinner = create_busy_spinner()\n"
             f"if {self.is_dump_detailed_report}:\n"
             "    spinner.start('Dumping runtime environment and sys.path...')\n"
             f"else:\n"
@@ -394,8 +394,26 @@ def magics_cleanup(code):
     return scorep_env, nomagic_code
 
 
-class BusySpinner:
+class BaseSpinner:
     def __init__(self, lock=None):
+        pass
+
+    def _spinner_task(self):
+        pass
+
+    def start(self, working_message='Working...'):
+        pass
+
+    def report(self, done_message='Done.'):
+        pass
+
+    def stop(self, done_message='Done.'):
+        pass
+
+
+class BusySpinner(BaseSpinner):
+    def __init__(self, lock=None):
+        super().__init__(lock)
         self._lock = lock or threading.Lock()
         self._stop_event = threading.Event()
         self._thread = threading.Thread(target=self._spinner_task)
@@ -426,3 +444,12 @@ class BusySpinner:
         self.report(done_message)
         self._stop_event.set()
         self._thread.join()
+
+
+def create_busy_spinner(lock=None):
+    is_enabled = os.getenv("DISABLE_PROCESSING_ANIMATIONS") != "1"
+    if is_enabled:
+        return BusySpinner(lock)
+    else:
+        return BaseSpinner(lock)
+

@@ -19,7 +19,7 @@ import psutil
 from ipykernel.ipkernel import IPythonKernel
 from itables import show
 from jumper.userpersistence import PersHelper, scorep_script_name
-from jumper.userpersistence import magics_cleanup, BusySpinner
+from jumper.userpersistence import magics_cleanup, create_busy_spinner
 import importlib
 from jumper.perfdatahandler import PerformanceDataHandler
 import jumper.visualization as perfvis
@@ -804,7 +804,7 @@ class JumperKernel(IPythonKernel):
         self.cell_output("\0")
 
         stdout_lock = threading.Lock()
-        process_busy_spinner = BusySpinner(stdout_lock)
+        process_busy_spinner = create_busy_spinner(stdout_lock)
         process_busy_spinner.start('Process is running...')
 
         multicellmode_timestamps = self.read_scorep_process_pipe(proc, stdout_lock)
