@@ -7,6 +7,7 @@
     import numpy as np
     def f(x):
         return x**2
+    a, b = 5, 10
     a_vec = np.arange(a)
     b_vec = np.arange(a, b)
 
@@ -17,6 +18,7 @@
   - |-
     %%execute_with_scorep
     import pandas as pd
+    import scorep
     def g(x):
         return np.log2(x)
     with scorep.instrumenter.enable():
@@ -33,9 +35,13 @@
     os.environ['SUBPROCESS_VAR'] = 'SUBPROCESS'
     sys.path.append('/new/subprocess/path')
   - - "\0"
+    - ""
     - "Inner product of a_vec and b_vec = 80\n"
+    - ""
     - "f(4) = 16\n"
+    - ""
     - "JUPYTER_VAR = JUPYTER\n"
+    - ""
     - "'/new/jupyter/path' found in sys.path\n"
     - "Instrumentation results can be found in test_kernel_tmp/scorep-traces"
 -
