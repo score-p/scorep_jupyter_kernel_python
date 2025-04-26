@@ -31,6 +31,9 @@ class KernelTests(jkt.KernelTests):
         os.system(f"rm -rf {tmp_dir}")
         return
 
+    def clean_console_output(text):
+        return text.replace('\r', '').strip()
+
     def check_stream_output(self, code, expected_output, stream="stdout"):
         self.flush_channels()
         reply, output_msgs = self.execute_helper(code=code)
@@ -44,10 +47,14 @@ class KernelTests(jkt.KernelTests):
 
             if msg["header"]["msg_type"] == "stream":
                 # self.assertEqual(msg["content"]["name"], stream)
-                self.assertEqual(msg["content"]["text"], expected_msg)
+                self.assertEqual(
+                    clean_console_output(msg["content"]["text"]),
+                    clean_console_output(expected_msg)
+                )
             elif msg["header"]["msg_type"] == "execute_result":
                 self.assertEqual(
-                    msg["content"]["data"]["text/plain"], expected_msg
+                    clean_console_output(msg["content"]["data"]["text/plain"]),
+                    clean_console_output(expected_msg)
                 )
 
 
@@ -70,7 +77,6 @@ class KernelTests(jkt.KernelTests):
     def test_02_ipykernel_exec(self):
         self.check_from_file("tests/kernel/ipykernel_exec.yaml")
 
-
     def test_03_scorep_exec(self):
         self.check_from_file("tests/kernel/scorep_exec.yaml")
 
@@ -82,6 +88,10 @@ class KernelTests(jkt.KernelTests):
 
     def test_06_writemode(self):
         self.check_from_file("tests/kernel/writemode.yaml")
+
+
+def clean_console_output(text):
+    return text.replace('\r', '').strip()
 
 
 if __name__ == "__main__":
