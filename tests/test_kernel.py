@@ -1,6 +1,6 @@
 import logging
 import unittest
-from unittest.mock import patch
+import nbformat
 import jupyter_kernel_test as jkt
 import yaml, re, os
 
@@ -30,9 +30,6 @@ class KernelTests(jkt.KernelTests):
         super().tearDownClass()
         os.system(f"rm -rf {tmp_dir}")
         return
-
-    def clean_console_output(text):
-        return text.replace('\r', '').strip()
 
     def check_stream_output(self, code, expected_output, stream="stdout"):
         self.flush_channels()
