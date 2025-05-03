@@ -54,9 +54,8 @@ class KernelTests(jkt.KernelTests):
                 self.check_stream_output(code, expected_output)
 
     def check_from_notebook(self, notebook_path: str):
-        nb = nbformat.read(open(notebook_path), as_version=4)
-        from pprint import pprint
-        # pprint(nb.cells)
+        with open(notebook_path, encoding="utf-8") as f:
+            nb = nbformat.read(f, as_version=4)
 
         for idx, cell in enumerate(nb.cells):
             if cell.cell_type != "code":
@@ -69,17 +68,9 @@ class KernelTests(jkt.KernelTests):
             expected_outputs = self.extract_notebook_cell_outputs(cell_outputs)
             kernel_outputs = self.extract_kernel_executed_outputs(output_messages)
 
-            # print(idx)
-            # pprint(expected_outputs)
-            # print('---------------------------------')
-            # pprint(kernel_outputs)
-            # print()
+            with self.subTest(cell=idx+1, code_starts=cell_code.splitlines()[0]):
+                self.assertListEqual(kernel_outputs, expected_outputs)
 
-            # with self.subTest(cell=idx, code_line=cell_code.splitlines()[0] if cell_code.strip() else "<empty>"):
-            #     self.assertListEqual()
-
-            # with self.subTest(cell=idx, code_line=code.splitlines()[0] if code.strip() else "<empty>"):
-            #     self.check_stream_output(code, expected_outputs)
 
     @staticmethod
     def extract_notebook_cell_outputs(cell_outputs: list) -> list:
@@ -93,9 +84,10 @@ class KernelTests(jkt.KernelTests):
                 message_text = "\n".join(output["traceback"])
             else:
                 message_text = ''
-            message_text = message_text.strip()
-            print(f'{message_text=}')
-            expected_outputs.append(message_text)
+
+            split_message_text = [line.strip() for line in message_text.splitlines()]
+            expected_outputs.extend(split_message_text)
+
         return expected_outputs
 
     @staticmethod
@@ -110,13 +102,13 @@ class KernelTests(jkt.KernelTests):
                 message_text = ''
 
             if '\x00' not in message_text and '\r' not in message_text:
-                kernel_outputs.append(message_text.strip())
+                kernel_outputs.extend(message_text.splitlines())
 
         return kernel_outputs
 
     # Enumerate tests to ensure proper execution order
     def test_00_scorep_env(self):
-        self.check_from_notebook("tests/kernel/test_scorep_kernel.ipynb")
+        self.check_from_notebook("tests/kernel/test_scorep_kernel_1.ipynb")
 
     def test_01_scorep_pythonargs(self):
         self.check_from_file("tests/kernel/scorep_pythonargs.yaml")
