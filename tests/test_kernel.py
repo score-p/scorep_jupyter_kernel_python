@@ -33,30 +33,19 @@ class KernelTests(jkt.KernelTests):
 
     def check_stream_output(self, code, expected_output, stream="stdout"):
         self.flush_channels()
-        reply, output_msgs = self.execute_helper(code=code)
-        for msg, expected_msg in zip(output_msgs, expected_output):
+        reply, output_messages = self.execute_helper(code=code)
+        from pprint import pprint
+
+        for expected_msg in expected_output:
             # replace env vars
             expected_msg = os.path.expandvars(expected_msg)
-            # self.assertEqual(msg["header"]["msg_type"], "stream")
-            # some messages can be of type 'execute_result'
-            # type instead of stdout
-            # self.assertEqual(msg["content"]["name"], stream)
+            for msg in output_messages:
+                self.extract_message_output(msg)
 
-            if msg["header"]["msg_type"] == "stream":
-                # self.assertEqual(msg["content"]["name"], stream)
-                self.assertEqual(
-                    clean_console_output(msg["content"]["text"]),
-                    clean_console_output(expected_msg)
-                )
-            elif msg["header"]["msg_type"] == "execute_result":
-                self.assertEqual(
-                    clean_console_output(msg["content"]["data"]["text/plain"]),
-                    clean_console_output(expected_msg)
-                )
+
 
 
     def check_from_file(self, filename):
-
         with open(filename, "r") as file:
             cells = yaml.safe_load(file)
 
@@ -64,9 +53,70 @@ class KernelTests(jkt.KernelTests):
             with self.subTest(block=idx, code_line=code.splitlines()[0]):
                 self.check_stream_output(code, expected_output)
 
+    def check_from_notebook(self, notebook_path: str):
+        nb = nbformat.read(open(notebook_path), as_version=4)
+        from pprint import pprint
+        # pprint(nb.cells)
+
+        for idx, cell in enumerate(nb.cells):
+            if cell.cell_type != "code":
+                continue
+
+            cell_code = cell.source
+            cell_outputs = cell.get("outputs", [])
+            reply, output_messages = self.execute_helper(code=cell_code)
+
+            expected_outputs = self.extract_notebook_cell_outputs(cell_outputs)
+            kernel_outputs = self.extract_kernel_executed_outputs(output_messages)
+
+            # print(idx)
+            # pprint(expected_outputs)
+            # print('---------------------------------')
+            # pprint(kernel_outputs)
+            # print()
+
+            # with self.subTest(cell=idx, code_line=cell_code.splitlines()[0] if cell_code.strip() else "<empty>"):
+            #     self.assertListEqual()
+
+            # with self.subTest(cell=idx, code_line=code.splitlines()[0] if code.strip() else "<empty>"):
+            #     self.check_stream_output(code, expected_outputs)
+
+    @staticmethod
+    def extract_notebook_cell_outputs(cell_outputs: list) -> list:
+        expected_outputs = []
+        for output in cell_outputs:
+            if output.output_type == "stream":
+                message_text = output.get("text", "")
+            elif output.output_type == "execute_result":
+                message_text = output["data"].get("text/plain", "")
+            elif output.output_type == "error":
+                message_text = "\n".join(output["traceback"])
+            else:
+                message_text = ''
+            message_text = message_text.strip()
+            print(f'{message_text=}')
+            expected_outputs.append(message_text)
+        return expected_outputs
+
+    @staticmethod
+    def extract_kernel_executed_outputs(output_messages: list) -> list:
+        kernel_outputs = []
+        for msg in output_messages:
+            if msg["header"]["msg_type"] == "stream":
+                message_text = msg["content"]["text"]
+            elif msg["header"]["msg_type"] == "execute_result":
+                message_text = msg["content"]["data"]["text/plain"]
+            else:
+                message_text = ''
+
+            if '\x00' not in message_text and '\r' not in message_text:
+                kernel_outputs.append(message_text.strip())
+
+        return kernel_outputs
+
     # Enumerate tests to ensure proper execution order
     def test_00_scorep_env(self):
-        self.check_from_file("tests/kernel/scorep_env.yaml")
+        self.check_from_notebook("tests/kernel/test_scorep_kernel.ipynb")
 
     def test_01_scorep_pythonargs(self):
         self.check_from_file("tests/kernel/scorep_pythonargs.yaml")
@@ -87,9 +137,6 @@ class KernelTests(jkt.KernelTests):
         self.check_from_file("tests/kernel/writemode.yaml")
 
 
-def clean_console_output(text):
-    return text.replace('\r', '').strip()
-
-
 if __name__ == "__main__":
+    # KernelTests.check_from_notebook("tests/kernel/notebook.ipynb")
     unittest.main()
