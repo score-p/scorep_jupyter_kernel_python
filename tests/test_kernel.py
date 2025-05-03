@@ -16,6 +16,10 @@ class KernelTests(jkt.KernelTests):
     @classmethod
     def setUpClass(cls) -> None:
         os.environ["DISABLE_PROCESSING_ANIMATIONS"] = "1"
+        os.environ["SCOREP_ENABLE_TRACING"] = "1"
+        os.environ["SCOREP_ENABLE_PROFILING"] = "0"
+        os.environ["SCOREP_TOTAL_MEMORY"] = "3g"
+        os.environ["SCOREP_EXPERIMENT_DIRECTORY"] = "test_kernel_tmp/scorep-traces"
         logging_config.LOGGING['loggers']['kernel']['level'] = 'WARNING'
         logging.config.dictConfig(logging_config.LOGGING)
 
@@ -30,28 +34,6 @@ class KernelTests(jkt.KernelTests):
         super().tearDownClass()
         os.system(f"rm -rf {tmp_dir}")
         return
-
-    def check_stream_output(self, code, expected_output, stream="stdout"):
-        self.flush_channels()
-        reply, output_messages = self.execute_helper(code=code)
-        from pprint import pprint
-
-        for expected_msg in expected_output:
-            # replace env vars
-            expected_msg = os.path.expandvars(expected_msg)
-            for msg in output_messages:
-                self.extract_message_output(msg)
-
-
-
-
-    def check_from_file(self, filename):
-        with open(filename, "r") as file:
-            cells = yaml.safe_load(file)
-
-        for idx, (code, expected_output) in enumerate(cells):
-            with self.subTest(block=idx, code_line=code.splitlines()[0]):
-                self.check_stream_output(code, expected_output)
 
     def check_from_notebook(self, notebook_path: str):
         with open(notebook_path, encoding="utf-8") as f:
@@ -68,7 +50,7 @@ class KernelTests(jkt.KernelTests):
             expected_outputs = self.extract_notebook_cell_outputs(cell_outputs)
             kernel_outputs = self.extract_kernel_executed_outputs(output_messages)
 
-            with self.subTest(cell=idx+1, code_starts=cell_code.splitlines()[0]):
+            with self.subTest(cell=idx+1, code_starts=cell_code.splitlines()[0] if cell_code else '<empty>'):
                 self.assertListEqual(kernel_outputs, expected_outputs)
 
 
@@ -111,13 +93,13 @@ class KernelTests(jkt.KernelTests):
         self.check_from_notebook("tests/kernel/test_scorep_kernel_1.ipynb")
 
     def test_01_scorep_pythonargs(self):
-        self.check_from_file("tests/kernel/scorep_pythonargs.yaml")
+        self.check_from_notebook("tests/kernel/scorep_pythonargs.ipynb")
 
     def test_02_ipykernel_exec(self):
-        self.check_from_file("tests/kernel/ipykernel_exec.yaml")
+        self.check_from_notebook("tests/kernel/ipykernel_exec.ipynb")
 
     def test_03_scorep_exec(self):
-        self.check_from_file("tests/kernel/scorep_exec.yaml")
+        self.check_from_notebook("tests/kernel/scorep_exec.ipynb")
 
     def test_04_persistence(self):
         self.check_from_file("tests/kernel/persistence.yaml")
