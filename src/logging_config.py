@@ -78,7 +78,7 @@ LOGGING = {
     'loggers': {
         'kernel': {
             'handlers': ['console', 'debug_file', 'info_file', 'error_file'],
-            'level': 'INFO',
+            'level': 'WARNING',
             'propagate': False,
         },
     }

@@ -54,8 +54,7 @@ class KernelTests(jkt.KernelTests):
                 self.assertListEqual(kernel_outputs, expected_outputs)
 
 
-    @staticmethod
-    def extract_notebook_cell_outputs(cell_outputs: list) -> list:
+    def extract_notebook_cell_outputs(self, cell_outputs: list) -> list:
         expected_outputs = []
         for output in cell_outputs:
             if output.output_type == "stream":
@@ -67,10 +66,21 @@ class KernelTests(jkt.KernelTests):
             else:
                 message_text = ''
 
-            split_message_text = [line.strip() for line in message_text.splitlines()]
+            split_message_text = self.prepare_notebook_message_list(message_text)
             expected_outputs.extend(split_message_text)
 
         return expected_outputs
+
+    @staticmethod
+    def prepare_notebook_message_list(message_text: str) -> list:
+        split_message_text = []
+        for line in message_text.splitlines():
+            clean_line = line.strip()
+            # Expand environment variables (e.g. "${PWD}")
+            # to ensure consistent test results across different machines
+            expanded_line = os.path.expandvars(clean_line)
+            split_message_text.append(expanded_line)
+        return split_message_text
 
     @staticmethod
     def extract_kernel_executed_outputs(output_messages: list) -> list:
@@ -84,7 +94,8 @@ class KernelTests(jkt.KernelTests):
                 message_text = ''
 
             if '\x00' not in message_text and '\r' not in message_text:
-                kernel_outputs.extend(message_text.splitlines())
+                split_message_text = [line.strip() for line in message_text.splitlines()]
+                kernel_outputs.extend(split_message_text)
 
         return kernel_outputs
 
@@ -102,15 +113,14 @@ class KernelTests(jkt.KernelTests):
         self.check_from_notebook("tests/kernel/scorep_exec.ipynb")
 
     def test_04_persistence(self):
-        self.check_from_file("tests/kernel/persistence.yaml")
+        self.check_from_notebook("tests/kernel/persistence.ipynb")
 
     def test_05_multicell(self):
-        self.check_from_file("tests/kernel/multicell.yaml")
+        self.check_from_notebook("tests/kernel/multicell.ipynb")
 
     def test_06_writemode(self):
-        self.check_from_file("tests/kernel/writemode.yaml")
+        self.check_from_notebook("tests/kernel/writemode.ipynb")
 
 
 if __name__ == "__main__":
-    # KernelTests.check_from_notebook("tests/kernel/notebook.ipynb")
     unittest.main()
