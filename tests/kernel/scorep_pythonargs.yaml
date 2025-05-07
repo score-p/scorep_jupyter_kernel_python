@@ -1,5 +1,0 @@
--
-  - |-
-    %%scorep_python_binding_arguments
-    --noinstrumenter
-  - - "Score-P Python binding arguments set successfully: ['--noinstrumenter']"
