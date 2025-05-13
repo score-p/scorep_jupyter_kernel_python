@@ -806,9 +806,14 @@ class JumperKernel(IPythonKernel):
         process_busy_spinner = create_busy_spinner(stdout_lock)
         process_busy_spinner.start('Process is running...')
 
-        multicellmode_timestamps = self.read_scorep_process_pipe(proc, stdout_lock)
+        multicellmode_timestamps = []
 
-        process_busy_spinner.stop()
+        try:
+            multicellmode_timestamps = self.read_scorep_process_pipe(proc, stdout_lock)
+            process_busy_spinner.stop('Done.')
+        except KeyboardInterrupt:
+            process_busy_spinner.stop('Kernel interrupted.')
+
 
         # for multiple nodes, we have to add more lists here, one list per node
         # this is required to be in line with the performance data aggregation
