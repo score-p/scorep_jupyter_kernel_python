@@ -77,7 +77,4 @@
     %%bash
     chmod u+x test_kernel_tmp/my_jupyter_to_script_run.sh
     ./test_kernel_tmp/my_jupyter_to_script_run.sh
-  - - "a + b = 15\n"
-    - "a - b = -5\n"
-    - "c = 350\n"
-    - "Sum(c_vec) = 61030\n"
+  - - "a + b = 15\na - b = -5\nc = 350\nSum(c_vec) = 61030\n"
