@@ -10,7 +10,7 @@ import astunparse
 from pathlib import Path
 import uuid
 import importlib
-from pympler import asizeof
+
 
 scorep_script_name = "scorep_script.py"
 
