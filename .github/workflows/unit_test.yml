@@ -49,8 +49,8 @@ jobs:
         
       - name: Run userpersistence tests
         run: |
-          python -m unittest tests/test_userpersistence.py
+          python -m unittest tests.test_userpersistence
           
       - name: Run kernel tests
         run: |
-          python -m unittest tests/test_kernel.py
+          python -m unittest tests.test_kernel
