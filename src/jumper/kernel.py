@@ -8,7 +8,6 @@ import sys
 import threading
 import time
 import shutil
-import logging
 import logging.config
 
 from enum import Enum
@@ -25,7 +24,7 @@ import jumper.visualization as perfvis
 
 # import jumper.multinode_monitor.slurm_monitor as slurm_monitor
 
-from jumper.logging_config import LOGGING
+from .logging_config import LOGGING
 
 PYTHON_EXECUTABLE = sys.executable
 READ_CHUNK_SIZE = 8
