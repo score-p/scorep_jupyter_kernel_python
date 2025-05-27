@@ -969,7 +969,14 @@ class JumperKernel(IPythonKernel):
 
     def read_scorep_process_pipe(self, proc: subprocess.Popen[bytes], stdout_lock: threading.Lock) -> list:
         """
-        Reads and processes the output of a subprocess running with Score-P instrumentation.
+        This function reads stdout and stderr of the subprocess running with Score-P instrumentation independently.
+        It logs all stderr output, collects lines containing
+        the marker "MCM_TS" (used to identify multi-cell mode timestamps) into a list, and sends the remaining
+        stdout lines to the Jupyter cell output.
+
+        Simultaneous access to stdout is synchronized via a lock to prevent overlapping with another thread performing
+        long-running process animation.
+
         Args:
             proc (subprocess.Popen[bytes]): The subprocess whose output is being read.
             stdout_lock (threading.Lock): Lock to avoid output overlapping
