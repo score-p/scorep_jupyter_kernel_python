@@ -152,7 +152,17 @@ MODE=[disk,memory]
 ```
 
 When using persistence in `disk` mode, user can also define directory to which serializer output will be saved with `SCOREP_KERNEL_PERSISTENCE_DIR` environment variable.
-To see the detailed report for marshalling steps - `MARSHALLING_DETAILED_REPORT=1` environment variable can be set.
+```
+%env SCOREP_KERNEL_PERSISTENCE_DIR=path/to/dir
+```
+To see the detailed report for marshalling steps - `MARSHALLING_DETAILED_REPORT` environment variable can be set.
+```
+%env MARSHALLING_DETAILED_REPORT=1
+```
+You can disable visual animations shown during long-running tasks by setting the `DISABLE_PROCESSING_ANIMATIONS` environment variable.
+```
+%env DISABLE_PROCESSING_ANIMATIONS=1
+```
 
 `%%execute_with_scorep`
 
