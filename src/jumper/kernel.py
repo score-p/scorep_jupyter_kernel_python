@@ -21,13 +21,13 @@ from jumper.userpersistence import magics_cleanup, create_busy_spinner
 import importlib
 from jumper.perfdatahandler import PerformanceDataHandler
 import jumper.visualization as perfvis
+from jumper.kernel_messages import KernelErrorCode, KERNEL_ERROR_MESSAGES
 
 # import jumper.multinode_monitor.slurm_monitor as slurm_monitor
 
 from .logging_config import LOGGING
 
 PYTHON_EXECUTABLE = sys.executable
-READ_CHUNK_SIZE = 8
 userpersistence_token = "jumper.userpersistence"
 jupyter_dump = "jupyter_dump.pkl"
 subprocess_dump = "subprocess_dump.pkl"
@@ -129,17 +129,12 @@ class JumperKernel(IPythonKernel):
 
     def scorep_not_available(self):
         if not self.scorep_available_:
-            self.cell_output("Score-P not available, cell ignored.", "stderr")
+            self.log_error(KernelErrorCode.SCOREP_NOT_AVAILABLE)
             return self.standard_reply()
         if not self.scorep_python_available_:
-            self.cell_output(
-                "Score-P Python not available, cell ignored. "
-                "Consider installing it via `pip install scorep`",
-                "stderr",
-            )
+            self.log_error(KernelErrorCode.SCOREP_PYTHON_NOT_AVAILABLE)
             return self.standard_reply()
-        else:
-            return None
+        return None
 
     def marshaller_settings(self, code):
         """
@@ -696,12 +691,7 @@ class JumperKernel(IPythonKernel):
         # Set up files/pipes for persistence communication
         if not self.pershelper.preprocess():
             self.pershelper.postprocess()
-            error_message = "Failed to set up persistence communication files/pipes."
-            self.log.error(error_message)
-            self.cell_output(
-                f"KernelError: {error_message} ",
-                "stderr",
-            )
+            self.log_error(KernelErrorCode.PERSISTENCE_SETUP_FAIL)
             return self.standard_reply()
 
         self.log.debug("Persistence communication set up successfully.")
@@ -732,12 +722,8 @@ class JumperKernel(IPythonKernel):
             )
 
             if reply_status_dump["status"] != "ok":
-                error_message = "Failed to pickle notebook's persistence."
-                self.log.error(error_message)
-                self.ghost_cell_error(
-                    reply_status_dump,
-                    f"KernelError: {error_message}",
-                )
+                self.log_error(KernelErrorCode.PERSISTENCE_DUMP_FAIL, direction="Jupyter -> Score-P")
+                self.pershelper.postprocess()
                 return reply_status_dump
 
         # Launch subprocess with Jupyter notebook environment
@@ -789,12 +775,8 @@ class JumperKernel(IPythonKernel):
                 cell_id=cell_id,
             )
             if reply_status_dump["status"] != "ok":
-                error_message = "Failed to pickle notebook's persistence."
-                self.log.error(error_message)
-                self.ghost_cell_error(
-                    reply_status_dump,
-                    f"KernelError: {error_message}",
-                )
+                self.log_error(KernelErrorCode.PERSISTENCE_DUMP_FAIL, direction="Jupyter -> Score-P")
+                self.pershelper.postprocess()
                 return reply_status_dump
 
         # Empty cell output, required for interactive output
@@ -871,13 +853,8 @@ class JumperKernel(IPythonKernel):
         # This prevents jupyter_update() from getting stuck while reading non-existent temporary files
         # if something goes wrong during process execution.
         if proc.poll():
+            self.log_error(KernelErrorCode.SCOREP_SUBPROCESS_FAIL)
             self.pershelper.postprocess()
-            error_message = "Cell execution failed, cell persistence was not recorded."
-            self.log.error(error_message)
-            self.cell_output(
-                f"KernelError: {error_message}",
-                "stderr",
-            )
             return self.standard_reply()
 
         # os_environ_.clear()
@@ -896,12 +873,8 @@ class JumperKernel(IPythonKernel):
             cell_id=cell_id,
         )
         if reply_status_update["status"] != "ok":
-            error_message = "Failed to load cell's persistence to the notebook."
-            self.log.error(error_message)
-            self.ghost_cell_error(
-                reply_status_update,
-                f"KernelError: {error_message}"
-            )
+            self.log_error(KernelErrorCode.PERSISTENCE_LOAD_FAIL, direction=f"Score-P -> Jupyter")
+            self.pershelper.postprocess()
             return reply_status_update
 
         # In memory mode, subprocess terminates once jupyter_update is
@@ -909,12 +882,7 @@ class JumperKernel(IPythonKernel):
         if self.pershelper.mode == "memory":
             if proc.poll():
                 self.pershelper.postprocess()
-                error_message = "Cell execution failed, cell persistence was not recorded."
-                self.log.error(error_message)
-                self.cell_output(
-                    f"KernelError: {error_message}",
-                    "stderr",
-                )
+                self.log_error(KernelErrorCode.PERSISTENCE_LOAD_FAIL, direction="Score-P -> Jupyter")
                 return self.standard_reply()
 
         # Determine directory to which trace files were saved by Score-P
@@ -1352,6 +1320,31 @@ class JumperKernel(IPythonKernel):
     def do_shutdown(self, restart):
         self.pershelper.postprocess()
         return super().do_shutdown(restart)
+
+    def log_error(self, code: KernelErrorCode, **kwargs):
+        """
+        Logs a kernel error with predefined error code and adds an extensible message format.
+
+        Parameters:
+            code (KernelErrorCode): error code to select message template from `KERNEL_ERROR_MESSAGES`.
+            **kwargs: contextual fields for the error message template (e.g., active_kernel="jupyter").
+
+            In addition to the dynamic arguments, the formatter always injects:
+                - mode (str): PersHelper() mode (e.g. "memory")
+                - marshaller (str): matshaller (e.g. "dill")
+        """
+        mode = self.pershelper.mode
+        marshaller = self.pershelper.marshaller
+
+        template = KERNEL_ERROR_MESSAGES.get(code, "Unknown error. Mode: {mode}, Marshaller: {marshaller}")
+        message = template.format(
+            mode=mode,
+            marshaller=marshaller,
+            **kwargs
+        )
+
+        self.log.error(message)
+        self.cell_output("KernelError: " + message, "stderr")
 
 
 if __name__ == "__main__":

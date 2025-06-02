@@ -1,9 +1,12 @@
+import yaml, os
 import logging
 import unittest
+from unittest.mock import MagicMock
 import jupyter_kernel_test as jkt
-import yaml, os
 
 from jumper import logging_config
+from jumper.kernel_messages import KernelErrorCode, KERNEL_ERROR_MESSAGES
+from jumper.kernel import JumperKernel
 
 tmp_dir = "test_kernel_tmp/"
 
@@ -88,6 +91,61 @@ class KernelTests(jkt.KernelTests):
 
 def clean_console_output(text):
     return text.replace('\r', '').strip()
+
+
+class DummyPersHelper:
+    def __init__(self, mode="test_mode", marshaller="test_marshal"):
+        self.mode = mode
+        self.marshaller = marshaller
+
+
+class KernelTestLogError(unittest.TestCase):
+    def setUp(self):
+        self.kernel = JumperKernel()
+        setattr(self.kernel.log, "error", MagicMock())
+        self.kernel.cell_output = MagicMock()
+        self.kernel.pershelper = DummyPersHelper()
+
+        self.direction = "Far away"
+
+    def test_error_with_all_fields(self):
+
+        self.kernel.log_error(
+            KernelErrorCode.PERSISTENCE_DUMP_FAIL,
+            direction=self.direction
+        )
+        expected = KERNEL_ERROR_MESSAGES[KernelErrorCode.PERSISTENCE_DUMP_FAIL].format(
+            mode="test_mode",
+            marshaller="test_marshal",
+            direction=self.direction
+        )
+        self.kernel.log.error.assert_called_with(expected)
+        self.kernel.cell_output.assert_called_with(f"KernelError: {expected}", "stderr")
+
+    def test_unknown_error_code(self):
+        dummy_code = -1
+
+        self.kernel.log_error(dummy_code, dumb_hint="bar")
+        msg = "Unknown error. Mode: test_mode, Marshaller: test_marshal"
+        self.assertTrue(self.kernel.log.error.call_args[0][0].startswith(msg))
+
+    def test_error_templates_are_formatable(self):
+        fake_context = {
+            "mode": "test_mode",
+            "marshaller": "test_marshal",
+            "direction": "dummy_direction",
+            "detail": "dummy_detail",
+            "step": "dummy_step"
+        }
+
+        for code, template in KERNEL_ERROR_MESSAGES.items():
+            try:
+                formatted = template.format(**fake_context)
+                self.assertIsInstance(formatted, str)
+            except KeyError as e:
+                self.fail(f"Missing key in template for {code.name}: {e}")
+            except ValueError as e:
+                self.fail(f"Format error in template for {code.name}: {e}")
 
 
 if __name__ == "__main__":
