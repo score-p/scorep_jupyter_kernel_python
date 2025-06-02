@@ -888,7 +888,7 @@ class JumperKernel(IPythonKernel):
         # Determine directory to which trace files were saved by Score-P
         scorep_folder = ""
         if "SCOREP_EXPERIMENT_DIRECTORY" in os.environ:
-            self.log.warning(f'{os.environ["SCOREP_EXPERIMENT_DIRECTORY"]=}')
+            self.log.debug(f'{os.environ["SCOREP_EXPERIMENT_DIRECTORY"]=}')
             scorep_folder = os.environ["SCOREP_EXPERIMENT_DIRECTORY"]
             self.cell_output(
                 f"Instrumentation results can be found in {scorep_folder}"

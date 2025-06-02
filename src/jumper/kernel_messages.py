@@ -30,6 +30,6 @@ KERNEL_ERROR_MESSAGES = {
         "[mode: {mode}] Failed to load persistence ({direction}, marshaller: {marshaller})."
     ),
     KernelErrorCode.SCOREP_SUBPROCESS_FAIL: (
-        "[mode: {mode}] Subprocess terminated unexpectedly. Persistence not recorded ({marshaller})."
+        "[mode: {mode}] Subprocess terminated unexpectedly. Persistence not recorded (marshaller: {marshaller})."
     ),
 }
