@@ -155,13 +155,13 @@ When using persistence in `disk` mode, user can also define directory to which s
 ```
 %env SCOREP_KERNEL_PERSISTENCE_DIR=path/to/dir
 ```
-To see the detailed report for marshalling steps - `MARSHALLING_DETAILED_REPORT` environment variable can be set.
+To see the detailed report for marshalling steps - `JUMPER_MARSHALLING_DETAILED_REPORT` environment variable can be set.
 ```
-%env MARSHALLING_DETAILED_REPORT=1
+%env JUMPER_MARSHALLING_DETAILED_REPORT=1
 ```
-You can disable visual animations shown during long-running tasks by setting the `DISABLE_PROCESSING_ANIMATIONS` environment variable.
+You can disable visual animations shown during long-running tasks by setting the `JUMPER_DISABLE_PROCESSING_ANIMATIONS` environment variable.
 ```
-%env DISABLE_PROCESSING_ANIMATIONS=1
+%env JUMPER_DISABLE_PROCESSING_ANIMATIONS=1
 ```
 
 `%%execute_with_scorep`

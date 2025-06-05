@@ -17,7 +17,7 @@ class KernelTests(jkt.KernelTests):
 
     @classmethod
     def setUpClass(cls) -> None:
-        os.environ["DISABLE_PROCESSING_ANIMATIONS"] = "1"
+        os.environ["JUMPER_DISABLE_PROCESSING_ANIMATIONS"] = "1"
         logging_config.LOGGING['loggers']['kernel']['level'] = 'WARNING'
         logging.config.dictConfig(logging_config.LOGGING)
 

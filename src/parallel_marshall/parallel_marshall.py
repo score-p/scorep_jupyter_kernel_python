@@ -10,16 +10,16 @@ import logging
 # mode is automatically determined by the file object that is passed for
 # dumping
 mode = ""
-backend = str(os.environ.get("PARALLEL_MARSHALL_BACKEND", "dill"))
-if os.environ.get("PARALLEL_MARSHALL_NWORKERS"):
+backend = str(os.environ.get("JUMPER_PARALLEL_MARSHALL_BACKEND", "dill"))
+if os.environ.get("JUMPER_PARALLEL_MARSHALL_NWORKERS"):
     workers = min(
-        int(os.environ.get("PARALLEL_MARSHALL_NWORKERS")),
+        int(os.environ.get("JUMPER_PARALLEL_MARSHALL_NWORKERS")),
         multiprocessing.cpu_count(),
         multiprocessing.cpu_count(),
     )
 else:
     workers = multiprocessing.cpu_count()
-debug = int(os.environ.get("PARALLEL_MARSHALL_DEBUG", 20))
+debug = int(os.environ.get("JUMPER_PARALLEL_MARSHALL_DEBUG", 20))
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(filename="parallel_marshall.log", level=logging.INFO)

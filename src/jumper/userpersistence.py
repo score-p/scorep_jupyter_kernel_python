@@ -227,7 +227,7 @@ class PersHelper:
             self.jupyter_variables.extend(user_variables)
 
     def set_dump_report_level(self):
-        self.is_dump_detailed_report = int(os.getenv('MARSHALLING_DETAILED_REPORT', '0'))
+        self.is_dump_detailed_report = int(os.getenv('JUMPER_MARSHALLING_DETAILED_REPORT', '0'))
 
 
 def dump_runtime(
@@ -450,7 +450,7 @@ class BusySpinner(BaseSpinner):
 
 
 def create_busy_spinner(lock=None):
-    is_enabled = os.getenv("DISABLE_PROCESSING_ANIMATIONS") != "1"
+    is_enabled = os.getenv("JUMPER_DISABLE_PROCESSING_ANIMATIONS") != "1"
     if is_enabled:
         return BusySpinner(lock)
     else:
