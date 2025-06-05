@@ -167,7 +167,8 @@ def plot_graph(ax, metric, perfdata, time_indices=None, color=None):
                 transition_offset = 0
             ax.axvspan(
                 x_scale[current_index] + start_offset,
-                x_scale[min(target_index, len(x_scale)-1)] + transition_offset,
+                x_scale[min(target_index, len(x_scale) - 1)]
+                + transition_offset,
                 facecolor=color[cell_idx],
                 alpha=0.3,
             )
@@ -177,7 +178,7 @@ def plot_graph(ax, metric, perfdata, time_indices=None, color=None):
                 + start_offset
                 + (
                     (
-                        x_scale[min(target_index, len(x_scale)-1)]
+                        x_scale[min(target_index, len(x_scale) - 1)]
                         + transition_offset
                         - x_scale[current_index]
                         + start_offset

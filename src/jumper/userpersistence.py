@@ -114,10 +114,12 @@ class PersHelper:
             "import os\n"
             "import threading\n"
             f"import {self.marshaller}\n"
-            "from jumper.userpersistence import dump_runtime, dump_variables, create_busy_spinner\n"
+            "from jumper.userpersistence import dump_runtime, "
+            "dump_variables, create_busy_spinner\n"
             "spinner = create_busy_spinner()\n"
             f"if {self.is_dump_detailed_report}:\n"
-            "    spinner.start('Dumping runtime environment and sys.path...')\n"
+            "    spinner.start('Dumping runtime environment and sys.path...')"
+            "\n"
             f"else:\n"
             "    spinner.start('Loading data...')\n"
             "try:\n"
@@ -125,7 +127,8 @@ class PersHelper:
             f"    '{self.paths['jupyter']['os_environ']}',"
             f"    '{self.paths['jupyter']['sys_path']}',{self.marshaller})\n"
             f"    if {self.is_dump_detailed_report}:\n"
-            "        spinner.report('Dumping runtime environment and sys.path done.')\n"
+            "        spinner.report('Dumping runtime environment and "
+            "sys.path done.')\n"
             "        spinner.start('Dumping variables...')\n"
             f"    dump_variables({str(self.jupyter_variables)},globals(),"
             f"        '{self.paths['jupyter']['var']}',"
@@ -227,7 +230,9 @@ class PersHelper:
             self.jupyter_variables.extend(user_variables)
 
     def set_dump_report_level(self):
-        self.is_dump_detailed_report = int(os.getenv('JUMPER_MARSHALLING_DETAILED_REPORT', '0'))
+        self.is_dump_detailed_report = int(
+            os.getenv("JUMPER_MARSHALLING_DETAILED_REPORT", "0")
+        )
 
 
 def dump_runtime(
@@ -252,7 +257,9 @@ def dump_runtime(
 
 def dump_variables(variables_names, globals_, var_dump_, marshaller):
     user_variables = {
-        k: v for k, v in globals_.items() if k in variables_names
+        k: v
+        for k, v in globals_.items()
+        if k in variables_names
         and not isinstance(globals_[k], types.ModuleType)
     }
 
@@ -264,7 +271,8 @@ def dump_variables(variables_names, globals_, var_dump_, marshaller):
         if non_persistent_class in globals().keys():
             user_variables[el].__class__ = globals()[non_persistent_class]
 
-    with os.fdopen(os.open(var_dump_, os.O_WRONLY | os.O_CREAT), "wb") as file:
+    with (os.fdopen(os.open(var_dump_, os.O_WRONLY | os.O_CREAT), "wb")
+          as file):
         marshaller.dump(user_variables, file)
 
 
@@ -404,13 +412,13 @@ class BaseSpinner:
     def _spinner_task(self):
         pass
 
-    def start(self, working_message='Working...'):
+    def start(self, working_message="Working..."):
         pass
 
-    def report(self, done_message='Done.'):
+    def report(self, done_message="Done."):
         pass
 
-    def stop(self, done_message='Done.'):
+    def stop(self, done_message="Done."):
         pass
 
 
@@ -420,30 +428,35 @@ class BusySpinner(BaseSpinner):
         self._lock = lock or threading.Lock()
         self._stop_event = threading.Event()
         self._thread = threading.Thread(target=self._spinner_task)
-        self.working_message = ''
-        self.done_message = ''
+        self.working_message = ""
+        self.done_message = ""
 
     def _spinner_task(self):
         spinner_chars = "|/-\\"
         idx = 0
         while not self._stop_event.is_set():
             with self._lock:
-                sys.stdout.write(f"\r{self.working_message} {spinner_chars[idx % len(spinner_chars)]}")
+                sys.stdout.write(
+                    f"\r{self.working_message} "
+                    f"{spinner_chars[idx % len(spinner_chars)]}"
+                )
                 sys.stdout.flush()
             time.sleep(0.1)
             idx += 1
 
-    def start(self, working_message='Working...'):
+    def start(self, working_message="Working..."):
         self.working_message = working_message
         if not self._thread.is_alive():
             self._thread.start()
 
-    def report(self, done_message='Done.'):
+    def report(self, done_message="Done."):
         with self._lock:
-            sys.stdout.write(f"\r{done_message}{' ' * len(self.working_message)}\n")
+            sys.stdout.write(
+                f"\r{done_message}{' ' * len(self.working_message)}\n"
+            )
             sys.stdout.flush()
 
-    def stop(self, done_message='Done.'):
+    def stop(self, done_message="Done."):
         self.report(done_message)
         self._stop_event.set()
         self._thread.join()
@@ -455,4 +468,3 @@ def create_busy_spinner(lock=None):
         return BusySpinner(lock)
     else:
         return BaseSpinner(lock)
-
