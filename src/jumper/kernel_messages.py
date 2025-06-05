@@ -24,12 +24,15 @@ KERNEL_ERROR_MESSAGES = {
         "Failed to set up persistence communication files/pipes "
     ),
     KernelErrorCode.PERSISTENCE_DUMP_FAIL: (
-        "[mode: {mode}] Failed to serialize notebook persistence ({direction}, marshaller: {marshaller})."
+        "[mode: {mode}] Failed to serialize notebook persistence ({direction},"
+        "marshaller: {marshaller})."
     ),
     KernelErrorCode.PERSISTENCE_LOAD_FAIL: (
-        "[mode: {mode}] Failed to load persistence ({direction}, marshaller: {marshaller})."
+        "[mode: {mode}] Failed to load persistence ({direction}, "
+        "marshaller: {marshaller})."
     ),
     KernelErrorCode.SCOREP_SUBPROCESS_FAIL: (
-        "[mode: {mode}] Subprocess terminated unexpectedly. Persistence not recorded (marshaller: {marshaller})."
+        "[mode: {mode}] Subprocess terminated unexpectedly. "
+        "Persistence not recorded (marshaller: {marshaller})."
     ),
 }

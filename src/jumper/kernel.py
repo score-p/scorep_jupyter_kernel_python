@@ -109,7 +109,7 @@ class JumperKernel(IPythonKernel):
             self.scorep_python_available_ = False
 
         logging.config.dictConfig(LOGGING)
-        self.log = logging.getLogger('kernel')
+        self.log = logging.getLogger("kernel")
 
     def cell_output(self, string, stream="stdout"):
         """
@@ -704,7 +704,9 @@ class JumperKernel(IPythonKernel):
             os.open(scorep_script_name, os.O_WRONLY | os.O_CREAT), "w"
         ) as file:
             file.write(self.pershelper.subprocess_wrapper(code))
-        self.log.debug(f"Code written to temporary script: {scorep_script_name}")
+        self.log.debug(
+            f"Code written to temporary script: {scorep_script_name}"
+        )
 
         # For disk mode use implicit synchronization between kernel and
         # subprocess: await jupyter_dump, subprocess.wait(),
@@ -722,7 +724,10 @@ class JumperKernel(IPythonKernel):
             )
 
             if reply_status_dump["status"] != "ok":
-                self.log_error(KernelErrorCode.PERSISTENCE_DUMP_FAIL, direction="Jupyter -> Score-P")
+                self.log_error(
+                    KernelErrorCode.PERSISTENCE_DUMP_FAIL,
+                    direction="Jupyter -> Score-P",
+                )
                 self.pershelper.postprocess()
                 return reply_status_dump
 
@@ -775,7 +780,10 @@ class JumperKernel(IPythonKernel):
                 cell_id=cell_id,
             )
             if reply_status_dump["status"] != "ok":
-                self.log_error(KernelErrorCode.PERSISTENCE_DUMP_FAIL, direction="Jupyter -> Score-P")
+                self.log_error(
+                    KernelErrorCode.PERSISTENCE_DUMP_FAIL,
+                    direction="Jupyter -> Score-P",
+                )
                 self.pershelper.postprocess()
                 return reply_status_dump
 
@@ -785,16 +793,17 @@ class JumperKernel(IPythonKernel):
 
         stdout_lock = threading.Lock()
         process_busy_spinner = create_busy_spinner(stdout_lock)
-        process_busy_spinner.start('Process is running...')
+        process_busy_spinner.start("Process is running...")
 
         multicellmode_timestamps = []
 
         try:
-            multicellmode_timestamps = self.read_scorep_process_pipe(proc, stdout_lock)
-            process_busy_spinner.stop('Done.')
+            multicellmode_timestamps = self.read_scorep_process_pipe(
+                proc, stdout_lock
+            )
+            process_busy_spinner.stop("Done.")
         except KeyboardInterrupt:
-            process_busy_spinner.stop('Kernel interrupted.')
-
+            process_busy_spinner.stop("Kernel interrupted.")
 
         # for multiple nodes, we have to add more lists here, one list per node
         # this is required to be in line with the performance data aggregation
@@ -850,7 +859,8 @@ class JumperKernel(IPythonKernel):
         )
 
         # Check if the score-p process is running.
-        # This prevents jupyter_update() from getting stuck while reading non-existent temporary files
+        # This prevents jupyter_update() from getting stuck while reading
+        # non-existent temporary files
         # if something goes wrong during process execution.
         if proc.poll():
             self.log_error(KernelErrorCode.SCOREP_SUBPROCESS_FAIL)
@@ -873,7 +883,10 @@ class JumperKernel(IPythonKernel):
             cell_id=cell_id,
         )
         if reply_status_update["status"] != "ok":
-            self.log_error(KernelErrorCode.PERSISTENCE_LOAD_FAIL, direction=f"Score-P -> Jupyter")
+            self.log_error(
+                KernelErrorCode.PERSISTENCE_LOAD_FAIL,
+                direction="Score-P -> Jupyter",
+            )
             self.pershelper.postprocess()
             return reply_status_update
 
@@ -882,7 +895,10 @@ class JumperKernel(IPythonKernel):
         if self.pershelper.mode == "memory":
             if proc.poll():
                 self.pershelper.postprocess()
-                self.log_error(KernelErrorCode.PERSISTENCE_LOAD_FAIL, direction="Score-P -> Jupyter")
+                self.log_error(
+                    KernelErrorCode.PERSISTENCE_LOAD_FAIL,
+                    direction="Score-P -> Jupyter",
+                )
                 return self.standard_reply()
 
         # Determine directory to which trace files were saved by Score-P
@@ -934,19 +950,24 @@ class JumperKernel(IPythonKernel):
             )
         return self.standard_reply()
 
-
-    def read_scorep_process_pipe(self, proc: subprocess.Popen[bytes], stdout_lock: threading.Lock) -> list:
+    def read_scorep_process_pipe(
+        self, proc: subprocess.Popen[bytes], stdout_lock: threading.Lock
+    ) -> list:
         """
-        This function reads stdout and stderr of the subprocess running with Score-P instrumentation independently.
+        This function reads stdout and stderr of the subprocess running with
+        Score-P instrumentation independently.
         It logs all stderr output, collects lines containing
-        the marker "MCM_TS" (used to identify multi-cell mode timestamps) into a list, and sends the remaining
+        the marker "MCM_TS" (used to identify multi-cell mode timestamps) into
+        a list, and sends the remaining
         stdout lines to the Jupyter cell output.
 
-        Simultaneous access to stdout is synchronized via a lock to prevent overlapping with another thread performing
+        Simultaneous access to stdout is synchronized via a lock to prevent
+        overlapping with another thread performing
         long-running process animation.
 
         Args:
-            proc (subprocess.Popen[bytes]): The subprocess whose output is being read.
+            proc (subprocess.Popen[bytes]): The subprocess whose output is
+            being read.
             stdout_lock (threading.Lock): Lock to avoid output overlapping
 
         Returns:
@@ -969,12 +990,14 @@ class JumperKernel(IPythonKernel):
                     sel.unregister(key.fileobj)
                     continue
 
-                decoded_line = line.decode(sys.getdefaultencoding(), errors='ignore')
+                decoded_line = line.decode(
+                    sys.getdefaultencoding(), errors="ignore"
+                )
 
                 if key.fileobj is proc.stderr:
                     with stdout_lock:
-                        self.log.warning(f'{decoded_line.strip()}')
-                elif 'MCM_TS' in decoded_line:
+                        self.log.warning(f"{decoded_line.strip()}")
+                elif "MCM_TS" in decoded_line:
                     multicellmode_timestamps.append(decoded_line)
                 else:
                     with stdout_lock:
@@ -987,7 +1010,6 @@ class JumperKernel(IPythonKernel):
                 break
 
         return multicellmode_timestamps
-
 
     async def do_execute(
         self,
@@ -1323,11 +1345,14 @@ class JumperKernel(IPythonKernel):
 
     def log_error(self, code: KernelErrorCode, **kwargs):
         """
-        Logs a kernel error with predefined error code and adds an extensible message format.
+        Logs a kernel error with predefined error code and adds an extensible
+        message format.
 
         Parameters:
-            code (KernelErrorCode): error code to select message template from `KERNEL_ERROR_MESSAGES`.
-            **kwargs: contextual fields for the error message template (e.g., active_kernel="jupyter").
+            code (KernelErrorCode): error code to select message template from
+            `KERNEL_ERROR_MESSAGES`.
+            **kwargs: contextual fields for the error message template
+            (e.g., active_kernel="jupyter").
 
             In addition to the dynamic arguments, the formatter always injects:
                 - mode (str): PersHelper() mode (e.g. "memory")
@@ -1336,12 +1361,10 @@ class JumperKernel(IPythonKernel):
         mode = self.pershelper.mode
         marshaller = self.pershelper.marshaller
 
-        template = KERNEL_ERROR_MESSAGES.get(code, "Unknown error. Mode: {mode}, Marshaller: {marshaller}")
-        message = template.format(
-            mode=mode,
-            marshaller=marshaller,
-            **kwargs
+        template = KERNEL_ERROR_MESSAGES.get(
+            code, "Unknown error. Mode: {mode}, Marshaller: {marshaller}"
         )
+        message = template.format(mode=mode, marshaller=marshaller, **kwargs)
 
         self.log.error(message)
         self.cell_output("KernelError: " + message, "stderr")

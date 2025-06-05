@@ -3,7 +3,7 @@ import os
 import sys
 
 
-LOGGING_DIR = 'logging'
+LOGGING_DIR = "logging"
 os.makedirs(LOGGING_DIR, exist_ok=True)
 
 
@@ -19,67 +19,62 @@ class IgnoreErrorFilter(logging.Filter):
 
 class JumperKernelOnlyFilter(logging.Filter):
     def filter(self, record):
-        return 'jumper' in record.pathname
+        return "jumper" in record.pathname
+
 
 LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'verbose': {
-            'format': '[{levelname[0]} {asctime} {name}] {message}',
-            'style': '{',
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "[{levelname[0]} {asctime} {name}] {message}",
+            "style": "{",
         },
     },
-    'handlers': {
-        'info_file': {
-            'level': 'INFO',
-            'class': 'logging.FileHandler',
-            'filename': os.path.join(LOGGING_DIR, 'info.log'),
-            'formatter': 'verbose'
+    "handlers": {
+        "info_file": {
+            "level": "INFO",
+            "class": "logging.FileHandler",
+            "filename": os.path.join(LOGGING_DIR, "info.log"),
+            "formatter": "verbose",
         },
-        'debug_file': {
-            'level': 'DEBUG',
-            'class': 'logging.FileHandler',
-            'filename': os.path.join(LOGGING_DIR, 'debug.log'),
-            'formatter': 'verbose'
+        "debug_file": {
+            "level": "DEBUG",
+            "class": "logging.FileHandler",
+            "filename": os.path.join(LOGGING_DIR, "debug.log"),
+            "formatter": "verbose",
         },
-        'error_file': {
-            'level': 'ERROR',
-            'class': 'logging.FileHandler',
-            'filename': os.path.join(LOGGING_DIR, 'error.log'),
-            'formatter': 'verbose'
+        "error_file": {
+            "level": "ERROR",
+            "class": "logging.FileHandler",
+            "filename": os.path.join(LOGGING_DIR, "error.log"),
+            "formatter": "verbose",
         },
-        'console': {
-            'level': 'DEBUG',
-            'class': 'logging.StreamHandler',
-            'stream': sys.stdout,
-            'filters': [
-                'ignore_error_filter',  # prevents from writing to jupyter cell output twice
-                'jumper_kernel_only_filter',
-            ]
+        "console": {
+            "level": "DEBUG",
+            "class": "logging.StreamHandler",
+            "stream": sys.stdout,
+            "filters": [
+                "ignore_error_filter",  # prevents from writing to jupyter
+                # cell output twice
+                "jumper_kernel_only_filter",
+            ],
         },
     },
-    'filters': {
-        'jupyter_filter': {
-            '()': JupyterLogFilter
-        },
-        'ignore_error_filter': {
-            '()': IgnoreErrorFilter
-        },
-        'jumper_kernel_only_filter': {
-            '()': JumperKernelOnlyFilter
-        }
+    "filters": {
+        "jupyter_filter": {"()": JupyterLogFilter},
+        "ignore_error_filter": {"()": IgnoreErrorFilter},
+        "jumper_kernel_only_filter": {"()": JumperKernelOnlyFilter},
     },
-    'root': {
-        'handlers': [],
-        'level': 'WARNING',
+    "root": {
+        "handlers": [],
+        "level": "WARNING",
     },
-
-    'loggers': {
-        'kernel': {
-            'handlers': ['console', 'debug_file', 'info_file', 'error_file'],
-            'level': 'WARNING',
-            'propagate': False,
+    "loggers": {
+        "kernel": {
+            "handlers": ["console", "debug_file", "info_file", "error_file"],
+            "level": "WARNING",
+            "propagate": False,
         },
-    }
+    },
 }

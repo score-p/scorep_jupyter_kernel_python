@@ -149,14 +149,16 @@ class PerformanceDataHandler:
                 perfdata_aggregated[node][3].extend(perfdata[node][3])
                 perfdata_aggregated[node][4].extend(perfdata[node][4])
                 perfdata_aggregated[node][5].extend(perfdata[node][5])
-                for gpu_index in range(0, len(perfdata[node][6])):
-                    perfdata_aggregated[node][6][gpu_index].extend(
-                        perfdata[node][6][gpu_index]
-                    )
-                for gpu_index in range(0, len(perfdata[node][7])):
-                    perfdata_aggregated[node][7][gpu_index].extend(
-                        perfdata[node][7][gpu_index]
-                    )
+                if len(perfdata[node][6]) - 3 > 0:
+                    # GPUs available
+                    for gpu_index in range(0, len(perfdata[node][6])):
+                        perfdata_aggregated[node][6][gpu_index].extend(
+                            perfdata[node][6][gpu_index]
+                        )
+                    for gpu_index in range(0, len(perfdata[node][7])):
+                        perfdata_aggregated[node][7][gpu_index].extend(
+                            perfdata[node][7][gpu_index]
+                        )
 
                 # add cell index and the number of measurements
                 # we will use that in the visualization to generate
