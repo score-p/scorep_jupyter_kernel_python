@@ -1,10 +1,16 @@
 import os
 import shutil
 import ast
+import threading
+import time
+import sys
+import types
+
 import astunparse
 from pathlib import Path
 import uuid
 import importlib
+
 
 scorep_script_name = "scorep_script.py"
 
@@ -24,6 +30,7 @@ class PersHelper:
             "jupyter": {"os_environ": "", "sys_path": "", "var": ""},
             "subprocess": {"os_environ": "", "sys_path": "", "var": ""},
         }
+        self.is_dump_detailed_report = False
 
     def preprocess(self):
 
@@ -105,14 +112,30 @@ class PersHelper:
         jupyter_dump_ = (
             "import sys\n"
             "import os\n"
+            "import threading\n"
             f"import {self.marshaller}\n"
-            "from jumper.userpersistence import dump_runtime,dump_variables\n"
-            "dump_runtime(os.environ, sys.path,"
-            f"'{self.paths['jupyter']['os_environ']}',"
-            f"'{self.paths['jupyter']['sys_path']}',{self.marshaller})\n"
-            f"dump_variables({str(self.jupyter_variables)},globals(),"
-            f"'{self.paths['jupyter']['var']}',"
-            f"{self.marshaller})\n"
+            "from jumper.userpersistence import dump_runtime, dump_variables, create_busy_spinner\n"
+            "spinner = create_busy_spinner()\n"
+            f"if {self.is_dump_detailed_report}:\n"
+            "    spinner.start('Dumping runtime environment and sys.path...')\n"
+            f"else:\n"
+            "    spinner.start('Loading data...')\n"
+            "try:\n"
+            "    dump_runtime(os.environ, sys.path,"
+            f"    '{self.paths['jupyter']['os_environ']}',"
+            f"    '{self.paths['jupyter']['sys_path']}',{self.marshaller})\n"
+            f"    if {self.is_dump_detailed_report}:\n"
+            "        spinner.report('Dumping runtime environment and sys.path done.')\n"
+            "        spinner.start('Dumping variables...')\n"
+            f"    dump_variables({str(self.jupyter_variables)},globals(),"
+            f"        '{self.paths['jupyter']['var']}',"
+            f"        {self.marshaller})\n"
+            f"    if {self.is_dump_detailed_report}:\n"
+            "        spinner.stop('Dumping variables done.')\n"
+            f"    else:\n"
+            "        spinner.stop('Data is loaded.')\n"
+            "except KeyboardInterrupt:\n"
+            "    spinner.stop('Kernel interrupted.')\n"
         )
 
         return jupyter_dump_
@@ -203,6 +226,9 @@ class PersHelper:
             self.jupyter_definitions += user_definitions
             self.jupyter_variables.extend(user_variables)
 
+    def set_dump_report_level(self):
+        self.is_dump_detailed_report = int(os.getenv('JUMPER_MARSHALLING_DETAILED_REPORT', '0'))
+
 
 def dump_runtime(
     os_environ_, sys_path_, os_environ_dump_, sys_path_dump_, marshaller
@@ -227,6 +253,7 @@ def dump_runtime(
 def dump_variables(variables_names, globals_, var_dump_, marshaller):
     user_variables = {
         k: v for k, v in globals_.items() if k in variables_names
+        and not isinstance(globals_[k], types.ModuleType)
     }
 
     for el in user_variables.keys():
@@ -368,3 +395,64 @@ def magics_cleanup(code):
     ):  # Line magic & executed cell, remove first word
         nomagic_code = code.split(" ", 1)[1]
     return scorep_env, nomagic_code
+
+
+class BaseSpinner:
+    def __init__(self, lock=None):
+        pass
+
+    def _spinner_task(self):
+        pass
+
+    def start(self, working_message='Working...'):
+        pass
+
+    def report(self, done_message='Done.'):
+        pass
+
+    def stop(self, done_message='Done.'):
+        pass
+
+
+class BusySpinner(BaseSpinner):
+    def __init__(self, lock=None):
+        super().__init__(lock)
+        self._lock = lock or threading.Lock()
+        self._stop_event = threading.Event()
+        self._thread = threading.Thread(target=self._spinner_task)
+        self.working_message = ''
+        self.done_message = ''
+
+    def _spinner_task(self):
+        spinner_chars = "|/-\\"
+        idx = 0
+        while not self._stop_event.is_set():
+            with self._lock:
+                sys.stdout.write(f"\r{self.working_message} {spinner_chars[idx % len(spinner_chars)]}")
+                sys.stdout.flush()
+            time.sleep(0.1)
+            idx += 1
+
+    def start(self, working_message='Working...'):
+        self.working_message = working_message
+        if not self._thread.is_alive():
+            self._thread.start()
+
+    def report(self, done_message='Done.'):
+        with self._lock:
+            sys.stdout.write(f"\r{done_message}{' ' * len(self.working_message)}\n")
+            sys.stdout.flush()
+
+    def stop(self, done_message='Done.'):
+        self.report(done_message)
+        self._stop_event.set()
+        self._thread.join()
+
+
+def create_busy_spinner(lock=None):
+    is_enabled = os.getenv("JUMPER_DISABLE_PROCESSING_ANIMATIONS") != "1"
+    if is_enabled:
+        return BusySpinner(lock)
+    else:
+        return BaseSpinner(lock)
+

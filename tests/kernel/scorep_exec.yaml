@@ -8,9 +8,12 @@
   - |-
     %%execute_with_scorep
     import scorep
+    a = 3
+    b = 8
     with scorep.instrumenter.enable():
         print('a - b =', a - b)
   - - "\0"
+    - ""
     - "a - b = -5\n"
     - "Instrumentation results can be found in test_kernel_tmp/scorep-traces"
 -
@@ -26,6 +29,7 @@
     with scorep.instrumenter.enable():
         print('a - b =', a - b)
   - - "\0"
+    - ""
     - "a - b = -5\n"
     - "Instrumentation results can be found in test_kernel_tmp/scorep-traces"
 -
@@ -41,6 +45,7 @@
     with scorep.instrumenter.enable():
         print('a - b =', a - b)
   - - "\0"
+    - ""
     - "a - b = -5\n"
     - "Instrumentation results can be found in test_kernel_tmp/scorep-traces"
 -
@@ -56,5 +61,6 @@
     with scorep.instrumenter.enable():
         print('a - b =', a - b)
   - - "\0"
+    - ""
     - "a - b = -5\n"
     - "Instrumentation results can be found in test_kernel_tmp/scorep-traces"
