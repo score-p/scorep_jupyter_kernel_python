@@ -1,4 +1,6 @@
 __pycache__/
 .variables
 .userpersistency
-
+build
+logging
+**/*.egg-info
