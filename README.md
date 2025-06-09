@@ -8,13 +8,9 @@
 
 # A Jupyter Kernel for Performance Engineering
 
-This is the JUmPER Kernel that enables you to:
+This is the JUmPER Kernel that enables you to instrument and trace or profile Jupyter cells with [Score-P](https://score-p.org/).
 
-1. Monitor Jupyter cells and measure system metrics like cpu, gpu, I/O or memory utilization.
-
-2. Instrument and trace or profile Jupyter cells with [Score-P](https://score-p.org/).
-
-For binding to Score-P, the kernel uses the [Score-P Python bindings](https://github.com/score-p/scorep_binding_python). Monitoring does not rely on Score-P and you can use it without a Score-P installation.
+For binding to Score-P, the kernel uses the [Score-P Python bindings](https://github.com/score-p/scorep_binding_python). 
 
 
 
@@ -24,7 +20,6 @@ For binding to Score-P, the kernel uses the [Score-P Python bindings](https://gi
 - [Table of Content](#table-of-content)
 - [Installation](#installation)
 - [Usage](#usage)
-  - [Monitoring](#monitoring)
   - [Score-P Instrumentation](#score-p-instrumentation)
     - [Configuring Score-P in Jupyter](#configuring-score-p-in-jupyter)
   - [Multi-Cell Mode](#multi-cell-mode)
@@ -33,6 +28,7 @@ For binding to Score-P, the kernel uses the [Score-P Python bindings](https://gi
 - [Limitations](#limitations)
   - [Serialization Type Support](#serialization-type-support)
   - [Overhead](#overhead)
+  - [Logging Configuration](#logging-configuration)
 - [Future Work](#future-work)
 - [Citing](#citing)
 - [Contact](#contact)
@@ -40,7 +36,7 @@ For binding to Score-P, the kernel uses the [Score-P Python bindings](https://gi
 
 # Installation
 
-To install the kernel and required dependencies for supporting the monitoring features:
+To install the kernel and required dependencies:
 
 ```
 pip install jumper-kernel
@@ -57,7 +53,6 @@ The kernel will then be installed in your active python environment.
 You can select the kernel in Jupyter as `jumper`.
 
 **For using the Score-P features of the kernel you need a proper Score-P installation.**
-Note: this is not required for the monitoring feature of system metrics.
 
 ```
 pip install scorep
@@ -71,58 +66,6 @@ From the Score-P Python bindings:
 
 
 # Usage
-
-## Monitoring
-
-Every cell that is executed will be monitored by a parallel running process that collects system metrics for CPU, Memory, IO and if available GPU. Besides that, Jumper forwards the execution of that code to the default Python kernel.
-
-The frequency for performance monitoring can be set via the `JUMPER_REPORT_FREQUENCY`environment variable.
-
-```
-%env JUMPER_REPORT_FREQUENCY=2
-```
-
-Additionally, the number of reports required to store performance data can be defined by the `JUMPER_REPORTS_MIN` environment variable.
-
-```
-%env JUMPER_REPORTS_MIN=2
-```
-
-The performance data is recorded in-memory and the kernel provides several magic commands to display and interact with the data:
-
-
-![](doc/code_history.png)
-
-`%%display_code_history`
-
-Shows the history of the code of monitored cells with index and timestamp.
-
-`%%display_code_for_index`
-
-Shows the code for the cell of the selected index.
-
-
-![](doc/monitoring.gif)
-
-`%%display_graph_for_last`
-
-Shows the performance display for the last monitored cell.
-
-`%%display_graph_for_index [index]`
-
-Shows the performance display for the cell of the selected index.
-
-`%%display_graph_for_all`
-
-Shows the accumulated performance display for all monitored cells.
-
-`%%perfdata_to_variable [varname]`
-
-Exports the performance data to a variable
-
-`%%perfdata_to_json [filename]`
-
-Exports the performance data and the code to json files.
 
 ## Score-P Instrumentation
 
@@ -228,8 +171,6 @@ Stops the marking process and writes the marked cells in a Python script. Additi
 
 # Presentation of Performance Data
 
-For the monitoring data, use the build-in magic commands or build your own visualizations after exporting the data to a variable or json via the introduced magic commands.
-
 To inspect the Score-P collected performance data, use tools as Vampir (Trace) or Cube (Profile).
 
 # Limitations 
@@ -249,14 +190,11 @@ When dealing with big data structures, there might be a big runtime overhead at 
 ## Logging Configuration
 To adjust logging and obtain more detailed output about the behavior of the JUmPER kernel, refer to the `src/logging_config.py` file.
 
-This file contains configuration options for controlling the verbosity, format, and destination of log messages. You can customize it to suit your debugging or monitoring needs.
+This file contains configuration options for controlling the verbosity, format, and destination of log messages. You can customize it to suit your debugging needs.
 
 # Future Work
 
-The kernel is still under development. The following is on the agenda:
- 
- - Provide perfmonitors for multi node setups
- - Config for default perfmonitor to define collected metrics
+The kernel is still under development.
  
 PRs are welcome.
 

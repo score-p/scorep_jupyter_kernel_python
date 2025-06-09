@@ -369,39 +369,64 @@ def magics_cleanup(code):
     """
     lines = code.splitlines(True)
     scorep_env = []
-    for i, line in enumerate(lines):
-        if line.startswith("%env"):
-            env_var = line.strip().split(" ", 1)[1]
+    
+    # Cell magics that should skip entire cell content for persistence
+    non_persistent_cell_magics = ["%%bash"]  # Non-Python content
+    # Cell magics that should keep Python content but skip magic line
+    python_cell_magics = ["%%prun", "%%capture"]
+    whitelist_prefixes_line = ["%prun", "%time"]
+    
+    # Check if this is a cell magic
+    if lines and lines[0].strip().startswith("%%"):
+        first_line = lines[0].strip()
+        if any(first_line.startswith(prefix) for prefix in non_persistent_cell_magics):
+            # For non-Python cell magics like %%bash
+            # Skip the entire cell content for persistence
+            return scorep_env, ""
+        elif any(first_line.startswith(prefix) for prefix in python_cell_magics):
+            # For Python cell magics like %%prun, %%capture
+            # Skip only the magic line, keep the Python content for persistence
+            filtered_lines = lines[1:]  # Skip first line (the magic)
+            return scorep_env, "".join(filtered_lines)
+    
+    # Process line by line for non-cell magics or non-whitelisted cell magics
+    filtered_lines = []
+    
+    for line in lines:
+        stripped_line = line.strip()
+        
+        # Keep empty lines and comments
+        if not stripped_line or stripped_line.startswith("#"):
+            filtered_lines.append(line)
+            
+        # Handle %env specially
+        elif stripped_line.startswith("%env"):
+            env_var = stripped_line.split(" ", 1)[1]
             if "=" in env_var:
-                # Assign environment variable value
                 if env_var.startswith("SCOREP"):
-                    # For writefile mode, extract SCOREP env vars separately
                     scorep_env.append("export " + env_var + "\n")
                 else:
                     key, val = env_var.split("=", 1)
-                    lines[i] = f'os.environ["{key}"]="{val}"\n'
+                    filtered_lines.append(f'os.environ["{key}"]="{val}"\n')
             else:
-                # Print environment variable value
                 key = env_var
-                lines[i] = f"print(\"env: {key}=os.environ['{key}']\")\n"
-    code = "".join(lines)
-
-    whitelist_prefixes_cell = ["%%prun", "%%capture"]
-    whitelist_prefixes_line = ["%prun", "%time"]
-
-    nomagic_code = ""  # Code to be parsed for user variables
-    if not code.startswith(
-        tuple(["%", "!"])
-    ):  # No IPython magics and shell commands
-        nomagic_code = code
-    elif code.startswith(
-        tuple(whitelist_prefixes_cell)
-    ):  # Cell magic & executed cell, remove first line
-        nomagic_code = code.split("\n", 1)[1]
-    elif code.startswith(
-        tuple(whitelist_prefixes_line)
-    ):  # Line magic & executed cell, remove first word
-        nomagic_code = code.split(" ", 1)[1]
+                filtered_lines.append(f"print(\"env: {key}=os.environ['{key}']\")\n")
+                
+        # Handle whitelisted line magics - keep the command part
+        elif any(stripped_line.startswith(prefix) for prefix in whitelist_prefixes_line):
+            parts = line.split(" ", 1)
+            if len(parts) > 1:
+                filtered_lines.append(parts[1])
+                
+        # Remove all other magic commands and shell commands
+        elif stripped_line.startswith("%") or stripped_line.startswith("!"):
+            continue
+            
+        # Keep regular Python code
+        else:
+            filtered_lines.append(line)
+    
+    nomagic_code = "".join(filtered_lines)
     return scorep_env, nomagic_code
 
 
