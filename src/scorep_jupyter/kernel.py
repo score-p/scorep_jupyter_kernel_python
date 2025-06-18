@@ -11,6 +11,10 @@ import logging.config
 
 from enum import Enum
 from textwrap import dedent
+from statistics import mean
+from typing import IO, AnyStr, Callable
+
+import pandas as pd
 from ipykernel.ipkernel import IPythonKernel
 from scorep_jupyter.userpersistence import PersHelper, scorep_script_name
 from scorep_jupyter.userpersistence import magics_cleanup, create_busy_spinner
@@ -459,6 +463,7 @@ class scorep_jupyterKernel(IPythonKernel):
         allow_stdin=False,
         *,
         cell_id=None,
+        is_multicell_final=False,
     ):
         """
         Execute given code with Score-P Python bindings instrumentation.
@@ -563,28 +568,7 @@ class scorep_jupyterKernel(IPythonKernel):
                 self.pershelper.postprocess()
                 return reply_status_dump
 
-        # Empty cell output, required for interactive output
-        # e.g. tqdm for-loop progress bar
-        self.cell_output("\0")
-
-        stdout_lock = threading.Lock()
-        process_busy_spinner = create_busy_spinner(stdout_lock)
-        process_busy_spinner.start("Process is running...")
-
-        # Due to splitting into scorep-kernel and ipython extension,
-        # multicell mode is not supported for coarse-grained measurements
-        # anymore (in the extension) and we do not show the single cells in
-        # the ipython extension visualizations after executing them with scorep
-        # however, since we are using scorep anyway, the ipython extension is
-        # not useful, since we can count hardware counters anyway
-        # multicellmode_timestamps = []
-
-        try:
-            # multicellmode_timestamps =
-            self.read_scorep_process_pipe(proc, stdout_lock)
-            process_busy_spinner.stop("Done.")
-        except KeyboardInterrupt:
-            process_busy_spinner.stop("Kernel interrupted.")
+        multicellmode_timestamps = self.start_reading_scorep_process_streams(proc, is_multicell_final)
 
         # In disk mode, subprocess already terminated
         # after dumping persistence to file
@@ -669,66 +653,129 @@ class scorep_jupyterKernel(IPythonKernel):
         self.pershelper.postprocess()
         return self.standard_reply()
 
-    def read_scorep_process_pipe(
-        self, proc: subprocess.Popen[bytes], stdout_lock: threading.Lock
+    def start_reading_scorep_process_streams(
+        self,
+        proc: subprocess.Popen[bytes],
+        is_multicell_final: bool,
     ) -> list:
         """
         This function reads stdout and stderr of the subprocess running with
         Score-P instrumentation independently.
-        It logs all stderr output, collects lines containing
-        the marker "MCM_TS" (used to identify multi-cell mode timestamps) into
-        a list, and sends the remaining
-        stdout lines to the Jupyter cell output.
 
         Simultaneous access to stdout is synchronized via a lock to prevent
-        overlapping with another thread performing
+        overlapping with stderr reading thread and thread performing
         long-running process animation.
 
         Args:
-            proc (subprocess.Popen[bytes]): The subprocess whose output is
-            being read.
-            stdout_lock (threading.Lock): Lock to avoid output overlapping
+            proc (subprocess.Popen[bytes]): The subprocess whose output is being read.
+            is_multicell_final (bool): If multicell mode is finalizing - spinner must be disabled.
 
         Returns:
             list: A list of decoded strings containing "MCM_TS" timestamps.
         """
+
+        stdout_lock = threading.Lock()
+        spinner_stop_event = threading.Event()
+        process_busy_spinner = create_busy_spinner(stdout_lock, spinner_stop_event, is_multicell_final)
+        process_busy_spinner.start("Process is running...")
+
         multicellmode_timestamps = []
-        sel = selectors.DefaultSelector()
 
-        sel.register(proc.stdout, selectors.EVENT_READ)
-        sel.register(proc.stderr, selectors.EVENT_READ)
+        # Empty cell output, required for interactive output
+        # e.g. tqdm for-loop progress bar
+        self.cell_output("\0")
 
+        try:
+            t_stderr = threading.Thread(
+                target=self.read_scorep_stderr,
+                args=(
+                    proc.stderr,
+                    stdout_lock,
+                    spinner_stop_event)
+            )
+            t_stderr.start()
+
+            multicellmode_timestamps = self.read_scorep_stdout(proc.stdout, stdout_lock, spinner_stop_event)
+
+            t_stderr.join()
+            process_busy_spinner.stop("Done.")
+
+        except KeyboardInterrupt:
+            process_busy_spinner.stop("Kernel interrupted.")
+
+        if multicellmode_timestamps:
+            self.log.debug(f'{multicellmode_timestamps = }')
+        else:
+            self.log.debug(f'"multicellmode_timestamps" is empty.')
+
+
+        return multicellmode_timestamps
+
+    def read_scorep_stream(
+        self,
+        stream: IO[AnyStr],
+        lock: threading.Lock,
+        process_line: Callable[[str], None],
+        read_chunk_size: int = 64,
+    ):
+        incomplete_line = ""
+        endline_pattern = re.compile(r"(.*?[\r\n]|.+$)")
+
+
+
+        while True:
+            chunk = stream.read(read_chunk_size)
+            if not chunk:
+                break
+            chunk = chunk.decode(sys.getdefaultencoding(), errors="ignore")
+            lines = endline_pattern.findall(chunk)
+            if lines:
+                lines[0] = incomplete_line + lines[0]
+                if lines[-1][-1] not in ["\n", "\r"]:
+                    incomplete_line = lines.pop(-1)
+                else:
+                    incomplete_line = ""
+                for line in lines:
+                    with lock:
+                        process_line(line)
+
+    def read_scorep_stdout(
+            self,
+            stdout: IO[AnyStr],
+            lock: threading.Lock,
+            spinner_stop_event: threading.Event,
+            read_chunk_size=64,
+    ) -> list:
+        multicellmode_timestamps = []
         line_width = 50
         clear_line = "\r" + " " * line_width + "\r"
 
-        while True:
-            # Select between stdout and stderr
-            for key, val in sel.select():
-                line = key.fileobj.readline()
-                if not line:
-                    sel.unregister(key.fileobj)
-                    continue
+        def process_stdout_line(line: str):
+            if "MCM_TS" in line:
+                multicellmode_timestamps.append(line)
+            else:
+                if spinner_stop_event.is_set():
+                    sys.stdout.write(clear_line)
+                    sys.stdout.flush()
+                    self.cell_output(line)
 
-                decoded_line = line.decode(
-                    sys.getdefaultencoding(), errors="ignore"
-                )
-
-                if key.fileobj is proc.stderr:
-                    with stdout_lock:
-                        self.log.warning(f"{decoded_line.strip()}")
-                elif "MCM_TS" in decoded_line:
-                    multicellmode_timestamps.append(decoded_line)
-                else:
-                    with stdout_lock:
-                        sys.stdout.write(clear_line)
-                        sys.stdout.flush()
-                        self.cell_output(decoded_line)
-
-            # If both stdout and stderr empty -> out of loop
-            if not sel.get_map():
-                break
-
+        self.read_scorep_stream(stdout, lock, process_stdout_line, read_chunk_size)
         return multicellmode_timestamps
+
+    def read_scorep_stderr(
+            self,
+            stderr: IO[AnyStr],
+            lock: threading.Lock,
+            spinner_stop_event: threading.Event,
+            read_chunk_size=64,
+    ):
+        def process_stderr_line(line: str):
+            if spinner_stop_event.is_set():
+                self.cell_output(line)
+                self.log.error(line)
+
+        self.read_scorep_stream(stderr, lock, process_stderr_line, read_chunk_size)
+
 
     async def do_execute(
         self,
@@ -778,6 +825,7 @@ class scorep_jupyterKernel(IPythonKernel):
                         user_expressions,
                         allow_stdin,
                         cell_id=cell_id,
+                        is_multicell_final=True,
                     )
                 except Exception:
                     self.cell_output(

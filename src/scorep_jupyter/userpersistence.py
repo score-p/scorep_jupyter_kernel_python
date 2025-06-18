@@ -11,6 +11,7 @@ from pathlib import Path
 import uuid
 import importlib
 
+
 scorep_script_name = "scorep_script.py"
 
 
@@ -442,7 +443,7 @@ def magics_cleanup(code):
 
 
 class BaseSpinner:
-    def __init__(self, lock=None):
+    def __init__(self, lock=None, stop_event=None):
         pass
 
     def _spinner_task(self):
@@ -459,22 +460,23 @@ class BaseSpinner:
 
 
 class BusySpinner(BaseSpinner):
-    def __init__(self, lock=None):
+    def __init__(self, lock=None, stop_event=None):
         super().__init__(lock)
         self._lock = lock or threading.Lock()
-        self._stop_event = threading.Event()
+        self._stop_event = stop_event or threading.Event()
         self._thread = threading.Thread(target=self._spinner_task)
         self.working_message = ""
         self.done_message = ""
 
     def _spinner_task(self):
         spinner_chars = "|/-\\"
+        clear_line = " " * 50
         idx = 0
         while not self._stop_event.is_set():
             with self._lock:
                 sys.stdout.write(
                     f"\r{self.working_message} "
-                    f"{spinner_chars[idx % len(spinner_chars)]}"
+                    f"{spinner_chars[idx % len(spinner_chars)]}{clear_line}"
                 )
                 sys.stdout.flush()
             time.sleep(0.1)
@@ -498,11 +500,11 @@ class BusySpinner(BaseSpinner):
         self._thread.join()
 
 
-def create_busy_spinner(lock=None):
-    is_enabled = (
-        os.getenv("SCOREP_JUPYTER_DISABLE_PROCESSING_ANIMATIONS") != "1"
-    )
-    if is_enabled:
-        return BusySpinner(lock)
+def create_busy_spinner(lock=None, stop_event=None, is_multicell_final=False):
+    is_enabled = os.getenv("SCOREP_JUPYTER_DISABLE_PROCESSING_ANIMATIONS") != "1"
+    if is_enabled and not is_multicell_final:
+        return BusySpinner(lock, stop_event)
     else:
-        return BaseSpinner(lock)
+        if stop_event:
+            stop_event.set()
+        return BaseSpinner()

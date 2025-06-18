@@ -119,6 +119,8 @@ To see the detailed report for marshalling steps - `SCOREP_JUPYTER_MARSHALLING_D
 %env SCOREP_JUPYTER_MARSHALLING_DETAILED_REPORT=1
 ```
 You can disable visual animations shown during long-running tasks by setting the `SCOREP_JUPYTER_DISABLE_PROCESSING_ANIMATIONS` environment variable.
+This can be useful for debugging, as it ensures that any error messages from your code in cells are shown without being overwritten.
+It is also helpful when running code that produces its own progress bars (e.g., using `tqdm`), to prevent output from being obscured.
 ```
 %env SCOREP_JUPYTER_DISABLE_PROCESSING_ANIMATIONS=1
 ```
