@@ -6,12 +6,19 @@
 <img width="450" src="doc/JUmPER01.png"/>
 </p>
 
-# A Jupyter Kernel for Performance Engineering
+# JUmPER: Jupyter meets Performance
 
-This is the JUmPER Kernel that enables you to instrument and trace or profile Jupyter cells with [Score-P](https://score-p.org/).
+JUmPER brings performance engineering to Jupyter. It consists of the two repositories:
+
+- JUmPER Ipython extension (https://github.com/ScaDS/jumper_ipython_extension)
+
+The extension allows you to take coarse-grained performance measurements and create visualizations in your Python kernels.
+
+- Score-P Jupyter kernel Python (this repository)
+
+The Score-P kernel allows you to instrument, and trace or profile your Python code in Jupyter using [Score-P](https://score-p.org/). 
 
 For binding to Score-P, the kernel uses the [Score-P Python bindings](https://github.com/score-p/scorep_binding_python). 
-
 
 
 # Table of Content
@@ -39,8 +46,8 @@ For binding to Score-P, the kernel uses the [Score-P Python bindings](https://gi
 To install the kernel and required dependencies:
 
 ```
-pip install jumper-kernel
-python -m jumper.install
+pip install scorep_jupyter
+python -m scorep_jupyter.install
 ```
 
 You can also build the kernel from source via:
@@ -50,13 +57,9 @@ pip install .
 ```
 
 The kernel will then be installed in your active python environment.
-You can select the kernel in Jupyter as `jumper`.
+You can select the kernel in Jupyter as `Score-P_Python`.
 
 **For using the Score-P features of the kernel you need a proper Score-P installation.**
-
-```
-pip install scorep
-```
 
 From the Score-P Python bindings:
 
@@ -64,6 +67,19 @@ From the Score-P Python bindings:
 > Please make sure that `scorep-config` is in your `PATH` variable.
 > For Ubuntu LTS systems there is a non-official ppa of Score-P available: https://launchpad.net/~andreasgocht/+archive/ubuntu/scorep .
 
+To use the coarse-grained performance measurements, simply install the JUmPER extension via:
+
+```
+pip install jumper_extension
+```
+
+Then load it in a Jupyter cell with:
+
+```
+%load_ext jumper_extension
+```
+
+You can find usage information in the repository of the extension.
 
 # Usage
 
@@ -200,7 +216,16 @@ PRs are welcome.
 
 # Citing
 
-If you publish some work using the kernel, we would appreciate if you cite the following paper:
+If you publish some work using the kernel, we would appreciate if you cite one of the following papers:
+
+```
+Werner, E., Rygin, A., Gocht-Zech, A., Döbel, S., & Lieber, M. (2024, November).
+JUmPER: Performance Data Monitoring, Instrumentation and Visualization for Jupyter Notebooks.
+In SC24-W: Workshops of the International Conference for High Performance Computing, Networking, Storage and Analysis (pp. 2003-2011). IEEE.
+https://www.doi.org/10.1109/SCW63240.2024.00250
+```
+
+or
 
 ```
 Werner, E., Manjunath, L., Frenzel, J., & Torge, S. (2021, October).
