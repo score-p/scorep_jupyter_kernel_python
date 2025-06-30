@@ -6,9 +6,9 @@ import json
 from jumper.logo import logo_image
 
 kernel_spec = {
-    "argv": [sys.executable, "-m", "jumper.kernel", "-f", "{connection_file}"],
-    "name": "jumper",
-    "display_name": "JUmPER",
+    "argv": [sys.executable, "-m", "scorep_jupyter.kernel", "-f", "{connection_file}"],
+    "name": "scorep_jupyter",
+    "display_name": "Score-P_Python",
     "language": "python",
 }
 
@@ -21,8 +21,8 @@ def install_kernel_spec():
         with open(os.path.join(d, "logo-64x64.png"), "wb") as f:
             f.write(logo_image)
 
-        print("installed the jumper kernel")
-        KernelSpecManager().install_kernel_spec(d, "jumper", user=True)
+        print("installed the scorep jupyter python kernel")
+        KernelSpecManager().install_kernel_spec(d, "scorep_jupyter", user=True)
 
 
 if __name__ == "__main__":
