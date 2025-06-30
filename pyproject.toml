@@ -6,8 +6,8 @@ requires = [
 build-backend = "setuptools.build_meta:__legacy__"
 
 [project]
-name='jumper-kernel'
-version='1.1.1'
+name='scorep-jupyter'
+version='1.2.0'
 authors=[
   {name='Elias Werner',email='elias.werner@tu-dresden.de'},
 ]
@@ -23,7 +23,8 @@ dependencies = [
   "ipykernel",
   "jupyter-client",
   "astunparse",
-  "dill"
+  "dill",
+  "scorep"
 ]
 
 [project.urls]

@@ -13,17 +13,17 @@ import logging.config
 from enum import Enum
 from textwrap import dedent
 from ipykernel.ipkernel import IPythonKernel
-from jumper.userpersistence import PersHelper, scorep_script_name
-from jumper.userpersistence import magics_cleanup, create_busy_spinner
+from scorep_jupyter.userpersistence import PersHelper, scorep_script_name
+from scorep_jupyter.userpersistence import magics_cleanup, create_busy_spinner
 import importlib
-from jumper.kernel_messages import KernelErrorCode, KERNEL_ERROR_MESSAGES
+from scorep_jupyter.kernel_messages import KernelErrorCode, KERNEL_ERROR_MESSAGES
 
-# import jumper.multinode_monitor.slurm_monitor as slurm_monitor
+# import scorep_jupyter.multinode_monitor.slurm_monitor as slurm_monitor
 
 from .logging_config import LOGGING
 
 PYTHON_EXECUTABLE = sys.executable
-userpersistence_token = "jumper.userpersistence"
+userpersistence_token = "scorep_jupyter.userpersistence"
 jupyter_dump = "jupyter_dump.pkl"
 subprocess_dump = "subprocess_dump.pkl"
 
@@ -38,7 +38,7 @@ class KernelMode(Enum):
         return self.value[1]
 
 
-class JumperKernel(IPythonKernel):
+class scorep_jupyterKernel(IPythonKernel):
     implementation = "Python and Score-P"
     implementation_version = "1.0"
     language = "python"
@@ -305,7 +305,7 @@ class JumperKernel(IPythonKernel):
                         f"""
                         # This bash script is generated automatically to run
                         # Jupyter Notebook -> Python script conversion
-                        # by JUmPER kernel
+                        # by scorep_jupyter kernel
                         # {self.writefile_python_name}
                         # !/bin/bash
                         """
@@ -322,7 +322,7 @@ class JumperKernel(IPythonKernel):
                     dedent(
                         f"""
                         # This is the automatic conversion of
-                        # Jupyter Notebook -> Python script by JUmPER kernel.
+                        # Jupyter Notebook -> Python script by scorep_jupyter kernel.
                         # Code corresponding to the cells not marked for
                         # Score-P instrumentation is framed by
                         # "with scorep.instrumenter.disable()
@@ -880,4 +880,4 @@ class JumperKernel(IPythonKernel):
 if __name__ == "__main__":
     from ipykernel.kernelapp import IPKernelApp
 
-    IPKernelApp.launch_instance(kernel_class=JumperKernel)
+    IPKernelApp.launch_instance(kernel_class=scorep_jupyterKernel)

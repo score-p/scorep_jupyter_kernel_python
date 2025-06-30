@@ -7,7 +7,7 @@ import subprocess
 import dill
 import cloudpickle
 
-from src.jumper.userpersistence import (
+from src.scorep_jupyter.userpersistence import (
     extract_variables_names,
     extract_definitions,
     load_variables,
@@ -93,7 +93,7 @@ class UserPersistenceTests(unittest.TestCase):
                 with open("tests/userpersistence/sys_path.json", "r") as file:
                     expected_sys_path = json.load(file)
                 code = (
-                    "from src.jumper.userpersistence import dump_runtime\n"
+                    "from src.scorep_jupyter.userpersistence import dump_runtime\n"
                     f"import {serializer.__name__}\n"
                     "import os\n"
                     "import sys\n"
@@ -147,7 +147,7 @@ class UserPersistenceTests(unittest.TestCase):
                     variables_names = list(expected_variables.keys())
                 code = (
                     (
-                        "from src.jumper.userpersistence "
+                        "from src.scorep_jupyter.userpersistence "
                         "import dump_variables\n"
                         f"import {serializer.__name__}\n"
                     )

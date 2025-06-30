@@ -44,7 +44,7 @@ class PersHelper:
             for key2 in self.paths[key1]:
 
                 if self.mode == "memory":
-                    fd_path = "jumper_" + key1 + "_" + key2 + "_" + uid
+                    fd_path = "scorep_jupyter_" + key1 + "_" + key2 + "_" + uid
                 elif self.mode == "disk":
                     fd_path = dir_path + "_" + key2 + "_" + uid
 
@@ -114,7 +114,7 @@ class PersHelper:
             "import os\n"
             "import threading\n"
             f"import {self.marshaller}\n"
-            "from jumper.userpersistence import dump_runtime, "
+            "from scorep_jupyter.userpersistence import dump_runtime, "
             "dump_variables, create_busy_spinner\n"
             "spinner = create_busy_spinner()\n"
             f"if {self.is_dump_detailed_report}:\n"
@@ -152,7 +152,7 @@ class PersHelper:
             "import sys\n"
             "import os\n"
             f"import {self.marshaller}\n"
-            "from jumper.userpersistence import dump_runtime,"
+            "from scorep_jupyter.userpersistence import dump_runtime,"
             "dump_variables, load_runtime, load_variables\n"
             "load_runtime(os.environ, sys.path,"
             f"'{self.paths['jupyter']['os_environ']}',"
@@ -195,7 +195,7 @@ class PersHelper:
         jupyter_update = (
             "import sys\n"
             "import os\n"
-            "from jumper.userpersistence import load_runtime, load_variables\n"
+            "from scorep_jupyter.userpersistence import load_runtime, load_variables\n"
             f"load_runtime(os.environ, sys.path,"
             f"'{self.paths['subprocess']['os_environ']}',"
             f"'{self.paths['subprocess']['sys_path']}',{self.marshaller})\n"
@@ -231,7 +231,7 @@ class PersHelper:
 
     def set_dump_report_level(self):
         self.is_dump_detailed_report = int(
-            os.getenv("JUMPER_MARSHALLING_DETAILED_REPORT", "0")
+            os.getenv("scorep_jupyter_MARSHALLING_DETAILED_REPORT", "0")
         )
 
 
@@ -306,7 +306,7 @@ def extract_definitions(code):
     Extract imported modules and definitions of classes and functions from
     the code block.
     """
-    # can't use in kernel as import from jumper.userpersistence:
+    # can't use in kernel as import from scorep_jupyter.userpersistence:
     # self-reference error during dill dump of notebook
     root = ast.parse(code)
     definitions = []
@@ -488,7 +488,7 @@ class BusySpinner(BaseSpinner):
 
 
 def create_busy_spinner(lock=None):
-    is_enabled = os.getenv("JUMPER_DISABLE_PROCESSING_ANIMATIONS") != "1"
+    is_enabled = os.getenv("scorep_jupyter_DISABLE_PROCESSING_ANIMATIONS") != "1"
     if is_enabled:
         return BusySpinner(lock)
     else:

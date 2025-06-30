@@ -3,7 +3,7 @@ from IPython.utils.tempdir import TemporaryDirectory
 import os
 import sys
 import json
-from jumper.logo import logo_image
+from scorep_jupyter.logo import logo_image
 
 kernel_spec = {
     "argv": [sys.executable, "-m", "scorep_jupyter.kernel", "-f", "{connection_file}"],
