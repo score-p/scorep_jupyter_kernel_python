@@ -17,9 +17,9 @@ class IgnoreErrorFilter(logging.Filter):
         return record.levelno < logging.ERROR
 
 
-class JumperKernelOnlyFilter(logging.Filter):
+class scorep_jupyterKernelOnlyFilter(logging.Filter):
     def filter(self, record):
-        return "jumper" in record.pathname
+        return "scorep_jupyter" in record.pathname
 
 
 LOGGING = {
@@ -57,14 +57,14 @@ LOGGING = {
             "filters": [
                 "ignore_error_filter",  # prevents from writing to jupyter
                 # cell output twice
-                "jumper_kernel_only_filter",
+                "scorep_jupyter_kernel_only_filter",
             ],
         },
     },
     "filters": {
         "jupyter_filter": {"()": JupyterLogFilter},
         "ignore_error_filter": {"()": IgnoreErrorFilter},
-        "jumper_kernel_only_filter": {"()": JumperKernelOnlyFilter},
+        "scorep_jupyter_kernel_only_filter": {"()": scorep_jupyterKernelOnlyFilter},
     },
     "root": {
         "handlers": [],

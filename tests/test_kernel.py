@@ -4,20 +4,20 @@ import unittest
 from unittest.mock import MagicMock
 import jupyter_kernel_test as jkt
 
-from jumper import logging_config
-from jumper.kernel_messages import KernelErrorCode, KERNEL_ERROR_MESSAGES
-from jumper.kernel import JumperKernel
+from scorep_jupyter import logging_config
+from scorep_jupyter.kernel_messages import KernelErrorCode, KERNEL_ERROR_MESSAGES
+from scorep_jupyter.kernel import scorep_jupyterKernel
 
 tmp_dir = "test_kernel_tmp/"
 
 
 class KernelTests(jkt.KernelTests):
-    kernel_name = "jumper"
+    kernel_name = "scorep_jupyter"
     language_name = "python"
 
     @classmethod
     def setUpClass(cls) -> None:
-        os.environ["JUMPER_DISABLE_PROCESSING_ANIMATIONS"] = "1"
+        os.environ["scorep_jupyter_DISABLE_PROCESSING_ANIMATIONS"] = "1"
         logging_config.LOGGING['loggers']['kernel']['level'] = 'WARNING'
         logging.config.dictConfig(logging_config.LOGGING)
 
@@ -101,7 +101,7 @@ class DummyPersHelper:
 
 class KernelTestLogError(unittest.TestCase):
     def setUp(self):
-        self.kernel = JumperKernel()
+        self.kernel = scorep_jupyterKernel()
         setattr(self.kernel.log, "error", MagicMock())
         self.kernel.cell_output = MagicMock()
         self.kernel.pershelper = DummyPersHelper()

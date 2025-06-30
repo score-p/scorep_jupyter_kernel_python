@@ -12,23 +12,18 @@ import logging.config
 
 from enum import Enum
 from textwrap import dedent
-from statistics import mean
-import pandas as pd
 from ipykernel.ipkernel import IPythonKernel
-from itables import show
-from jumper.userpersistence import PersHelper, scorep_script_name
-from jumper.userpersistence import magics_cleanup, create_busy_spinner
+from scorep_jupyter.userpersistence import PersHelper, scorep_script_name
+from scorep_jupyter.userpersistence import magics_cleanup, create_busy_spinner
 import importlib
-from jumper.perfdatahandler import PerformanceDataHandler
-import jumper.visualization as perfvis
-from jumper.kernel_messages import KernelErrorCode, KERNEL_ERROR_MESSAGES
+from scorep_jupyter.kernel_messages import KernelErrorCode, KERNEL_ERROR_MESSAGES
 
-# import jumper.multinode_monitor.slurm_monitor as slurm_monitor
+# import scorep_jupyter.multinode_monitor.slurm_monitor as slurm_monitor
 
 from .logging_config import LOGGING
 
 PYTHON_EXECUTABLE = sys.executable
-userpersistence_token = "jumper.userpersistence"
+userpersistence_token = "scorep_jupyter.userpersistence"
 jupyter_dump = "jupyter_dump.pkl"
 subprocess_dump = "subprocess_dump.pkl"
 
@@ -43,7 +38,7 @@ class KernelMode(Enum):
         return self.value[1]
 
 
-class JumperKernel(IPythonKernel):
+class scorep_jupyterKernel(IPythonKernel):
     implementation = "Python and Score-P"
     implementation_version = "1.0"
     language = "python"
@@ -96,11 +91,6 @@ class JumperKernel(IPythonKernel):
         self.writefile_scorep_binding_args = []
         self.writefile_multicell = False
 
-        # will be set to True as soon as GPU data is received
-        self.gpu_avail = False
-        self.perfdata_handler = PerformanceDataHandler()
-        self.nodelist = self.perfdata_handler.get_nodelist()
-
         self.scorep_available_ = shutil.which("scorep")
         self.scorep_python_available_ = True
         try:
@@ -109,7 +99,7 @@ class JumperKernel(IPythonKernel):
             self.scorep_python_available_ = False
 
         logging.config.dictConfig(LOGGING)
-        self.log = logging.getLogger("kernel")
+        self.log = logging.getLogger('kernel')
 
     def cell_output(self, string, stream="stdout"):
         """
@@ -129,12 +119,17 @@ class JumperKernel(IPythonKernel):
 
     def scorep_not_available(self):
         if not self.scorep_available_:
-            self.log_error(KernelErrorCode.SCOREP_NOT_AVAILABLE)
+            self.cell_output("Score-P not available, cell ignored.", "stderr")
             return self.standard_reply()
         if not self.scorep_python_available_:
-            self.log_error(KernelErrorCode.SCOREP_PYTHON_NOT_AVAILABLE)
+            self.cell_output(
+                "Score-P Python not available, cell ignored. "
+                "Consider installing it via `pip install scorep`",
+                "stderr",
+            )
             return self.standard_reply()
-        return None
+        else:
+            return None
 
     def marshaller_settings(self, code):
         """
@@ -144,10 +139,14 @@ class JumperKernel(IPythonKernel):
             # Clean files/pipes before switching
             self.pershelper.postprocess()
 
+            # Safely extract content after the magic command
+            code_parts = code.split("\n", 1)
+            content = code_parts[1] if len(code_parts) > 1 else ""
+
             marshaller_match = re.search(
-                r"MARSHALLER=([\w-]+)", code.split("\n", 1)[1]
+                r"MARSHALLER=([\w-]+)", content
             )
-            mode_match = re.search(r"MODE=([\w-]+)", code.split("\n", 1)[1])
+            mode_match = re.search(r"MODE=([\w-]+)", content)
             marshaller = (
                 marshaller_match.group(1) if marshaller_match else None
             )
@@ -173,43 +172,6 @@ class JumperKernel(IPythonKernel):
                 f"Kernel uses '{self.pershelper.marshaller}' marshaller in "
                 f"'{self.pershelper.mode}' mode."
             )
-        else:
-            self.cell_output(
-                f"KernelWarning: Currently in {self.mode}, command ignored.",
-                "stderr",
-            )
-        return self.standard_reply()
-
-    def set_perfmonitor(self, code):
-        """
-        Read the perfmonitor and try to select it.
-        """
-        if self.mode == KernelMode.DEFAULT:
-            monitor = code.split("\n")[1]
-            if monitor in {"local", "localhost", "LOCAL", "LOCALHOST"}:
-                self.cell_output(
-                    "Selected local monitor. No parallel monitoring."
-                )
-            else:
-                try:
-                    self.perfdata_handler.set_monitor(monitor)
-                    self.nodelist = self.perfdata_handler.get_nodelist()
-                    if len(self.nodelist) <= 1:
-                        self.nodelist = None
-                        self.cell_output(
-                            "Found monitor: "
-                            + str(monitor)
-                            + " but no nodelist, using local setup. "
-                        )
-                    else:
-                        self.cell_output(
-                            "Selected monitor: "
-                            + str(monitor)
-                            + " and got nodes: "
-                            + str(self.nodelist)
-                        )
-                except Exception:
-                    self.cell_output("Error setting monitor", "stderr")
         else:
             self.cell_output(
                 f"KernelWarning: Currently in {self.mode}, command ignored.",
@@ -343,7 +305,7 @@ class JumperKernel(IPythonKernel):
                         f"""
                         # This bash script is generated automatically to run
                         # Jupyter Notebook -> Python script conversion
-                        # by JUmPER kernel
+                        # by scorep_jupyter kernel
                         # {self.writefile_python_name}
                         # !/bin/bash
                         """
@@ -360,7 +322,7 @@ class JumperKernel(IPythonKernel):
                     dedent(
                         f"""
                         # This is the automatic conversion of
-                        # Jupyter Notebook -> Python script by JUmPER kernel.
+                        # Jupyter Notebook -> Python script by scorep_jupyter kernel.
                         # Code corresponding to the cells not marked for
                         # Score-P instrumentation is framed by
                         # "with scorep.instrumenter.disable()
@@ -488,192 +450,6 @@ class JumperKernel(IPythonKernel):
         self.pershelper.postprocess()
         self.cell_output(error_message, "stderr")
 
-    def report_perfdata(self, performance_data_nodes, duration):
-
-        # print the performance data
-        report_trs = int(os.environ.get("JUMPER_REPORTS_MIN", 2))
-
-        # just count the number of memory measurements to decide whether we
-        # want to print the information
-        if len(performance_data_nodes[0][1]) > report_trs:
-
-            self.cell_output("\n----Performance Data----\n", "stdout")
-            self.cell_output(
-                "Duration: " + "{:.2f}".format(duration) + "\n", "stdout"
-            )
-            # last 4 values are means across nodes, print them separately
-
-            """
-            structure in performance_data_nodes:
-            [
-                [NODE_1: [CPU_UTIL:[CPU_1][CPU_2][CPU_N][MEAN][MAX][MIN]]
-                         [MEM_UTIL]
-                         [GPU_UTIL:[GPU_1][GPU_2][GPU_N][MEAN][MAX][MIN]
-                         [GPU_MEM:[GPU_1][GPU_2][GPU_N][MEAN][MAX][MIN]]
-                [NODE_2: [...]]
-                [NODE_N: [...]]
-                [CPU_UTIL_ACROSS_NODES (The mean of the means)]
-                [MEM_UTIL_ACROSS_NODES (The mean of the raw values)]
-                [GPU_UTIL_ACROSS_NODES (The mean of the means)]
-                [GPU_MEM_ACROSS_NODES (The mean of the means)]
-            ]
-            """
-
-            for idx, performance_data in enumerate(
-                performance_data_nodes[:-8]
-            ):
-
-                if self.nodelist:
-                    self.cell_output(
-                        "--NODE " + str(self.nodelist[idx]) + "--\n", "stdout"
-                    )
-
-                cpu_util = performance_data[0]
-                mem_util = performance_data[1]
-                io_ops_read = performance_data[2]
-                io_ops_write = performance_data[3]
-                io_bytes_read = performance_data[4]
-                io_bytes_write = performance_data[5]
-                gpu_util = performance_data[6]
-                gpu_mem = performance_data[7]
-
-                if cpu_util:
-                    # self.cell_output("--CPU Util--\n", 'stdout')
-                    self.cell_output(
-                        "\nCPU Util (Across CPUs)       \tAVG: "
-                        + "{:.2f}".format(mean(cpu_util[-3]))
-                        + "\t MIN: "
-                        + "{:.2f}".format(min(cpu_util[-1]))
-                        + "\t MAX: "
-                        + "{:.2f}".format(max(cpu_util[-2]))
-                        + "\n",
-                        "stdout",
-                    )
-
-                if len(mem_util) > 0:
-                    self.cell_output(
-                        "Mem Util in GB (Across nodes)\tAVG: "
-                        + "{:.2f}".format(mean(mem_util))
-                        + "\t MIN: "
-                        + "{:.2f}".format(min(mem_util))
-                        + "\t MAX: "
-                        + "{:.2f}".format(max(mem_util))
-                        + "\n",
-                        "stdout",
-                    )
-
-                if len(io_ops_read) > 0:
-                    self.cell_output(
-                        "IO Ops (excl.) Read          \tTotal: "
-                        + "{:.0f}".format(io_ops_read[-1])
-                        + "\n",
-                        "stdout",
-                    )
-
-                if len(io_ops_write) > 0:
-                    self.cell_output(
-                        "               Write         \tTotal: "
-                        + "{:.0f}".format(io_ops_write[-1])
-                        + "\n",
-                        "stdout",
-                    )
-
-                if len(io_bytes_read) > 0:
-                    self.cell_output(
-                        "IO Bytes (excl.) Read        \tTotal: "
-                        + "{:.2f}".format(io_bytes_read[-1])
-                        + "\n",
-                        "stdout",
-                    )
-
-                if len(io_bytes_write) > 0:
-                    self.cell_output(
-                        "                 Write       \tTotal: "
-                        + "{:.2f}".format(io_bytes_write[-1])
-                        + "\n",
-                        "stdout",
-                    )
-
-                if gpu_util[0] and gpu_mem[0]:
-                    self.gpu_avail = True
-                    self.cell_output(
-                        "--GPU Util and Mem per GPU--\n", "stdout"
-                    )
-                    self.cell_output(
-                        "GPU Util \tAVG: "
-                        + "{:.2f}".format(mean(gpu_util[-3]))
-                        + "\t MIN: "
-                        + "{:.2f}".format(min(gpu_util[-1]))
-                        + "\t MAX: "
-                        + "{:.2f}".format(max(gpu_util[-2]))
-                        + "\n",
-                        "stdout",
-                    )
-                    self.cell_output(
-                        "\t    "
-                        + "\tMem AVG: "
-                        + "{:.2f}".format(mean(gpu_mem[-3]))
-                        + "\t MIN: "
-                        + "{:.2f}".format(min(gpu_mem[-1]))
-                        + "\t MAX: "
-                        + "{:.2f}".format(max(gpu_mem[-2]))
-                        + "\n",
-                        "stdout",
-                    )
-
-            """
-            performance data nodes consists of:
-            [raw data node0,
-             raw data node1,
-             raw data noden,
-             CPU Mean across nodes,
-             Mem Mean across nodes,
-             IO OPS READ Mean across nodes,
-             IO OPS WRITE Mean across nodes,
-             IO Bytes READ Mean across nodes,
-             IO Bytes WRITE Mean across nodes,
-             GPU Util Mean across nodes (if avail),
-             GPU Mem Mean across nodes (if avail)]
-            """
-            """
-            if len(performance_data_nodes)-8 > 1:
-                self.cell_output("\n---Across Nodes---\n", 'stdout')
-
-                self.cell_output(
-                    "\n--CPU Util-- \tAVG: " + "{:.2f}".format(
-                        mean(performance_data_nodes[-4])) + "\t MIN: " +
-                        "{:.2f}".format(
-                        min(performance_data_nodes[-4])) + "\t MAX: " +
-                         "{:.2f}".format(max(performance_data_nodes[-4])) +
-                          "\n", 'stdout')
-
-                if performance_data_nodes[-3]:
-                    self.cell_output(
-                        "--Mem Util-- \tAVG: " + "{:.2f}".format(
-                            mean(performance_data_nodes[-3])) + "\t MIN: " +
-                             "{:.2f}".format(
-                            min(performance_data_nodes[-3])) + "\t MAX: " +
-                             "{:.2f}".format(
-                            max(performance_data_nodes[-3])) + "\n", 'stdout')
-
-                if performance_data_nodes[-2] and performance_data_nodes[-1]:
-                    self.cell_output("--GPU Util and Mem per GPU--\n",'stdout')
-                    self.cell_output(
-                        "--GPU Util-- \tAVG: " + "{:.2f}".format(
-                            mean(performance_data_nodes[-2])) + "\t MIN: " +
-                             "{:.2f}".format(
-                            min(performance_data_nodes[-2])) + "\t MAX: " +
-                             "{:.2f}".format(max(performance_data_nodes[-2])) +
-                              "\n", 'stdout')
-                    self.cell_output("\t    " +
-                                     "\tMem AVG: " + "{:.2f}".format(
-                        mean(performance_data_nodes[-1])) + "\t MIN: " +
-                         "{:.2f}".format(
-                        min(performance_data_nodes[-1])) + "\t MAX: " +
-                         "{:.2f}".format(max(performance_data_nodes[-1])) +
-                          "\n", 'stdout')
-            """
-
     async def scorep_execute(
         self,
         code,
@@ -766,7 +542,6 @@ class JumperKernel(IPythonKernel):
         )
         self.log.debug(f"Subprocess started with PID {proc.pid}")
 
-        self.perfdata_handler.start_perfmonitor(proc.pid)
         # For memory mode jupyter_dump and jupyter_update must be awaited
         # concurrently to the running subprocess
         if self.pershelper.mode == "memory":
@@ -793,7 +568,7 @@ class JumperKernel(IPythonKernel):
 
         stdout_lock = threading.Lock()
         process_busy_spinner = create_busy_spinner(stdout_lock)
-        process_busy_spinner.start("Process is running...")
+        process_busy_spinner.start('Process is running...')
 
         multicellmode_timestamps = []
 
@@ -801,77 +576,21 @@ class JumperKernel(IPythonKernel):
             multicellmode_timestamps = self.read_scorep_process_pipe(
                 proc, stdout_lock
             )
-            process_busy_spinner.stop("Done.")
+            process_busy_spinner.stop('Done.')
         except KeyboardInterrupt:
-            process_busy_spinner.stop("Kernel interrupted.")
-
-        # for multiple nodes, we have to add more lists here, one list per node
-        # this is required to be in line with the performance data aggregation
-        # for the %%display_graph_for_all magic command, which does not have
-        # explicit timestamps, but aligns the colorization of the plot based
-        # on the number of perf measurements we have, which is individual per
-        # node
-
-        time_indices = None
-        if len(multicellmode_timestamps):
-            # retrieve the index this cell will have in the global history
-            sub_idx = len(self.perfdata_handler.get_code_history())
-            # append to have end of last code fragment
-            multicellmode_timestamps.append("MCM_TS" + str(time.time()))
-            time_indices = [[]]
-            nb_ms = 0.0
-            for idx, ts_string in enumerate(multicellmode_timestamps[:-1]):
-                secs = float(multicellmode_timestamps[idx + 1][6:]) - float(
-                    ts_string[6:]
-                )
-                nb_ms += secs / int(
-                    os.environ.get("JUMPER_REPORT_FREQUENCY", 2)
-                )
-                if nb_ms >= 1.0:
-                    # only consider if we have measurements
-                    time_indices[0].append(
-                        (str(sub_idx) + "_" + str(idx), nb_ms)
-                    )
-                    nb_ms %= 1.0
-            # add time for last to last measurement
-
-            if nb_ms >= 0.0:
-                if len(time_indices[0]):
-                    sub_idx, val = time_indices[0][-1]
-                    time_indices[0][-1] = (sub_idx, val + nb_ms)
-                else:
-                    time_indices[0].append(
-                        (str(sub_idx) + "_" + str(0), nb_ms)
-                    )
-
-            nb_ms = 0.0
-            for idx, val in enumerate(time_indices[0]):
-                sub_idx, ms = val
-                nb_ms += ms % 1.0
-                ms = int(ms)
-                if nb_ms >= 1.0:
-                    ms += 1
-                    nb_ms %= 1.0
-                time_indices[0][idx] = (sub_idx, ms)
-
-        performance_data_nodes, duration = (
-            self.perfdata_handler.end_perfmonitor()
-        )
-
-        # Check if the score-p process is running.
-        # This prevents jupyter_update() from getting stuck while reading
-        # non-existent temporary files
-        # if something goes wrong during process execution.
-        if proc.poll():
-            self.log_error(KernelErrorCode.SCOREP_SUBPROCESS_FAIL)
-            self.pershelper.postprocess()
-            return self.standard_reply()
-
-        # os_environ_.clear()
-        # sys_path_.clear()
+            process_busy_spinner.stop('Kernel interrupted.')
 
         # In disk mode, subprocess already terminated
         # after dumping persistence to file
+        if self.pershelper.mode == "disk":
+            if proc.returncode:
+                self.pershelper.postprocess()
+                self.cell_output(
+                    "KernelError: Cell execution failed, cell persistence "
+                    "was not recorded.",
+                    "stderr",
+                )
+                return self.standard_reply()
         # Ghost cell - load subprocess persistence back to Jupyter notebook
         # Run in a "silent" way to not increase cells counter
         reply_status_update = await super().do_execute(
@@ -942,12 +661,6 @@ class JumperKernel(IPythonKernel):
                 )
 
         self.pershelper.postprocess()
-
-        if performance_data_nodes:
-            self.report_perfdata(performance_data_nodes, duration)
-            self.perfdata_handler.append_code(
-                datetime.datetime.now(), code, time_indices
-            )
         return self.standard_reply()
 
     def read_scorep_process_pipe(
@@ -990,14 +703,12 @@ class JumperKernel(IPythonKernel):
                     sel.unregister(key.fileobj)
                     continue
 
-                decoded_line = line.decode(
-                    sys.getdefaultencoding(), errors="ignore"
-                )
+                decoded_line = line.decode(sys.getdefaultencoding(), errors='ignore')
 
                 if key.fileobj is proc.stderr:
                     with stdout_lock:
-                        self.log.warning(f"{decoded_line.strip()}")
-                elif "MCM_TS" in decoded_line:
+                        self.log.warning(f'{decoded_line.strip()}')
+                elif 'MCM_TS' in decoded_line:
                     multicellmode_timestamps.append(decoded_line)
                 else:
                     with stdout_lock:
@@ -1028,204 +739,7 @@ class JumperKernel(IPythonKernel):
         else save Score-P environment/binding arguments/ execute cell with
         Score-P Python binding.
         """
-
-        """
-        #displays all ran cell codes with index and timestamp
-        %%display_code_all
-
-        #displays code for index
-        %%display_code_for_index i
-
-        # displays graphs for last cell, arguments: cpu_util etc.
-        %%display_graphs_for_last cpu_util, ...
-        # displays one graph for all cell, arguments: cpu_util etc.
-        %%display_graphs_for_all cpu_util, ...
-        # -> displays performance data aggregated, indicates different cells
-        # by color
-        # displays graph for index cell, arguments: cpu_util etc.
-        %%display_graphs_for_index i cpu_util, ...
-        """
-        """
-        if code.startswith('%%display_graph_for_last'):
-            metrics = code.split(' ')
-            nmetrics = len(metrics) - 1
-            self.draw_performance_graph(
-                            self.get_perfdata_index(-1, metrics[1:]), nmetrics)
-            return self.standard_reply()
-        """
-        if code.startswith("%%display_graph_for_last"):
-            if not len(self.perfdata_handler.get_perfdata_history()):
-                self.cell_output("No performance data available.")
-            time_indices = self.perfdata_handler.get_time_indices()[-1]
-            if time_indices:
-                sub_idxs = [x[0] for x in time_indices[0]]
-                self.cell_output(
-                    f"Cell seemed to be tracked in multi cell"
-                    " mode. Got performance data for the"
-                    f" following sub cells: {sub_idxs}"
-                )
-            perfvis.draw_performance_graph(
-                self.nodelist,
-                self.perfdata_handler.get_perfdata_history()[-1],
-                self.gpu_avail,
-                time_indices,
-            )
-            return self.standard_reply()
-        elif code.startswith("%%display_graph_for_index"):
-            if len(code.split(" ")) == 1:
-                self.cell_output(
-                    "No index specified. Use: %%display_graph_for_index index",
-                    "stdout",
-                )
-            index = int(code.split(" ")[1])
-            if index >= len(self.perfdata_handler.get_perfdata_history()):
-                self.cell_output(
-                    "Tracked only "
-                    + str(len(self.perfdata_handler.get_perfdata_history()))
-                    + " cells. This index is not available."
-                )
-            else:
-                time_indices = self.perfdata_handler.get_time_indices()[index]
-                if time_indices:
-                    sub_idxs = [x[0] for x in time_indices[0]]
-                    self.cell_output(
-                        f"Cell seemed to be tracked in multi cell"
-                        " mode. Got performance data for the"
-                        f" following sub cells: {sub_idxs}"
-                    )
-                perfvis.draw_performance_graph(
-                    self.nodelist,
-                    self.perfdata_handler.get_perfdata_history()[index],
-                    self.gpu_avail,
-                    time_indices,
-                )
-            return self.standard_reply()
-        elif code.startswith("%%display_graph_for_all"):
-            data, time_indices = (
-                self.perfdata_handler.get_perfdata_aggregated()
-            )
-            perfvis.draw_performance_graph(
-                self.nodelist,
-                data,
-                self.gpu_avail,
-                time_indices,
-            )
-            return self.standard_reply()
-
-        elif code.startswith("%%display_code_for_index"):
-            if len(code.split(" ")) == 1:
-                self.cell_output(
-                    "No index specified. Use: %%display_code_for_index index",
-                    "stdout",
-                )
-            index = int(code.split(" ")[1])
-            if index >= len(self.perfdata_handler.get_perfdata_history()):
-                self.cell_output(
-                    "Tracked only "
-                    + str(len(self.perfdata_handler.get_perfdata_history()))
-                    + " cells. This index is not available."
-                )
-            else:
-                self.cell_output(
-                    "Cell timestamp: "
-                    + str(self.perfdata_handler.get_code_history()[index][0])
-                    + "\n--\n",
-                    "stdout",
-                )
-                self.cell_output(
-                    self.perfdata_handler.get_code_history()[index][1],
-                    "stdout",
-                )
-            return self.standard_reply()
-        elif code.startswith("%%display_code_history"):
-            show(
-                pd.DataFrame(
-                    self.perfdata_handler.get_code_history(),
-                    columns=["timestamp", "code"],
-                ).reset_index(),
-                layout={"topStart": "search", "topEnd": None},
-                columnDefs=[{"className": "dt-left", "targets": 2}],
-            )
-            return self.standard_reply()
-        elif code.startswith("%%perfdata_to_variable"):
-            if len(code.split(" ")) == 1:
-                self.cell_output(
-                    "No variable for export specified. Use: "
-                    "%%perfdata_to_variable myvar",
-                    "stdout",
-                )
-            else:
-                varname = code.split(" ")[1]
-                # for multi cell mode, we might have time indices which we want
-                # to communicate to the user, each time_index has the index of
-                # the overall mult cell and the sub index within this cell.
-                # In addition, it has a counter for the number of measurements
-                # each sub cell corresponds to in the list of performance data
-                # measurements, e.g. (2_0, 5), (2_1, 3), (2_2, 7)
-                mcm_time_indices = self.perfdata_handler.get_time_indices()
-                mcm_time_indices = list(
-                    filter(lambda item: item is not None, mcm_time_indices)
-                )
-
-                code = (
-                    f"{varname}="
-                    f"{self.perfdata_handler.get_perfdata_history()}"
-                )
-
-                if mcm_time_indices:
-                    code += f"\n{varname}.append({mcm_time_indices})"
-
-                await super().do_execute(code, silent=True)
-                self.cell_output(
-                    "Exported performance data to "
-                    + str(varname)
-                    + " variable. ",
-                    "stdout",
-                )
-                if mcm_time_indices:
-                    self.cell_output(
-                        "Detected that cells were executed in multi cell mode."
-                        + f"Last entry in {varname} is a list that contains "
-                        f"the sub indices per cell that were executed in "
-                        f"in multi cell mode and a counter for the number of"
-                        f" performance measurements within this sub cell, "
-                        f"e.g. f{mcm_time_indices[-1]}",
-                        "stdout",
-                    )
-            return self.standard_reply()
-        elif code.startswith("%%perfdata_to_json"):
-            if len(code.split(" ")) == 1:
-                self.cell_output(
-                    "No filename to export specified. Use: "
-                    "%%perfdata_to_variable myfile",
-                    "stdout",
-                )
-            else:
-                filename = code.split(" ")[1]
-                with open(f"{filename}_perfdata.json", "w") as f:
-                    json.dump(
-                        self.perfdata_handler.get_perfdata_history(),
-                        default=str,
-                        fp=f,
-                    )
-                with open(f"{filename}_code.json", "w") as f:
-                    json.dump(
-                        self.perfdata_handler.get_code_history(),
-                        default=str,
-                        fp=f,
-                    )
-                self.cell_output(
-                    "Exported performance data to "
-                    + str(filename)
-                    + "_perfdata.json and "
-                    + str(filename)
-                    + "_code.json",
-                    "stdout",
-                )
-            return self.standard_reply()
-        elif code.startswith("%%set_perfmonitor"):
-            return self.set_perfmonitor(code)
-        elif code.startswith("%%scorep_python_binding_arguments"):
+        if code.startswith("%%scorep_python_binding_arguments"):
             return self.scorep_not_available() or self.set_scorep_pythonargs(
                 code
             )
@@ -1311,7 +825,6 @@ class JumperKernel(IPythonKernel):
         else:
             if self.mode == KernelMode.DEFAULT:
                 self.pershelper.parse(magics_cleanup(code)[1], "jupyter")
-                self.perfdata_handler.start_perfmonitor(os.getpid())
                 parent_ret = await super().do_execute(
                     code,
                     silent,
@@ -1320,14 +833,6 @@ class JumperKernel(IPythonKernel):
                     allow_stdin,
                     cell_id=cell_id,
                 )
-                performance_data_nodes, duration = (
-                    self.perfdata_handler.end_perfmonitor()
-                )
-                if performance_data_nodes:
-                    self.report_perfdata(performance_data_nodes, duration)
-                    self.perfdata_handler.append_code(
-                        datetime.datetime.now(), code
-                    )
                 return parent_ret
             elif self.mode == KernelMode.MULTICELL:
                 return self.append_multicellmode(magics_cleanup(code)[1])
@@ -1361,10 +866,12 @@ class JumperKernel(IPythonKernel):
         mode = self.pershelper.mode
         marshaller = self.pershelper.marshaller
 
-        template = KERNEL_ERROR_MESSAGES.get(
-            code, "Unknown error. Mode: {mode}, Marshaller: {marshaller}"
+        template = KERNEL_ERROR_MESSAGES.get(code, "Unknown error. Mode: {mode}, Marshaller: {marshaller}")
+        message = template.format(
+            mode=mode,
+            marshaller=marshaller,
+            **kwargs
         )
-        message = template.format(mode=mode, marshaller=marshaller, **kwargs)
 
         self.log.error(message)
         self.cell_output("KernelError: " + message, "stderr")
@@ -1373,4 +880,4 @@ class JumperKernel(IPythonKernel):
 if __name__ == "__main__":
     from ipykernel.kernelapp import IPKernelApp
 
-    IPKernelApp.launch_instance(kernel_class=JumperKernel)
+    IPKernelApp.launch_instance(kernel_class=scorep_jupyterKernel)

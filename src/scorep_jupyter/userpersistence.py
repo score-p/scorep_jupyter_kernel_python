@@ -44,7 +44,7 @@ class PersHelper:
             for key2 in self.paths[key1]:
 
                 if self.mode == "memory":
-                    fd_path = "jumper_" + key1 + "_" + key2 + "_" + uid
+                    fd_path = "scorep_jupyter_" + key1 + "_" + key2 + "_" + uid
                 elif self.mode == "disk":
                     fd_path = dir_path + "_" + key2 + "_" + uid
 
@@ -114,7 +114,7 @@ class PersHelper:
             "import os\n"
             "import threading\n"
             f"import {self.marshaller}\n"
-            "from jumper.userpersistence import dump_runtime, "
+            "from scorep_jupyter.userpersistence import dump_runtime, "
             "dump_variables, create_busy_spinner\n"
             "spinner = create_busy_spinner()\n"
             f"if {self.is_dump_detailed_report}:\n"
@@ -152,7 +152,7 @@ class PersHelper:
             "import sys\n"
             "import os\n"
             f"import {self.marshaller}\n"
-            "from jumper.userpersistence import dump_runtime,"
+            "from scorep_jupyter.userpersistence import dump_runtime,"
             "dump_variables, load_runtime, load_variables\n"
             "load_runtime(os.environ, sys.path,"
             f"'{self.paths['jupyter']['os_environ']}',"
@@ -195,7 +195,7 @@ class PersHelper:
         jupyter_update = (
             "import sys\n"
             "import os\n"
-            "from jumper.userpersistence import load_runtime, load_variables\n"
+            "from scorep_jupyter.userpersistence import load_runtime, load_variables\n"
             f"load_runtime(os.environ, sys.path,"
             f"'{self.paths['subprocess']['os_environ']}',"
             f"'{self.paths['subprocess']['sys_path']}',{self.marshaller})\n"
@@ -231,7 +231,7 @@ class PersHelper:
 
     def set_dump_report_level(self):
         self.is_dump_detailed_report = int(
-            os.getenv("JUMPER_MARSHALLING_DETAILED_REPORT", "0")
+            os.getenv("scorep_jupyter_MARSHALLING_DETAILED_REPORT", "0")
         )
 
 
@@ -306,7 +306,7 @@ def extract_definitions(code):
     Extract imported modules and definitions of classes and functions from
     the code block.
     """
-    # can't use in kernel as import from jumper.userpersistence:
+    # can't use in kernel as import from scorep_jupyter.userpersistence:
     # self-reference error during dill dump of notebook
     root = ast.parse(code)
     definitions = []
@@ -369,39 +369,64 @@ def magics_cleanup(code):
     """
     lines = code.splitlines(True)
     scorep_env = []
-    for i, line in enumerate(lines):
-        if line.startswith("%env"):
-            env_var = line.strip().split(" ", 1)[1]
+    
+    # Cell magics that should skip entire cell content for persistence
+    non_persistent_cell_magics = ["%%bash"]  # Non-Python content
+    # Cell magics that should keep Python content but skip magic line
+    python_cell_magics = ["%%prun", "%%capture"]
+    whitelist_prefixes_line = ["%prun", "%time"]
+    
+    # Check if this is a cell magic
+    if lines and lines[0].strip().startswith("%%"):
+        first_line = lines[0].strip()
+        if any(first_line.startswith(prefix) for prefix in non_persistent_cell_magics):
+            # For non-Python cell magics like %%bash
+            # Skip the entire cell content for persistence
+            return scorep_env, ""
+        elif any(first_line.startswith(prefix) for prefix in python_cell_magics):
+            # For Python cell magics like %%prun, %%capture
+            # Skip only the magic line, keep the Python content for persistence
+            filtered_lines = lines[1:]  # Skip first line (the magic)
+            return scorep_env, "".join(filtered_lines)
+    
+    # Process line by line for non-cell magics or non-whitelisted cell magics
+    filtered_lines = []
+    
+    for line in lines:
+        stripped_line = line.strip()
+        
+        # Keep empty lines and comments
+        if not stripped_line or stripped_line.startswith("#"):
+            filtered_lines.append(line)
+            
+        # Handle %env specially
+        elif stripped_line.startswith("%env"):
+            env_var = stripped_line.split(" ", 1)[1]
             if "=" in env_var:
-                # Assign environment variable value
                 if env_var.startswith("SCOREP"):
-                    # For writefile mode, extract SCOREP env vars separately
                     scorep_env.append("export " + env_var + "\n")
                 else:
                     key, val = env_var.split("=", 1)
-                    lines[i] = f'os.environ["{key}"]="{val}"\n'
+                    filtered_lines.append(f'os.environ["{key}"]="{val}"\n')
             else:
-                # Print environment variable value
                 key = env_var
-                lines[i] = f"print(\"env: {key}=os.environ['{key}']\")\n"
-    code = "".join(lines)
-
-    whitelist_prefixes_cell = ["%%prun", "%%capture"]
-    whitelist_prefixes_line = ["%prun", "%time"]
-
-    nomagic_code = ""  # Code to be parsed for user variables
-    if not code.startswith(
-        tuple(["%", "!"])
-    ):  # No IPython magics and shell commands
-        nomagic_code = code
-    elif code.startswith(
-        tuple(whitelist_prefixes_cell)
-    ):  # Cell magic & executed cell, remove first line
-        nomagic_code = code.split("\n", 1)[1]
-    elif code.startswith(
-        tuple(whitelist_prefixes_line)
-    ):  # Line magic & executed cell, remove first word
-        nomagic_code = code.split(" ", 1)[1]
+                filtered_lines.append(f"print(\"env: {key}=os.environ['{key}']\")\n")
+                
+        # Handle whitelisted line magics - keep the command part
+        elif any(stripped_line.startswith(prefix) for prefix in whitelist_prefixes_line):
+            parts = line.split(" ", 1)
+            if len(parts) > 1:
+                filtered_lines.append(parts[1])
+                
+        # Remove all other magic commands and shell commands
+        elif stripped_line.startswith("%") or stripped_line.startswith("!"):
+            continue
+            
+        # Keep regular Python code
+        else:
+            filtered_lines.append(line)
+    
+    nomagic_code = "".join(filtered_lines)
     return scorep_env, nomagic_code
 
 
@@ -463,7 +488,7 @@ class BusySpinner(BaseSpinner):
 
 
 def create_busy_spinner(lock=None):
-    is_enabled = os.getenv("JUMPER_DISABLE_PROCESSING_ANIMATIONS") != "1"
+    is_enabled = os.getenv("scorep_jupyter_DISABLE_PROCESSING_ANIMATIONS") != "1"
     if is_enabled:
         return BusySpinner(lock)
     else:
