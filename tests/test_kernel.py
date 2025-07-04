@@ -6,7 +6,10 @@ import jupyter_kernel_test as jkt
 import yaml, re, os
 
 from scorep_jupyter import logging_config
-from scorep_jupyter.kernel_messages import KernelErrorCode, KERNEL_ERROR_MESSAGES
+from scorep_jupyter.kernel_messages import (
+    KernelErrorCode,
+    KERNEL_ERROR_MESSAGES,
+)
 from scorep_jupyter.kernel import scorep_jupyterKernel
 
 tmp_dir = "test_kernel_tmp/"
@@ -18,12 +21,14 @@ class KernelTests(jkt.KernelTests):
 
     @classmethod
     def setUpClass(cls) -> None:
-        os.environ["scorep_jupyter_DISABLE_PROCESSING_ANIMATIONS"] = "1"
+        os.environ["SCOREP_JUPYTER_DISABLE_PROCESSING_ANIMATIONS"] = "1"
         os.environ["SCOREP_ENABLE_TRACING"] = "1"
         os.environ["SCOREP_ENABLE_PROFILING"] = "0"
         os.environ["SCOREP_TOTAL_MEMORY"] = "3g"
-        os.environ["SCOREP_EXPERIMENT_DIRECTORY"] = "test_kernel_tmp/scorep-traces"
-        logging_config.LOGGING['loggers']['kernel']['level'] = 'WARNING'
+        os.environ["SCOREP_EXPERIMENT_DIRECTORY"] = (
+            "test_kernel_tmp/scorep-traces"
+        )
+        logging_config.LOGGING["loggers"]["kernel"]["level"] = "WARNING"
         logging.config.dictConfig(logging_config.LOGGING)
 
         super().setUpClass()
@@ -51,11 +56,17 @@ class KernelTests(jkt.KernelTests):
             reply, output_messages = self.execute_helper(code=cell_code)
 
             expected_outputs = self.extract_notebook_cell_outputs(cell_outputs)
-            kernel_outputs = self.extract_kernel_executed_outputs(output_messages)
+            kernel_outputs = self.extract_kernel_executed_outputs(
+                output_messages
+            )
 
-            with self.subTest(cell=idx+1, code_starts=cell_code.splitlines()[0] if cell_code else '<empty>'):
+            with self.subTest(
+                cell=idx + 1,
+                code_starts=(
+                    cell_code.splitlines()[0] if cell_code else "<empty>"
+                ),
+            ):
                 self.assertListEqual(kernel_outputs, expected_outputs)
-
 
     def extract_notebook_cell_outputs(self, cell_outputs: list) -> list:
         expected_outputs = []
@@ -67,9 +78,11 @@ class KernelTests(jkt.KernelTests):
             elif output.output_type == "error":
                 message_text = "\n".join(output["traceback"])
             else:
-                message_text = ''
+                message_text = ""
 
-            split_message_text = self.prepare_notebook_message_list(message_text)
+            split_message_text = self.prepare_notebook_message_list(
+                message_text
+            )
             expected_outputs.extend(split_message_text)
 
         return expected_outputs
@@ -94,10 +107,12 @@ class KernelTests(jkt.KernelTests):
             elif msg["header"]["msg_type"] == "execute_result":
                 message_text = msg["content"]["data"]["text/plain"]
             else:
-                message_text = ''
+                message_text = ""
 
-            if '\x00' not in message_text and '\r' not in message_text:
-                split_message_text = [line.strip() for line in message_text.splitlines()]
+            if "\x00" not in message_text and "\r" not in message_text:
+                split_message_text = [
+                    line.strip() for line in message_text.splitlines()
+                ]
                 kernel_outputs.extend(split_message_text)
 
         return kernel_outputs
@@ -140,16 +155,19 @@ class KernelTestLogError(unittest.TestCase):
     def test_error_with_all_fields(self):
 
         self.kernel.log_error(
-            KernelErrorCode.PERSISTENCE_DUMP_FAIL,
-            direction=self.direction
+            KernelErrorCode.PERSISTENCE_DUMP_FAIL, direction=self.direction
         )
-        expected = KERNEL_ERROR_MESSAGES[KernelErrorCode.PERSISTENCE_DUMP_FAIL].format(
+        expected = KERNEL_ERROR_MESSAGES[
+            KernelErrorCode.PERSISTENCE_DUMP_FAIL
+        ].format(
             mode="test_mode",
             marshaller="test_marshal",
-            direction=self.direction
+            direction=self.direction,
         )
         self.kernel.log.error.assert_called_with(expected)
-        self.kernel.cell_output.assert_called_with(f"KernelError: {expected}", "stderr")
+        self.kernel.cell_output.assert_called_with(
+            f"KernelError: {expected}", "stderr"
+        )
 
     def test_unknown_error_code(self):
         dummy_code = -1
@@ -164,7 +182,7 @@ class KernelTestLogError(unittest.TestCase):
             "marshaller": "test_marshal",
             "direction": "dummy_direction",
             "detail": "dummy_detail",
-            "step": "dummy_step"
+            "step": "dummy_step",
         }
 
         for code, template in KERNEL_ERROR_MESSAGES.items():

@@ -11,7 +11,6 @@ from pathlib import Path
 import uuid
 import importlib
 
-
 scorep_script_name = "scorep_script.py"
 
 
@@ -24,7 +23,7 @@ class PersHelper:
         self.subprocess_definitions = ""
         self.subprocess_variables = []
         self.base_path = Path(
-            os.environ["SCOREP_KERNEL_PERSISTENCE_DIR"]
+            os.environ["SCOREP_JUPYTER_PERSISTENCE_DIR"]
         ) / Path("./kernel_persistence/")
         self.paths = {
             "jupyter": {"os_environ": "", "sys_path": "", "var": ""},
@@ -195,7 +194,8 @@ class PersHelper:
         jupyter_update = (
             "import sys\n"
             "import os\n"
-            "from scorep_jupyter.userpersistence import load_runtime, load_variables\n"
+            "from scorep_jupyter.userpersistence import load_runtime, "
+            "load_variables\n"
             f"load_runtime(os.environ, sys.path,"
             f"'{self.paths['subprocess']['os_environ']}',"
             f"'{self.paths['subprocess']['sys_path']}',{self.marshaller})\n"
@@ -231,7 +231,7 @@ class PersHelper:
 
     def set_dump_report_level(self):
         self.is_dump_detailed_report = int(
-            os.getenv("scorep_jupyter_MARSHALLING_DETAILED_REPORT", "0")
+            os.getenv("SCOREP_JUPYTER_MARSHALLING_DETAILED_REPORT", "0")
         )
 
 
@@ -241,7 +241,9 @@ def dump_runtime(
     # Don't dump environment variables set by Score-P bindings.
     # Will force it to re-initialize instead of calling reset_preload()
     filtered_os_environ_ = {
-        k: v for k, v in os_environ_.items() if not k.startswith("SCOREP_")
+        k: v
+        for k, v in os_environ_.items()
+        if not k.startswith("SCOREP_") or "SCOREP_JUPYTER" in k
     }
 
     with os.fdopen(
@@ -271,8 +273,7 @@ def dump_variables(variables_names, globals_, var_dump_, marshaller):
         if non_persistent_class in globals().keys():
             user_variables[el].__class__ = globals()[non_persistent_class]
 
-    with (os.fdopen(os.open(var_dump_, os.O_WRONLY | os.O_CREAT), "wb")
-          as file):
+    with os.fdopen(os.open(var_dump_, os.O_WRONLY | os.O_CREAT), "wb") as file:
         marshaller.dump(user_variables, file)
 
 
@@ -379,11 +380,16 @@ def magics_cleanup(code):
     # Check if this is a cell magic
     if lines and lines[0].strip().startswith("%%"):
         first_line = lines[0].strip()
-        if any(first_line.startswith(prefix) for prefix in non_persistent_cell_magics):
+        if any(
+            first_line.startswith(prefix)
+            for prefix in non_persistent_cell_magics
+        ):
             # For non-Python cell magics like %%bash
             # Skip the entire cell content for persistence
             return scorep_env, ""
-        elif any(first_line.startswith(prefix) for prefix in python_cell_magics):
+        elif any(
+            first_line.startswith(prefix) for prefix in python_cell_magics
+        ):
             # For Python cell magics like %%prun, %%capture
             # Skip only the magic line, keep the Python content for persistence
             filtered_lines = lines[1:]  # Skip first line (the magic)
@@ -410,10 +416,15 @@ def magics_cleanup(code):
                     filtered_lines.append(f'os.environ["{key}"]="{val}"\n')
             else:
                 key = env_var
-                filtered_lines.append(f"print(\"env: {key}=os.environ['{key}']\")\n")
+                filtered_lines.append(
+                    f"print(\"env: {key}=os.environ['{key}']\")\n"
+                )
 
         # Handle whitelisted line magics - keep the command part
-        elif any(stripped_line.startswith(prefix) for prefix in whitelist_prefixes_line):
+        elif any(
+            stripped_line.startswith(prefix)
+            for prefix in whitelist_prefixes_line
+        ):
             parts = line.split(" ", 1)
             if len(parts) > 1:
                 filtered_lines.append(parts[1])
@@ -488,7 +499,9 @@ class BusySpinner(BaseSpinner):
 
 
 def create_busy_spinner(lock=None):
-    is_enabled = os.getenv("scorep_jupyter_DISABLE_PROCESSING_ANIMATIONS") != "1"
+    is_enabled = (
+        os.getenv("SCOREP_JUPYTER_DISABLE_PROCESSING_ANIMATIONS") != "1"
+    )
     if is_enabled:
         return BusySpinner(lock)
     else:

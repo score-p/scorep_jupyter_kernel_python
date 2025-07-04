@@ -64,7 +64,9 @@ LOGGING = {
     "filters": {
         "jupyter_filter": {"()": JupyterLogFilter},
         "ignore_error_filter": {"()": IgnoreErrorFilter},
-        "scorep_jupyter_kernel_only_filter": {"()": scorep_jupyterKernelOnlyFilter},
+        "scorep_jupyter_kernel_only_filter": {
+            "()": scorep_jupyterKernelOnlyFilter
+        },
     },
     "root": {
         "handlers": [],

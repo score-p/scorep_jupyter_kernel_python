@@ -6,7 +6,13 @@ import json
 from scorep_jupyter.logo import logo_image
 
 kernel_spec = {
-    "argv": [sys.executable, "-m", "scorep_jupyter.kernel", "-f", "{connection_file}"],
+    "argv": [
+        sys.executable,
+        "-m",
+        "scorep_jupyter.kernel",
+        "-f",
+        "{connection_file}",
+    ],
     "name": "scorep_jupyter",
     "display_name": "Score-P_Python",
     "language": "python",

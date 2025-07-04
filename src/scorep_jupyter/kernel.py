@@ -1,5 +1,4 @@
 import datetime
-import json
 import os
 import re
 import selectors
@@ -16,7 +15,10 @@ from ipykernel.ipkernel import IPythonKernel
 from scorep_jupyter.userpersistence import PersHelper, scorep_script_name
 from scorep_jupyter.userpersistence import magics_cleanup, create_busy_spinner
 import importlib
-from scorep_jupyter.kernel_messages import KernelErrorCode, KERNEL_ERROR_MESSAGES
+from scorep_jupyter.kernel_messages import (
+    KernelErrorCode,
+    KERNEL_ERROR_MESSAGES,
+)
 
 # import scorep_jupyter.multinode_monitor.slurm_monitor as slurm_monitor
 
@@ -75,7 +77,7 @@ class scorep_jupyterKernel(IPythonKernel):
 
         self.scorep_binding_args = []
 
-        os.environ["SCOREP_KERNEL_PERSISTENCE_DIR"] = "./"
+        os.environ["SCOREP_JUPYTER_PERSISTENCE_DIR"] = "./"
         self.pershelper = PersHelper("dill", "memory")
 
         self.mode = KernelMode.DEFAULT
@@ -99,7 +101,7 @@ class scorep_jupyterKernel(IPythonKernel):
             self.scorep_python_available_ = False
 
         logging.config.dictConfig(LOGGING)
-        self.log = logging.getLogger('kernel')
+        self.log = logging.getLogger("kernel")
 
     def cell_output(self, string, stream="stdout"):
         """
@@ -143,9 +145,7 @@ class scorep_jupyterKernel(IPythonKernel):
             code_parts = code.split("\n", 1)
             content = code_parts[1] if len(code_parts) > 1 else ""
 
-            marshaller_match = re.search(
-                r"MARSHALLER=([\w-]+)", content
-            )
+            marshaller_match = re.search(r"MARSHALLER=([\w-]+)", content)
             mode_match = re.search(r"MODE=([\w-]+)", content)
             marshaller = (
                 marshaller_match.group(1) if marshaller_match else None
@@ -322,7 +322,8 @@ class scorep_jupyterKernel(IPythonKernel):
                     dedent(
                         f"""
                         # This is the automatic conversion of
-                        # Jupyter Notebook -> Python script by scorep_jupyter kernel.
+                        # Jupyter Notebook -> Python script by scorep_jupyter
+                        # kernel.
                         # Code corresponding to the cells not marked for
                         # Score-P instrumentation is framed by
                         # "with scorep.instrumenter.disable()
@@ -568,17 +569,22 @@ class scorep_jupyterKernel(IPythonKernel):
 
         stdout_lock = threading.Lock()
         process_busy_spinner = create_busy_spinner(stdout_lock)
-        process_busy_spinner.start('Process is running...')
+        process_busy_spinner.start("Process is running...")
 
-        multicellmode_timestamps = []
+        # Due to splitting into scorep-kernel and ipython extension,
+        # multicell mode is not supported for coarse-grained measurements
+        # anymore (in the extension) and we do not show the single cells in
+        # the ipython extension visualizations after executing them with scorep
+        # however, since we are using scorep anyway, the ipython extension is
+        # not useful, since we can count hardware counters anyway
+        # multicellmode_timestamps = []
 
         try:
-            multicellmode_timestamps = self.read_scorep_process_pipe(
-                proc, stdout_lock
-            )
-            process_busy_spinner.stop('Done.')
+            # multicellmode_timestamps =
+            self.read_scorep_process_pipe(proc, stdout_lock)
+            process_busy_spinner.stop("Done.")
         except KeyboardInterrupt:
-            process_busy_spinner.stop('Kernel interrupted.')
+            process_busy_spinner.stop("Kernel interrupted.")
 
         # In disk mode, subprocess already terminated
         # after dumping persistence to file
@@ -703,12 +709,14 @@ class scorep_jupyterKernel(IPythonKernel):
                     sel.unregister(key.fileobj)
                     continue
 
-                decoded_line = line.decode(sys.getdefaultencoding(), errors='ignore')
+                decoded_line = line.decode(
+                    sys.getdefaultencoding(), errors="ignore"
+                )
 
                 if key.fileobj is proc.stderr:
                     with stdout_lock:
-                        self.log.warning(f'{decoded_line.strip()}')
-                elif 'MCM_TS' in decoded_line:
+                        self.log.warning(f"{decoded_line.strip()}")
+                elif "MCM_TS" in decoded_line:
                     multicellmode_timestamps.append(decoded_line)
                 else:
                     with stdout_lock:
@@ -866,12 +874,10 @@ class scorep_jupyterKernel(IPythonKernel):
         mode = self.pershelper.mode
         marshaller = self.pershelper.marshaller
 
-        template = KERNEL_ERROR_MESSAGES.get(code, "Unknown error. Mode: {mode}, Marshaller: {marshaller}")
-        message = template.format(
-            mode=mode,
-            marshaller=marshaller,
-            **kwargs
+        template = KERNEL_ERROR_MESSAGES.get(
+            code, "Unknown error. Mode: {mode}, Marshaller: {marshaller}"
         )
+        message = template.format(mode=mode, marshaller=marshaller, **kwargs)
 
         self.log.error(message)
         self.cell_output("KernelError: " + message, "stderr")
