@@ -46,7 +46,7 @@ For binding to Score-P, the kernel uses the [Score-P Python bindings](https://gi
 To install the kernel and required dependencies:
 
 ```
-pip install scorep_jupyter
+pip install scorep-jupyter
 python -m scorep_jupyter.install
 ```
 
@@ -67,7 +67,7 @@ From the Score-P Python bindings:
 > Please make sure that `scorep-config` is in your `PATH` variable.
 > For Ubuntu LTS systems there is a non-official ppa of Score-P available: https://launchpad.net/~andreasgocht/+archive/ubuntu/scorep .
 
-To use the coarse-grained performance measurements, simply install the JUmPER extension via:
+To use the coarse-grained performance measurements, simply install the jumper ipython extension via:
 
 ```
 pip install jumper_extension
@@ -110,17 +110,17 @@ MARSHALLER=[dill,cloudpickle]
 MODE=[disk,memory]
 ```
 
-When using persistence in `disk` mode, user can also define directory to which serializer output will be saved with `SCOREP_KERNEL_PERSISTENCE_DIR` environment variable.
+When using persistence in `disk` mode, user can also define directory to which serializer output will be saved with `SCOREP_JUPYTER_PERSISTENCE_DIR` environment variable.
 ```
-%env SCOREP_KERNEL_PERSISTENCE_DIR=path/to/dir
+%env SCOREP_JUPYTER_PERSISTENCE_DIR=path/to/dir
 ```
-To see the detailed report for marshalling steps - `JUMPER_MARSHALLING_DETAILED_REPORT` environment variable can be set.
+To see the detailed report for marshalling steps - `SCOREP_JUPYTER_MARSHALLING_DETAILED_REPORT` environment variable can be set.
 ```
-%env JUMPER_MARSHALLING_DETAILED_REPORT=1
+%env SCOREP_JUPYTER_MARSHALLING_DETAILED_REPORT=1
 ```
-You can disable visual animations shown during long-running tasks by setting the `JUMPER_DISABLE_PROCESSING_ANIMATIONS` environment variable.
+You can disable visual animations shown during long-running tasks by setting the `SCOREP_JUPYTER_DISABLE_PROCESSING_ANIMATIONS` environment variable.
 ```
-%env JUMPER_DISABLE_PROCESSING_ANIMATIONS=1
+%env SCOREP_JUPYTER_DISABLE_PROCESSING_ANIMATIONS=1
 ```
 
 `%%execute_with_scorep`
@@ -204,7 +204,7 @@ Similar yields for cloudpickle. Use the `%%marshalling_settings` magic command t
 When dealing with big data structures, there might be a big runtime overhead at the beginning and the end of a Score-P cell. This is due to additional data saving and loading processes for persistency in the background. However this does not affect the actual user code and the Score-P measurements.
 
 ## Logging Configuration
-To adjust logging and obtain more detailed output about the behavior of the JUmPER kernel, refer to the `src/logging_config.py` file.
+To adjust logging and obtain more detailed output about the behavior of the scorep_jupyter kernel, refer to the `src/logging_config.py` file.
 
 This file contains configuration options for controlling the verbosity, format, and destination of log messages. You can customize it to suit your debugging needs.
 
