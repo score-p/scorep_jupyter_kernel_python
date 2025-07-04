@@ -67,7 +67,7 @@ From the Score-P Python bindings:
 > Please make sure that `scorep-config` is in your `PATH` variable.
 > For Ubuntu LTS systems there is a non-official ppa of Score-P available: https://launchpad.net/~andreasgocht/+archive/ubuntu/scorep .
 
-To use the coarse-grained performance measurements, simply install the scorep_jupyter extension via:
+To use the coarse-grained performance measurements, simply install the jumper ipython extension via:
 
 ```
 pip install jumper_extension
