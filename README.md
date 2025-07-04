@@ -10,7 +10,7 @@
 
 JUmPER brings performance engineering to Jupyter. It consists of the two repositories:
 
-- JUmPER Ipython extension (https://github.com/ScaDS/scorep_jupyter_ipython_extension)
+- JUmPER Ipython extension (https://github.com/ScaDS/jumper_ipython_extension)
 
 The extension allows you to take coarse-grained performance measurements and create visualizations in your Python kernels.
 
