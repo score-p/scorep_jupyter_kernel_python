@@ -220,7 +220,7 @@ If you publish some work using the kernel, we would appreciate if you cite one o
 
 ```
 Werner, E., Rygin, A., Gocht-Zech, A., Döbel, S., & Lieber, M. (2024, November).
-scorep_jupyter: Performance Data Monitoring, Instrumentation and Visualization for Jupyter Notebooks.
+JUmPER: Performance Data Monitoring, Instrumentation and Visualization for Jupyter Notebooks.
 In SC24-W: Workshops of the International Conference for High Performance Computing, Networking, Storage and Analysis (pp. 2003-2011). IEEE.
 https://www.doi.org/10.1109/SCW63240.2024.00250
 ```
