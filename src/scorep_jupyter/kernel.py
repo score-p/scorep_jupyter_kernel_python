@@ -568,7 +568,7 @@ class scorep_jupyterKernel(IPythonKernel):
                 self.pershelper.postprocess()
                 return reply_status_dump
 
-        multicellmode_timestamps = self.start_reading_scorep_process_streams(proc, is_multicell_final)
+        self.start_reading_scorep_process_streams(proc, is_multicell_final)
 
         # In disk mode, subprocess already terminated
         # after dumping persistence to file
@@ -657,7 +657,7 @@ class scorep_jupyterKernel(IPythonKernel):
         self,
         proc: subprocess.Popen[bytes],
         is_multicell_final: bool,
-    ) -> list:
+    ):
         """
         This function reads stdout and stderr of the subprocess running with
         Score-P instrumentation independently.
@@ -679,8 +679,6 @@ class scorep_jupyterKernel(IPythonKernel):
         process_busy_spinner = create_busy_spinner(stdout_lock, spinner_stop_event, is_multicell_final)
         process_busy_spinner.start("Process is running...")
 
-        multicellmode_timestamps = []
-
         # Empty cell output, required for interactive output
         # e.g. tqdm for-loop progress bar
         self.cell_output("\0")
@@ -695,7 +693,7 @@ class scorep_jupyterKernel(IPythonKernel):
             )
             t_stderr.start()
 
-            multicellmode_timestamps = self.read_scorep_stdout(proc.stdout, stdout_lock, spinner_stop_event)
+            self.read_scorep_stdout(proc.stdout, stdout_lock, spinner_stop_event)
 
             t_stderr.join()
             process_busy_spinner.stop("Done.")
@@ -703,25 +701,47 @@ class scorep_jupyterKernel(IPythonKernel):
         except KeyboardInterrupt:
             process_busy_spinner.stop("Kernel interrupted.")
 
-        if multicellmode_timestamps:
-            self.log.debug(f'{multicellmode_timestamps = }')
-        else:
-            self.log.debug(f'"multicellmode_timestamps" is empty.')
+    def read_scorep_stdout(
+            self,
+            stdout: IO[AnyStr],
+            lock: threading.Lock,
+            spinner_stop_event: threading.Event,
+            read_chunk_size=64,
+    ):
+        line_width = 50
+        clear_line = "\r" + " " * line_width + "\r"
 
+        def process_stdout_line(line: str):
+            if spinner_stop_event.is_set():
+                sys.stdout.write(clear_line)
+                sys.stdout.flush()
+                self.cell_output(line)
 
-        return multicellmode_timestamps
+        self.read_scorep_stream(stdout, lock, process_stdout_line, read_chunk_size)
+
+    def read_scorep_stderr(
+            self,
+            stderr: IO[AnyStr],
+            lock: threading.Lock,
+            spinner_stop_event: threading.Event,
+            read_chunk_size=64,
+    ):
+        def process_stderr_line(line: str):
+            if spinner_stop_event.is_set():
+                self.cell_output(line)
+                self.log.error(line)
+
+        self.read_scorep_stream(stderr, lock, process_stderr_line, read_chunk_size)
 
     def read_scorep_stream(
-        self,
-        stream: IO[AnyStr],
-        lock: threading.Lock,
-        process_line: Callable[[str], None],
-        read_chunk_size: int = 64,
+            self,
+            stream: IO[AnyStr],
+            lock: threading.Lock,
+            process_line: Callable[[str], None],
+            read_chunk_size: int = 64,
     ):
         incomplete_line = ""
         endline_pattern = re.compile(r"(.*?[\r\n]|.+$)")
-
-
 
         while True:
             chunk = stream.read(read_chunk_size)
@@ -738,44 +758,6 @@ class scorep_jupyterKernel(IPythonKernel):
                 for line in lines:
                     with lock:
                         process_line(line)
-
-    def read_scorep_stdout(
-            self,
-            stdout: IO[AnyStr],
-            lock: threading.Lock,
-            spinner_stop_event: threading.Event,
-            read_chunk_size=64,
-    ) -> list:
-        multicellmode_timestamps = []
-        line_width = 50
-        clear_line = "\r" + " " * line_width + "\r"
-
-        def process_stdout_line(line: str):
-            if "MCM_TS" in line:
-                multicellmode_timestamps.append(line)
-            else:
-                if spinner_stop_event.is_set():
-                    sys.stdout.write(clear_line)
-                    sys.stdout.flush()
-                    self.cell_output(line)
-
-        self.read_scorep_stream(stdout, lock, process_stdout_line, read_chunk_size)
-        return multicellmode_timestamps
-
-    def read_scorep_stderr(
-            self,
-            stderr: IO[AnyStr],
-            lock: threading.Lock,
-            spinner_stop_event: threading.Event,
-            read_chunk_size=64,
-    ):
-        def process_stderr_line(line: str):
-            if spinner_stop_event.is_set():
-                self.cell_output(line)
-                self.log.error(line)
-
-        self.read_scorep_stream(stderr, lock, process_stderr_line, read_chunk_size)
-
 
     async def do_execute(
         self,

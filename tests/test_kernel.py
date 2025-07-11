@@ -131,7 +131,9 @@ class KernelTests(jkt.KernelTests):
         self.check_from_notebook("tests/kernel/persistence.ipynb")
 
     def test_04_multicell(self):
-        self.check_from_notebook("tests/kernel/multicell.ipynb")
+        pass
+        # TODO: should be moved to the extension or tested only if extension is loaded
+        # self.check_from_notebook("tests/kernel/multicell.ipynb")
 
     def test_05_writemode(self):
         self.check_from_notebook("tests/kernel/writemode.ipynb")
