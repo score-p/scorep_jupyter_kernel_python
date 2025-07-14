@@ -565,17 +565,16 @@ class scorep_jupyterKernel(IPythonKernel):
 
         self.start_reading_scorep_process_streams(proc, is_multicell_final)
 
-        # In disk mode, subprocess already terminated
-        # after dumping persistence to file
-        if self.pershelper.mode == "disk":
-            if proc.returncode:
-                self.pershelper.postprocess()
-                self.cell_output(
-                    "KernelError: Cell execution failed, cell persistence "
-                    "was not recorded.",
-                    "stderr",
-                )
-                return self.standard_reply()
+        if proc.poll():
+            self.pershelper.postprocess()
+            self.log_error(
+                KernelErrorCode.PERSISTENCE_LOAD_FAIL,
+                direction="Score-P -> Jupyter",
+                optional_hint = self.get_scorep_process_error_hint()
+
+            )
+            return self.standard_reply()
+
         # Ghost cell - load subprocess persistence back to Jupyter notebook
         # Run in a "silent" way to not increase cells counter
         reply_status_update = await super().do_execute(
@@ -587,41 +586,14 @@ class scorep_jupyterKernel(IPythonKernel):
             cell_id=cell_id,
         )
 
-        is_spinner_enabled = str(os.getenv(
-            "SCOREP_JUPYTER_DISABLE_PROCESSING_ANIMATIONS"
-        )).lower() not in ["true", "1", "t"]
-        if is_spinner_enabled:
-            scorep_process_error_hint = (
-                "\nHint: If the animation spinner is active, "
-                "runtime errors in Score-P cells might be hidden.\n"
-                "Try disabling the spinner with "
-                "%env SCOREP_JUPYTER_DISABLE_PROCESSING_ANIMATIONS=1 "
-                "and/or check the log file for details."
-            )
-        else:
-            scorep_process_error_hint = ""
-
         if reply_status_update["status"] != "ok":
             self.log_error(
                 KernelErrorCode.PERSISTENCE_LOAD_FAIL,
                 direction="Score-P -> Jupyter",
-                optional_hint = scorep_process_error_hint
+                optional_hint = self.get_scorep_process_error_hint()
             )
             self.pershelper.postprocess()
             return reply_status_update
-
-        # In memory mode, subprocess terminates once jupyter_update is
-        # executed and pipe is closed
-        if self.pershelper.mode == "memory":
-            if proc.poll():
-                self.pershelper.postprocess()
-                self.log_error(
-                    KernelErrorCode.PERSISTENCE_LOAD_FAIL,
-                    direction="Score-P -> Jupyter",
-                    optional_hint = scorep_process_error_hint
-
-                )
-                return self.standard_reply()
 
         # Determine directory to which trace files were saved by Score-P
         scorep_folder = ""
@@ -777,6 +749,22 @@ class scorep_jupyterKernel(IPythonKernel):
                 for line in lines:
                     with lock:
                         process_line(line)
+
+    @staticmethod
+    def get_scorep_process_error_hint():
+        is_spinner_enabled = str(os.getenv(
+            "SCOREP_JUPYTER_DISABLE_PROCESSING_ANIMATIONS"
+        )).lower() not in ["true", "1", "t"]
+        scorep_process_error_hint = ""
+        if is_spinner_enabled:
+            scorep_process_error_hint = (
+                "\nHint: If the animation spinner is active, "
+                "runtime errors in Score-P cells might be hidden.\n"
+                "Try disabling the spinner with "
+                "%env SCOREP_JUPYTER_DISABLE_PROCESSING_ANIMATIONS=1 "
+                "and/or check the log file for details."
+            )
+        return scorep_process_error_hint
 
     async def do_execute(
         self,
