@@ -238,7 +238,6 @@ class scorep_jupyterKernel(IPythonKernel):
                 f"print('Executing cell {self.multicell_cellcount}')\n"
                 + f"print('''{code}''')\n"
                 + f"print('-' * {max_line_len})\n"
-                + "print('MCM_TS'+str(time.time()))\n"
                 + f"{code}\n"
                 + "print('''\n''')\n"
             )
@@ -667,16 +666,18 @@ class scorep_jupyterKernel(IPythonKernel):
         long-running process animation.
 
         Args:
-            proc (subprocess.Popen[bytes]): The subprocess whose output is being read.
-            is_multicell_final (bool): If multicell mode is finalizing - spinner must be disabled.
+            proc (subprocess.Popen[bytes]): The subprocess whose output is
+            being read.
+            is_multicell_final (bool): If multicell mode is finalizing -
+            spinner must be disabled.
 
-        Returns:
-            list: A list of decoded strings containing "MCM_TS" timestamps.
         """
 
         stdout_lock = threading.Lock()
         spinner_stop_event = threading.Event()
-        process_busy_spinner = create_busy_spinner(stdout_lock, spinner_stop_event, is_multicell_final)
+        process_busy_spinner = create_busy_spinner(stdout_lock,
+                                                   spinner_stop_event,
+                                                   is_multicell_final)
         process_busy_spinner.start("Process is running...")
 
         # Empty cell output, required for interactive output
@@ -693,7 +694,8 @@ class scorep_jupyterKernel(IPythonKernel):
             )
             t_stderr.start()
 
-            self.read_scorep_stdout(proc.stdout, stdout_lock, spinner_stop_event)
+            self.read_scorep_stdout(proc.stdout, stdout_lock,
+                                    spinner_stop_event)
 
             t_stderr.join()
             process_busy_spinner.stop("Done.")
