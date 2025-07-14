@@ -674,28 +674,29 @@ class scorep_jupyterKernel(IPythonKernel):
         process_busy_spinner = create_busy_spinner(
             stdout_lock, spinner_stop_event, is_multicell_final
         )
-        process_busy_spinner.start("Process is running...")
+        t_stderr = threading.Thread(
+            target=self.read_scorep_stderr,
+            args=(proc.stderr, stdout_lock, spinner_stop_event),
+        )
 
         # Empty cell output, required for interactive output
         # e.g. tqdm for-loop progress bar
         self.cell_output("\0")
 
         try:
-            t_stderr = threading.Thread(
-                target=self.read_scorep_stderr,
-                args=(proc.stderr, stdout_lock, spinner_stop_event),
-            )
+            process_busy_spinner.start("Process is running...")
             t_stderr.start()
 
             self.read_scorep_stdout(
                 proc.stdout, stdout_lock, spinner_stop_event
             )
 
-            t_stderr.join()
             process_busy_spinner.stop("Done.")
 
         except KeyboardInterrupt:
             process_busy_spinner.stop("Kernel interrupted.")
+        finally:
+            t_stderr.join()
 
     def read_scorep_stdout(
         self,
@@ -727,7 +728,7 @@ class scorep_jupyterKernel(IPythonKernel):
         def process_stderr_line(line: str):
             if spinner_stop_event.is_set():
                 self.cell_output(line)
-                self.log.error(line)
+                self.log.error(line.strip())
 
         self.read_scorep_stream(
             stderr, lock, process_stderr_line, read_chunk_size
@@ -909,7 +910,7 @@ class scorep_jupyterKernel(IPythonKernel):
         )
         message = template.format(mode=mode, marshaller=marshaller, **kwargs)
 
-        self.log.error(message)
+        self.log.error(message.strip())
         self.cell_output("KernelError: " + message, "stderr")
 
 

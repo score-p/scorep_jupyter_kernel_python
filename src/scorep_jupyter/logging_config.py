@@ -1,9 +1,10 @@
 import logging
 import os
 import sys
+from pathlib import Path
 
 
-LOGGING_DIR = "logging"
+LOGGING_DIR = Path().cwd().parent / "logging"
 os.makedirs(LOGGING_DIR, exist_ok=True)
 
 
@@ -17,7 +18,7 @@ class IgnoreErrorFilter(logging.Filter):
         return record.levelno < logging.ERROR
 
 
-class scorep_jupyterKernelOnlyFilter(logging.Filter):
+class ScorepJupyterKernelOnlyFilter(logging.Filter):
     def filter(self, record):
         return "scorep_jupyter" in record.pathname
 
@@ -55,8 +56,8 @@ LOGGING = {
             "class": "logging.StreamHandler",
             "stream": sys.stdout,
             "filters": [
-                "ignore_error_filter",  # prevents from writing to jupyter
-                # cell output twice
+                # prevents from writing to jupyter cell output twice
+                "ignore_error_filter",
                 "scorep_jupyter_kernel_only_filter",
             ],
         },
@@ -65,7 +66,7 @@ LOGGING = {
         "jupyter_filter": {"()": JupyterLogFilter},
         "ignore_error_filter": {"()": IgnoreErrorFilter},
         "scorep_jupyter_kernel_only_filter": {
-            "()": scorep_jupyterKernelOnlyFilter
+            "()": ScorepJupyterKernelOnlyFilter
         },
     },
     "root": {
