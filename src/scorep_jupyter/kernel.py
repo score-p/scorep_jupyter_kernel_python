@@ -1,32 +1,28 @@
 import datetime
+import importlib
+import logging.config
 import os
 import re
-import selectors
+import shutil
 import subprocess
 import sys
 import threading
 import time
-import shutil
-import logging.config
-
 from enum import Enum
 from textwrap import dedent
-from statistics import mean
 from typing import IO, AnyStr, Callable
 
-import pandas as pd
 from ipykernel.ipkernel import IPythonKernel
-from scorep_jupyter.userpersistence import PersHelper, scorep_script_name
-from scorep_jupyter.userpersistence import magics_cleanup, create_busy_spinner
-import importlib
+
 from scorep_jupyter.kernel_messages import (
     KernelErrorCode,
     KERNEL_ERROR_MESSAGES,
 )
+from scorep_jupyter.userpersistence import PersHelper, scorep_script_name
+from scorep_jupyter.userpersistence import magics_cleanup, create_busy_spinner
+from .logging_config import LOGGING
 
 # import scorep_jupyter.multinode_monitor.slurm_monitor as slurm_monitor
-
-from .logging_config import LOGGING
 
 PYTHON_EXECUTABLE = sys.executable
 userpersistence_token = "scorep_jupyter.userpersistence"
@@ -675,9 +671,9 @@ class scorep_jupyterKernel(IPythonKernel):
 
         stdout_lock = threading.Lock()
         spinner_stop_event = threading.Event()
-        process_busy_spinner = create_busy_spinner(stdout_lock,
-                                                   spinner_stop_event,
-                                                   is_multicell_final)
+        process_busy_spinner = create_busy_spinner(
+            stdout_lock, spinner_stop_event, is_multicell_final
+        )
         process_busy_spinner.start("Process is running...")
 
         # Empty cell output, required for interactive output
@@ -687,15 +683,13 @@ class scorep_jupyterKernel(IPythonKernel):
         try:
             t_stderr = threading.Thread(
                 target=self.read_scorep_stderr,
-                args=(
-                    proc.stderr,
-                    stdout_lock,
-                    spinner_stop_event)
+                args=(proc.stderr, stdout_lock, spinner_stop_event),
             )
             t_stderr.start()
 
-            self.read_scorep_stdout(proc.stdout, stdout_lock,
-                                    spinner_stop_event)
+            self.read_scorep_stdout(
+                proc.stdout, stdout_lock, spinner_stop_event
+            )
 
             t_stderr.join()
             process_busy_spinner.stop("Done.")
@@ -704,11 +698,11 @@ class scorep_jupyterKernel(IPythonKernel):
             process_busy_spinner.stop("Kernel interrupted.")
 
     def read_scorep_stdout(
-            self,
-            stdout: IO[AnyStr],
-            lock: threading.Lock,
-            spinner_stop_event: threading.Event,
-            read_chunk_size=64,
+        self,
+        stdout: IO[AnyStr],
+        lock: threading.Lock,
+        spinner_stop_event: threading.Event,
+        read_chunk_size=64,
     ):
         line_width = 50
         clear_line = "\r" + " " * line_width + "\r"
@@ -719,28 +713,32 @@ class scorep_jupyterKernel(IPythonKernel):
                 sys.stdout.flush()
                 self.cell_output(line)
 
-        self.read_scorep_stream(stdout, lock, process_stdout_line, read_chunk_size)
+        self.read_scorep_stream(
+            stdout, lock, process_stdout_line, read_chunk_size
+        )
 
     def read_scorep_stderr(
-            self,
-            stderr: IO[AnyStr],
-            lock: threading.Lock,
-            spinner_stop_event: threading.Event,
-            read_chunk_size=64,
+        self,
+        stderr: IO[AnyStr],
+        lock: threading.Lock,
+        spinner_stop_event: threading.Event,
+        read_chunk_size=64,
     ):
         def process_stderr_line(line: str):
             if spinner_stop_event.is_set():
                 self.cell_output(line)
                 self.log.error(line)
 
-        self.read_scorep_stream(stderr, lock, process_stderr_line, read_chunk_size)
+        self.read_scorep_stream(
+            stderr, lock, process_stderr_line, read_chunk_size
+        )
 
     def read_scorep_stream(
-            self,
-            stream: IO[AnyStr],
-            lock: threading.Lock,
-            process_line: Callable[[str], None],
-            read_chunk_size: int = 64,
+        self,
+        stream: IO[AnyStr],
+        lock: threading.Lock,
+        process_line: Callable[[str], None],
+        read_chunk_size: int = 64,
     ):
         incomplete_line = ""
         endline_pattern = re.compile(r"(.*?[\r\n]|.+$)")
