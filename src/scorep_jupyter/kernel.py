@@ -586,10 +586,26 @@ class scorep_jupyterKernel(IPythonKernel):
             allow_stdin=allow_stdin,
             cell_id=cell_id,
         )
+
+        is_spinner_enabled = str(os.getenv(
+            "SCOREP_JUPYTER_DISABLE_PROCESSING_ANIMATIONS"
+        )).lower() not in ["true", "1", "t"]
+        if is_spinner_enabled:
+            scorep_process_error_hint = (
+                "\nHint: If the animation spinner is active, "
+                "runtime errors in Score-P cells might be hidden.\n"
+                "Try disabling the spinner with "
+                "%env SCOREP_JUPYTER_DISABLE_PROCESSING_ANIMATIONS=1 "
+                "and/or check the log file for details."
+            )
+        else:
+            scorep_process_error_hint = ""
+
         if reply_status_update["status"] != "ok":
             self.log_error(
                 KernelErrorCode.PERSISTENCE_LOAD_FAIL,
                 direction="Score-P -> Jupyter",
+                optional_hint = scorep_process_error_hint
             )
             self.pershelper.postprocess()
             return reply_status_update
@@ -602,6 +618,8 @@ class scorep_jupyterKernel(IPythonKernel):
                 self.log_error(
                     KernelErrorCode.PERSISTENCE_LOAD_FAIL,
                     direction="Score-P -> Jupyter",
+                    optional_hint = scorep_process_error_hint
+
                 )
                 return self.standard_reply()
 

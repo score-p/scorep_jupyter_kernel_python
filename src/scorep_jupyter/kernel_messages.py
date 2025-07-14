@@ -29,7 +29,7 @@ KERNEL_ERROR_MESSAGES = {
     ),
     KernelErrorCode.PERSISTENCE_LOAD_FAIL: (
         "[mode: {mode}] Failed to load persistence "
-        "({direction}, marshaller: {marshaller})."
+        "({direction}, marshaller: {marshaller}). {optional_hint}"
     ),
     KernelErrorCode.SCOREP_SUBPROCESS_FAIL: (
         "[mode: {mode}] Subprocess terminated unexpectedly. "
