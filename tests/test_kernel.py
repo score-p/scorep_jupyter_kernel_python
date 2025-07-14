@@ -185,6 +185,7 @@ class KernelTestLogError(unittest.TestCase):
             "direction": "dummy_direction",
             "detail": "dummy_detail",
             "step": "dummy_step",
+            "optional_hint": "dummy_optional_hint",
         }
 
         for code, template in KERNEL_ERROR_MESSAGES.items():
