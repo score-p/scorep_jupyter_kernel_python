@@ -17,6 +17,7 @@ from ipykernel.ipkernel import IPythonKernel
 from scorep_jupyter.kernel_messages import (
     KernelErrorCode,
     KERNEL_ERROR_MESSAGES,
+    get_scorep_process_error_hint,
 )
 from scorep_jupyter.userpersistence import PersHelper, scorep_script_name
 from scorep_jupyter.userpersistence import magics_cleanup, create_busy_spinner
@@ -570,7 +571,7 @@ class scorep_jupyterKernel(IPythonKernel):
             self.log_error(
                 KernelErrorCode.PERSISTENCE_LOAD_FAIL,
                 direction="Score-P -> Jupyter",
-                optional_hint = self.get_scorep_process_error_hint()
+                optional_hint = get_scorep_process_error_hint()
 
             )
             return self.standard_reply()
@@ -590,7 +591,7 @@ class scorep_jupyterKernel(IPythonKernel):
             self.log_error(
                 KernelErrorCode.PERSISTENCE_LOAD_FAIL,
                 direction="Score-P -> Jupyter",
-                optional_hint = self.get_scorep_process_error_hint()
+                optional_hint = get_scorep_process_error_hint()
             )
             self.pershelper.postprocess()
             return reply_status_update
@@ -749,22 +750,6 @@ class scorep_jupyterKernel(IPythonKernel):
                 for line in lines:
                     with lock:
                         process_line(line)
-
-    @staticmethod
-    def get_scorep_process_error_hint():
-        is_spinner_enabled = str(os.getenv(
-            "SCOREP_JUPYTER_DISABLE_PROCESSING_ANIMATIONS"
-        )).lower() not in ["true", "1", "t"]
-        scorep_process_error_hint = ""
-        if is_spinner_enabled:
-            scorep_process_error_hint = (
-                "\nHint: If the animation spinner is active, "
-                "runtime errors in Score-P cells might be hidden.\n"
-                "Try disabling the spinner with "
-                "%env SCOREP_JUPYTER_DISABLE_PROCESSING_ANIMATIONS=1 "
-                "and/or check the log file for details."
-            )
-        return scorep_process_error_hint
 
     async def do_execute(
         self,

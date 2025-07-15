@@ -3,4 +3,5 @@ __pycache__/
 .userpersistency
 build
 logging
+kernel_logs
 **/*.egg-info

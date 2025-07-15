@@ -1,4 +1,7 @@
+import os
 from enum import Enum, auto
+
+from .logging_config import LOGGING
 
 
 class KernelErrorCode(Enum):
@@ -36,3 +39,20 @@ KERNEL_ERROR_MESSAGES = {
         "Persistence not recorded (marshaller: {marshaller})."
     ),
 }
+
+
+def get_scorep_process_error_hint():
+    is_spinner_enabled = str(os.getenv(
+        "SCOREP_JUPYTER_DISABLE_PROCESSING_ANIMATIONS"
+    )).lower() not in ["true", "1", "t"]
+    scorep_process_error_hint = ""
+    if is_spinner_enabled:
+        scorep_process_error_hint = (
+            "\nHint: If the animation spinner is active, "
+            "runtime errors in Score-P cells might be hidden.\n"
+            "Try disabling the spinner with "
+            "%env SCOREP_JUPYTER_DISABLE_PROCESSING_ANIMATIONS=1 "
+            f"and/or check the log: "
+            f"{LOGGING['handlers']['error_file']['filename']} for details."
+        )
+    return scorep_process_error_hint
