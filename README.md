@@ -207,8 +207,20 @@ When dealing with big data structures, there might be a big runtime overhead at 
 
 ## Logging Configuration
 To adjust logging and obtain more detailed output about the behavior of the scorep_jupyter kernel, refer to the `src/logging_config.py` file.
-
 This file contains configuration options for controlling the verbosity, format, and destination of log messages. You can customize it to suit your debugging needs.
+
+Log files are stored in the following directory:
+```
+scorep_jupyter_kernel_python/
+├── logs_scorep_jupyter/
+│   ├── debug.log
+│   ├── info.log
+└── └── error.log
+```
+In some cases, you may want to suppress tqdm messages that are saved to error.log (since tqdm outputs to stderr). This can be done using the following environment variable:
+```
+%env TQDM_DISABLE=1
+```
 
 # Future Work
 

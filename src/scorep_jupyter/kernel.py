@@ -717,9 +717,10 @@ class scorep_jupyterKernel(IPythonKernel):
         read_chunk_size=64,
     ):
         def process_stderr_line(line: str):
+            self.log.error(line.strip())
             if spinner_stop_event.is_set():
                 self.cell_output(line)
-                self.log.error(line.strip())
+
 
         self.read_scorep_stream(
             stderr, lock, process_stderr_line, read_chunk_size
