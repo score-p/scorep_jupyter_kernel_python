@@ -48,11 +48,7 @@ def get_scorep_process_error_hint():
     scorep_process_error_hint = ""
     if is_spinner_enabled:
         scorep_process_error_hint = (
-            "\nHint: If the animation spinner is active, "
-            "runtime errors in Score-P cells might be hidden.\n"
-            "Try disabling the spinner with "
-            "%env SCOREP_JUPYTER_DISABLE_PROCESSING_ANIMATIONS=1 "
-            f"and/or check the log: "
-            f"{LOGGING['handlers']['error_file']['filename']} for details."
+            "\nHint: full error info saved to log file: "
+            f"{LOGGING['handlers']['error_file']['filename']}"
         )
     return scorep_process_error_hint

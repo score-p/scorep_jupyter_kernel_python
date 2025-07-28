@@ -10,7 +10,7 @@ import threading
 import time
 from enum import Enum
 from textwrap import dedent
-from typing import IO, AnyStr, Callable
+from typing import IO, AnyStr, Callable, List, TextIO
 
 from ipykernel.ipkernel import IPythonKernel
 
@@ -572,7 +572,6 @@ class scorep_jupyterKernel(IPythonKernel):
                 KernelErrorCode.PERSISTENCE_LOAD_FAIL,
                 direction="Score-P -> Jupyter",
                 optional_hint = get_scorep_process_error_hint()
-
             )
             return self.standard_reply()
 
@@ -665,29 +664,37 @@ class scorep_jupyterKernel(IPythonKernel):
         process_busy_spinner = create_busy_spinner(
             stdout_lock, spinner_stop_event, is_multicell_final
         )
+
+        captured_stdout: List[str] = []
+        captured_stderr: List[str] = []  # Output parameter (return not possible from thread)
         t_stderr = threading.Thread(
             target=self.read_scorep_stderr,
-            args=(proc.stderr, stdout_lock, spinner_stop_event),
+            args=(proc.stderr, stdout_lock, spinner_stop_event, captured_stderr),
         )
 
         # Empty cell output, required for interactive output
         # e.g. tqdm for-loop progress bar
         self.cell_output("\0")
 
+        spinner_message = "Done."
+
         try:
             process_busy_spinner.start("Process is running...")
             t_stderr.start()
 
-            self.read_scorep_stdout(
+            captured_stdout = self.read_scorep_stdout(
                 proc.stdout, stdout_lock, spinner_stop_event
             )
 
-            process_busy_spinner.stop("Done.")
-
         except KeyboardInterrupt:
-            process_busy_spinner.stop("Kernel interrupted.")
+            spinner_message = "Kernel interrupted."
         finally:
             t_stderr.join()
+            process_busy_spinner.stop(spinner_message)
+
+        # Handle recorded output (in case if it is suppressed by spinner animation)
+        self.handle_captured_output(captured_stdout, stream="stdout")
+        self.handle_captured_output(captured_stderr, stream="stderr")
 
     def read_scorep_stdout(
         self,
@@ -695,32 +702,40 @@ class scorep_jupyterKernel(IPythonKernel):
         lock: threading.Lock,
         spinner_stop_event: threading.Event,
         read_chunk_size=64,
-    ):
+    ) -> List[str]:
         line_width = 50
         clear_line = "\r" + " " * line_width + "\r"
+
+        captured_stdout: List[str] = []
 
         def process_stdout_line(line: str):
             if spinner_stop_event.is_set():
                 sys.stdout.write(clear_line)
                 sys.stdout.flush()
                 self.cell_output(line)
+            else:
+                captured_stdout.append(line)
 
         self.read_scorep_stream(
             stdout, lock, process_stdout_line, read_chunk_size
         )
+        return captured_stdout
 
     def read_scorep_stderr(
         self,
         stderr: IO[AnyStr],
         lock: threading.Lock,
         spinner_stop_event: threading.Event,
+        captured_stderr: List[str],
         read_chunk_size=64,
     ):
-        def process_stderr_line(line: str):
-            self.log.error(line.strip())
-            if spinner_stop_event.is_set():
-                self.cell_output(line)
 
+        def process_stderr_line(line: str):
+            if spinner_stop_event.is_set():
+                self.log.error(line.strip())
+                self.cell_output(line, 'stderr')
+            else:
+                captured_stderr.append(line)
 
         self.read_scorep_stream(
             stderr, lock, process_stderr_line, read_chunk_size
@@ -751,6 +766,17 @@ class scorep_jupyterKernel(IPythonKernel):
                 for line in lines:
                     with lock:
                         process_line(line)
+
+    def handle_captured_output(self, output: List[str], stream: str):
+        if output:
+            text_output  = "".join(output)
+            if stream == "stdout":
+                self.cell_output(text_output, stream=stream)
+            elif stream == "stderr":
+                self.cell_output(text_output, stream=stream)
+                self.log.error(text_output)
+            else:
+                self.log.error(f"Undefined stream type: {stream}")
 
     async def do_execute(
         self,

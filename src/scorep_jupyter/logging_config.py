@@ -4,7 +4,9 @@ import sys
 from pathlib import Path
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+print(f'{Path(__file__).as_uri()=}')
+print(f'{PROJECT_ROOT=}')
 LOGGING_DIR = PROJECT_ROOT / "logs_scorep_jupyter"
 os.makedirs(LOGGING_DIR, exist_ok=True)
 
