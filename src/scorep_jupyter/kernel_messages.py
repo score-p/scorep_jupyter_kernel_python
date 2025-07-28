@@ -42,13 +42,8 @@ KERNEL_ERROR_MESSAGES = {
 
 
 def get_scorep_process_error_hint():
-    is_spinner_enabled = str(os.getenv(
-        "SCOREP_JUPYTER_DISABLE_PROCESSING_ANIMATIONS"
-    )).lower() not in ["true", "1", "t"]
-    scorep_process_error_hint = ""
-    if is_spinner_enabled:
-        scorep_process_error_hint = (
-            "\nHint: full error info saved to log file: "
-            f"{LOGGING['handlers']['error_file']['filename']}"
-        )
+    scorep_process_error_hint = (
+        "\nHint: full error info saved to log file: "
+        f"{LOGGING['handlers']['error_file']['filename']}"
+    )
     return scorep_process_error_hint
