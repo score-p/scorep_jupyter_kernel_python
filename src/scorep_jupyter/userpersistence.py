@@ -501,7 +501,6 @@ class BusySpinner(BaseSpinner):
 
 
 def create_busy_spinner(lock=None, stop_event=None, is_multicell_final=False):
-
     is_enabled = str(
         os.getenv("SCOREP_JUPYTER_DISABLE_PROCESSING_ANIMATIONS")
     ).lower() not in ["true", "1", "t"]
