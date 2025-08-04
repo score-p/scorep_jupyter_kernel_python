@@ -10,7 +10,7 @@ import threading
 import time
 from enum import Enum
 from textwrap import dedent
-from typing import IO, AnyStr, Callable, List, TextIO
+from typing import IO, AnyStr, Callable, List
 
 from ipykernel.ipkernel import IPythonKernel
 
@@ -571,7 +571,7 @@ class scorep_jupyterKernel(IPythonKernel):
             self.log_error(
                 KernelErrorCode.PERSISTENCE_LOAD_FAIL,
                 direction="Score-P -> Jupyter",
-                optional_hint = get_scorep_process_error_hint()
+                optional_hint=get_scorep_process_error_hint(),
             )
             return self.standard_reply()
 
@@ -590,7 +590,7 @@ class scorep_jupyterKernel(IPythonKernel):
             self.log_error(
                 KernelErrorCode.PERSISTENCE_LOAD_FAIL,
                 direction="Score-P -> Jupyter",
-                optional_hint = get_scorep_process_error_hint()
+                optional_hint=get_scorep_process_error_hint(),
             )
             self.pershelper.postprocess()
             return reply_status_update
@@ -666,10 +666,17 @@ class scorep_jupyterKernel(IPythonKernel):
         )
 
         captured_stdout: List[str] = []
-        captured_stderr: List[str] = []  # Output parameter (return not possible from thread)
+        captured_stderr: List[str] = (
+            []
+        )  # Output parameter (return not possible from thread)
         t_stderr = threading.Thread(
             target=self.read_scorep_stderr,
-            args=(proc.stderr, stdout_lock, spinner_stop_event, captured_stderr),
+            args=(
+                proc.stderr,
+                stdout_lock,
+                spinner_stop_event,
+                captured_stderr,
+            ),
         )
 
         # Empty cell output, required for interactive output
@@ -692,7 +699,8 @@ class scorep_jupyterKernel(IPythonKernel):
             t_stderr.join()
             process_busy_spinner.stop(spinner_message)
 
-        # Handle recorded output (in case if it is suppressed by spinner animation)
+        # Handle recorded output
+        # (in case if it is suppressed by spinner animation)
         self.handle_captured_output(captured_stdout, stream="stdout")
         self.handle_captured_output(captured_stderr, stream="stderr")
 
@@ -733,7 +741,7 @@ class scorep_jupyterKernel(IPythonKernel):
         def process_stderr_line(line: str):
             if spinner_stop_event.is_set():
                 self.log.error(line.strip())
-                self.cell_output(line, 'stderr')
+                self.cell_output(line, "stderr")
             else:
                 captured_stderr.append(line)
 
@@ -769,7 +777,7 @@ class scorep_jupyterKernel(IPythonKernel):
 
     def handle_captured_output(self, output: List[str], stream: str):
         if output:
-            text_output  = "".join(output)
+            text_output = "".join(output)
             if stream == "stdout":
                 self.cell_output(text_output, stream=stream)
             elif stream == "stderr":
