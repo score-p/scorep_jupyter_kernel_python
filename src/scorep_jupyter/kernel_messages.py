@@ -1,4 +1,7 @@
+import os
 from enum import Enum, auto
+
+from .logging_config import LOGGING
 
 
 class KernelErrorCode(Enum):
@@ -29,10 +32,18 @@ KERNEL_ERROR_MESSAGES = {
     ),
     KernelErrorCode.PERSISTENCE_LOAD_FAIL: (
         "[mode: {mode}] Failed to load persistence "
-        "({direction}, marshaller: {marshaller})."
+        "({direction}, marshaller: {marshaller}). {optional_hint}"
     ),
     KernelErrorCode.SCOREP_SUBPROCESS_FAIL: (
         "[mode: {mode}] Subprocess terminated unexpectedly. "
         "Persistence not recorded (marshaller: {marshaller})."
     ),
 }
+
+
+def get_scorep_process_error_hint():
+    scorep_process_error_hint = (
+        "\nHint: full error info saved to log file: "
+        f"{LOGGING['handlers']['error_file']['filename']}"
+    )
+    return scorep_process_error_hint

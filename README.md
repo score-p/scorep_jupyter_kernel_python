@@ -119,6 +119,8 @@ To see the detailed report for marshalling steps - `SCOREP_JUPYTER_MARSHALLING_D
 %env SCOREP_JUPYTER_MARSHALLING_DETAILED_REPORT=1
 ```
 You can disable visual animations shown during long-running tasks by setting the `SCOREP_JUPYTER_DISABLE_PROCESSING_ANIMATIONS` environment variable.
+This can be useful for debugging, as it ensures that any error messages from your code in cells are shown without being overwritten.
+It is also helpful when running code that produces its own progress bars (e.g., using `tqdm`), to prevent output from being obscured.
 ```
 %env SCOREP_JUPYTER_DISABLE_PROCESSING_ANIMATIONS=1
 ```
@@ -205,8 +207,20 @@ When dealing with big data structures, there might be a big runtime overhead at 
 
 ## Logging Configuration
 To adjust logging and obtain more detailed output about the behavior of the scorep_jupyter kernel, refer to the `src/logging_config.py` file.
-
 This file contains configuration options for controlling the verbosity, format, and destination of log messages. You can customize it to suit your debugging needs.
+
+Log files are stored in the following directory:
+```
+scorep_jupyter_kernel_python/
+├── logs_scorep_jupyter/
+│   ├── debug.log
+│   ├── info.log
+└── └── error.log
+```
+In some cases, you may want to suppress tqdm messages that are saved to error.log (since tqdm outputs to stderr). This can be done using the following environment variable:
+```
+%env TQDM_DISABLE=1
+```
 
 # Future Work
 

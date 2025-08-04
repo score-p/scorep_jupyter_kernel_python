@@ -2,5 +2,5 @@ __pycache__/
 .variables
 .userpersistency
 build
-logging
+logs_scorep_jupyter/
 **/*.egg-info
