@@ -12,6 +12,8 @@ class KernelErrorCode(Enum):
     SCOREP_SUBPROCESS_FAIL = auto()
     SCOREP_NOT_AVAILABLE = auto()
     SCOREP_PYTHON_NOT_AVAILABLE = auto()
+    VAMPIR_NOT_FOUND = auto()
+    VAMPIR_LAUNCH_FAILED = auto()
 
 
 KERNEL_ERROR_MESSAGES = {
@@ -37,6 +39,17 @@ KERNEL_ERROR_MESSAGES = {
     KernelErrorCode.SCOREP_SUBPROCESS_FAIL: (
         "[mode: {mode}] Subprocess terminated unexpectedly. "
         "Persistence not recorded (marshaller: {marshaller})."
+    ),
+    KernelErrorCode.INSTRUMENTATION_PATH_UNKNOWN: (
+        "Instrumentation output directory not found or missing traces.otf2 "
+        "(looked in: {scorep_folder})"
+    ),
+    KernelErrorCode.VAMPIR_NOT_FOUND: (
+        "Vampir binary not found in PATH. Cannot launch visualization."
+    ),
+
+    KernelErrorCode.VAMPIR_LAUNCH_FAILED: (
+        "Failed to launch Vampir: {exception}"
     ),
 }
 

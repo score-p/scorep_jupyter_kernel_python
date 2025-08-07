@@ -100,7 +100,7 @@ class scorep_jupyterKernel(IPythonKernel):
             importlib.import_module("scorep")
         except ModuleNotFoundError:
             self.scorep_python_available_ = False
-
+        self.launch_vampir_requested = False
         logging.config.dictConfig(LOGGING)
         self.log = logging.getLogger("kernel")
 
@@ -634,8 +634,12 @@ class scorep_jupyterKernel(IPythonKernel):
                     f"Instrumentation results can be found in "
                     f"{os.getcwd()}/{scorep_folder}"
                 )
-
         self.pershelper.postprocess()
+
+        # Optional Vampir launch
+        if self.launch_vampir_requested and scorep_folder:
+            self.try_launch_vampir(scorep_folder)
+
         return self.standard_reply()
 
     def start_reading_scorep_process_streams(
@@ -786,6 +790,38 @@ class scorep_jupyterKernel(IPythonKernel):
             else:
                 self.log.error(f"Undefined stream type: {stream}")
 
+    def try_launch_vampir(self, scorep_folder: str):
+        """
+        Attempts to find traces.otf2 and launch Vampir on it.
+        Errors are logged using log_error().
+        """
+        trace_path = None
+        for root, dirs, files in os.walk(scorep_folder):
+            if "traces.otf2" in files:
+                trace_path = os.path.join(root, "traces.otf2")
+                break
+
+        if not trace_path or not os.path.isfile(trace_path):
+            self.log_error(
+                KernelErrorCode.INSTRUMENTATION_PATH_UNKNOWN,
+                scorep_folder=scorep_folder,
+            )
+            return
+
+        if shutil.which("vampir") is None:
+            self.log_error(KernelErrorCode.VAMPIR_NOT_FOUND)
+            return
+
+        try:
+            subprocess.run(["pkill", "-f", "vampir"], check=False)
+            self.cell_output(f"\nLaunching Vampir: {trace_path}")
+            subprocess.Popen(["vampir", trace_path])
+        except Exception as e:
+            self.log_error(
+                KernelErrorCode.VAMPIR_LAUNCH_FAILED,
+                exception=str(e),
+            )
+
     async def do_execute(
         self,
         code,
@@ -861,6 +897,11 @@ class scorep_jupyterKernel(IPythonKernel):
             return self.scorep_not_available() or self.abort_writefile()
         elif code.startswith("%%end_writefile"):
             return self.scorep_not_available() or self.end_writefile()
+
+        elif code.startswith("%%launch_vampir_on_scorep_instrumented"):
+            self.launch_vampir_requested = True
+            self.cell_output("Vampir will be launched after next instrumented execution.")
+            return self.standard_reply()
         elif code.startswith("%%execute_with_scorep"):
             scorep_missing = self.scorep_not_available()
             if scorep_missing is None:
