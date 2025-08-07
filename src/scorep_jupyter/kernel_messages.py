@@ -45,8 +45,8 @@ KERNEL_ERROR_MESSAGES = {
         "(looked in: {scorep_folder})"
     ),
     KernelErrorCode.VAMPIR_NOT_FOUND: (
-        "Vampir binary not found in PATH. Add it to PATH to enable automatic launch"
-        " (e.g. via `%env PATH=/path/to/vampir/bin:$PATH`)."
+        'Vampir binary not found in PATH. Add it to PATH to enable automatic launch'
+        ' (e.g. in ~/.bashrc: export PATH="/path/to/vampir/bin:$PATH"' 
     ),
 
     KernelErrorCode.VAMPIR_LAUNCH_FAILED: (
