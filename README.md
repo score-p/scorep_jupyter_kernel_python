@@ -29,13 +29,14 @@ For binding to Score-P, the kernel uses the [Score-P Python bindings](https://gi
 - [Usage](#usage)
   - [Score-P Instrumentation](#score-p-instrumentation)
     - [Configuring Score-P in Jupyter](#configuring-score-p-in-jupyter)
+    - [Vampir Launch Control](#vampir-launch-control)
   - [Multi-Cell Mode](#multi-cell-mode)
   - [Write Mode](#write-mode)
+  - [Logging Configuration](#logging-configuration)
 - [Presentation of Performance Data](#presentation-of-performance-data)
 - [Limitations](#limitations)
   - [Serialization Type Support](#serialization-type-support)
   - [Overhead](#overhead)
-  - [Logging Configuration](#logging-configuration)
 - [Future Work](#future-work)
 - [Citing](#citing)
 - [Contact](#contact)
@@ -131,7 +132,22 @@ Executes a cell with Score-P, i.e. it calls `python -m scorep <cell code>`
 
 ![](doc/instrumentation.gif)
 
+### Vampir Launch Control
 
+To automatically launch **Vampir** after a cell with Score-P instrumentation, use:
+
+```
+%%enable_vampir_launch_on_scorep_instrumented
+```
+
+This will cause the kernel to open `traces.otf2` in Vampir (if found) after the next instrumented cell.  
+To disable this behavior again:
+
+```
+%%disable_vampir_launch
+```
+
+By default, Vampir launching is disabled. You must enable it explicitly when needed.
 
 ## Multi-Cell Mode
 You can also treat multiple cells as one single cell by using the multi cell mode. Therefore you can mark the cells in the order you wish to execute them.
@@ -186,6 +202,23 @@ Stops the marking process and writes the marked cells in a Python script. Additi
 
 ![](doc/writemode.gif)
 
+## Logging Configuration
+To adjust logging and obtain more detailed output about the behavior of the scorep_jupyter kernel, refer to the `src/logging_config.py` file.
+This file contains configuration options for controlling the verbosity, format, and destination of log messages. You can customize it to suit your debugging needs.
+
+Log files are stored in the following directory:
+```
+scorep_jupyter_kernel_python/
+├── logs_scorep_jupyter/
+│   ├── debug.log
+│   ├── info.log
+└── └── error.log
+```
+In some cases, you may want to suppress tqdm messages that are saved to error.log (since tqdm outputs to stderr). This can be done using the following environment variable:
+```
+%env TQDM_DISABLE=1
+```
+
 
 # Presentation of Performance Data
 
@@ -204,23 +237,6 @@ Similar yields for cloudpickle. Use the `%%marshalling_settings` magic command t
 ## Overhead
 
 When dealing with big data structures, there might be a big runtime overhead at the beginning and the end of a Score-P cell. This is due to additional data saving and loading processes for persistency in the background. However this does not affect the actual user code and the Score-P measurements.
-
-## Logging Configuration
-To adjust logging and obtain more detailed output about the behavior of the scorep_jupyter kernel, refer to the `src/logging_config.py` file.
-This file contains configuration options for controlling the verbosity, format, and destination of log messages. You can customize it to suit your debugging needs.
-
-Log files are stored in the following directory:
-```
-scorep_jupyter_kernel_python/
-├── logs_scorep_jupyter/
-│   ├── debug.log
-│   ├── info.log
-└── └── error.log
-```
-In some cases, you may want to suppress tqdm messages that are saved to error.log (since tqdm outputs to stderr). This can be done using the following environment variable:
-```
-%env TQDM_DISABLE=1
-```
 
 # Future Work
 
