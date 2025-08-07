@@ -900,7 +900,10 @@ class scorep_jupyterKernel(IPythonKernel):
 
         elif code.startswith("%%enable_vampir_launch_on_scorep_instrumented"):
             self.launch_vampir_requested = True
-            self.cell_output("Vampir will be launched after next instrumented execution.")
+            if shutil.which("vampir") is None:
+                self.log_error(KernelErrorCode.VAMPIR_NOT_FOUND)
+            else:
+                self.cell_output("Vampir will be launched after next instrumented execution.")
             return self.standard_reply()
         elif code.startswith("%%disable_vampir_launch"):
             self.launch_vampir_requested = False

@@ -45,7 +45,8 @@ KERNEL_ERROR_MESSAGES = {
         "(looked in: {scorep_folder})"
     ),
     KernelErrorCode.VAMPIR_NOT_FOUND: (
-        "Vampir binary not found in PATH. Cannot launch visualization."
+        "Vampir binary not found in PATH. Add it to PATH to enable automatic launch"
+        " (e.g. via `%env PATH=/path/to/vampir/bin:$PATH`)."
     ),
 
     KernelErrorCode.VAMPIR_LAUNCH_FAILED: (
