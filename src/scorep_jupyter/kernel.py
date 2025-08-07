@@ -898,9 +898,13 @@ class scorep_jupyterKernel(IPythonKernel):
         elif code.startswith("%%end_writefile"):
             return self.scorep_not_available() or self.end_writefile()
 
-        elif code.startswith("%%launch_vampir_on_scorep_instrumented"):
+        elif code.startswith("%%enable_vampir_launch_on_scorep_instrumented"):
             self.launch_vampir_requested = True
             self.cell_output("Vampir will be launched after next instrumented execution.")
+            return self.standard_reply()
+        elif code.startswith("%%disable_vampir_launch"):
+            self.launch_vampir_requested = False
+            self.cell_output("Vampir launching disabled.")
             return self.standard_reply()
         elif code.startswith("%%execute_with_scorep"):
             scorep_missing = self.scorep_not_available()
