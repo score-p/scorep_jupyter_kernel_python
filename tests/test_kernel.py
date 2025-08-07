@@ -186,6 +186,8 @@ class KernelTestLogError(unittest.TestCase):
             "detail": "dummy_detail",
             "step": "dummy_step",
             "optional_hint": "dummy_optional_hint",
+            "scorep_folder": "/fake/path/to/scorep-dir",
+            "exception": "dummy_exception",
         }
 
         for code, template in KERNEL_ERROR_MESSAGES.items():

@@ -4,3 +4,15 @@ __pycache__/
 build
 logs_scorep_jupyter/
 **/*.egg-info
+
+# PyCharm
+.idea/
+.ipynb_checkpoints/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Ignore all result directories inside examples/ at any depth
+examples/**/scorep-*/
+
+
