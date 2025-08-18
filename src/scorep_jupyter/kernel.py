@@ -903,7 +903,8 @@ class scorep_jupyterKernel(IPythonKernel):
             if shutil.which("vampir") is None:
                 self.log_error(KernelErrorCode.VAMPIR_NOT_FOUND)
             else:
-                self.cell_output("Vampir will be launched after next instrumented execution.")
+                self.cell_output("Vampir will be launched after next "
+                                 "instrumented execution.")
             return self.standard_reply()
         elif code.startswith("%%disable_vampir_launch"):
             self.launch_vampir_requested = False
