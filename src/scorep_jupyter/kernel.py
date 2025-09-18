@@ -927,7 +927,7 @@ class scorep_jupyterKernel(IPythonKernel):
         elif code.startswith("%%end_writefile"):
             return self.scorep_not_available() or self.end_writefile()
 
-        elif code.startswith("%%enable_scorep_trace_viewer"):
+        elif code.startswith("%enable_scorep_trace_viewer"):
             # Enable Score-P trace viewer, with optional argument: 'vampir'
             self.visualize_traces_requested = True
             first_line = code.split("\n", 1)[0].strip()
@@ -953,7 +953,7 @@ class scorep_jupyterKernel(IPythonKernel):
                 f"Score-P trace viewer set to: {self.trace_viewer}"
             )
             return self.standard_reply()
-        elif code.startswith("%%disable_scorep_trace_viewer"):
+        elif code.startswith("%disable_scorep_trace_viewer"):
             self.visualize_traces_requested = False
             self.cell_output("Score-P trace viewer disabled.")
             return self.standard_reply()
