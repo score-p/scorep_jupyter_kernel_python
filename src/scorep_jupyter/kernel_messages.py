@@ -13,6 +13,7 @@ class KernelErrorCode(Enum):
     SCOREP_PYTHON_NOT_AVAILABLE = auto()
     VAMPIR_NOT_FOUND = auto()
     VAMPIR_LAUNCH_FAILED = auto()
+    UNSUPPORTED_VIEWER = auto()
 
 
 KERNEL_ERROR_MESSAGES = {
@@ -42,6 +43,9 @@ KERNEL_ERROR_MESSAGES = {
     KernelErrorCode.INSTRUMENTATION_PATH_UNKNOWN: (
         "Instrumentation output directory not found or missing traces.otf2 "
         "(looked in: {scorep_folder})"
+    ),
+    KernelErrorCode.UNSUPPORTED_VIEWER: (
+        "Unsupported viewer '{viewer}'. Supported viewers: {supported_viewers}."
     ),
     KernelErrorCode.VAMPIR_NOT_FOUND: (
         'Vampir binary not found in PATH. Add it to PATH to enable '

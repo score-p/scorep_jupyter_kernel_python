@@ -94,15 +94,25 @@ class scorep_jupyterKernel(IPythonKernel):
         self.writefile_scorep_binding_args = []
         self.writefile_multicell = False
 
+        # Score-P
         self.scorep_available_ = shutil.which("scorep")
         self.scorep_python_available_ = True
         try:
             importlib.import_module("scorep")
         except ModuleNotFoundError:
             self.scorep_python_available_ = False
-        self.launch_vampir_requested = False
-        logging.config.dictConfig(LOGGING)
+
+        # Traces
+        self.visualize_traces_requested = False
+        self.trace_viewer = "default"
+        self.trace_viewers = {
+            "default",
+            "vampir"
+        }
+
+        # Logging
         self.log = logging.getLogger("kernel")
+        logging.config.dictConfig(LOGGING)
 
     def cell_output(self, string, stream="stdout"):
         """
@@ -637,8 +647,8 @@ class scorep_jupyterKernel(IPythonKernel):
         self.pershelper.postprocess()
 
         # Optional Vampir launch
-        if self.launch_vampir_requested and scorep_folder:
-            self.try_launch_vampir(scorep_folder)
+        if self.visualize_traces_requested and scorep_folder:
+            self._view_scorep_traces(scorep_folder, self.trace_viewer)
 
         return self.standard_reply()
 
@@ -790,7 +800,7 @@ class scorep_jupyterKernel(IPythonKernel):
             else:
                 self.log.error(f"Undefined stream type: {stream}")
 
-    def try_launch_vampir(self, scorep_folder: str):
+    def _view_scorep_traces(self, scorep_folder: str, viewer = "default"):
         """
         Attempts to find traces.otf2 and launch Vampir on it.
         Errors are logged using log_error().
@@ -808,6 +818,22 @@ class scorep_jupyterKernel(IPythonKernel):
             )
             return
 
+        if viewer not in self.trace_viewers:
+            self.log_error(
+                KernelErrorCode.UNSUPPORTED_VIEWER,
+                scorep_folder=scorep_folder,
+                viewer=viewer,
+                supported_viewers="default, vampir",
+            )
+            return
+
+        if viewer == "default":
+            self._default_view_traces(trace_path)
+        elif viewer == "vampir":
+            self._try_launch_vampir(trace_path)
+
+
+    def _try_launch_vampir(self, trace_path: str):
         if shutil.which("vampir") is None:
             self.log_error(KernelErrorCode.VAMPIR_NOT_FOUND)
             return
@@ -821,6 +847,9 @@ class scorep_jupyterKernel(IPythonKernel):
                 KernelErrorCode.VAMPIR_LAUNCH_FAILED,
                 exception=str(e),
             )
+
+    def _default_view_traces(self, trace_path: str):
+        print('Default viewer launched')
 
     async def do_execute(
         self,
@@ -898,17 +927,35 @@ class scorep_jupyterKernel(IPythonKernel):
         elif code.startswith("%%end_writefile"):
             return self.scorep_not_available() or self.end_writefile()
 
-        elif code.startswith("%%enable_vampir_launch_on_scorep_instrumented"):
-            self.launch_vampir_requested = True
-            if shutil.which("vampir") is None:
-                self.log_error(KernelErrorCode.VAMPIR_NOT_FOUND)
+        elif code.startswith("%%enable_scorep_trace_viewer"):
+            # Enable Score-P trace viewer, with optional argument: 'vampir'
+            self.visualize_traces_requested = True
+            first_line = code.split("\n", 1)[0].strip()
+            parts = first_line.split()
+            requested_viewer = parts[1].lower() if len(parts) > 1 else "default"
+
+            if requested_viewer not in self.trace_viewers:
+                self.log_error(
+                    KernelErrorCode.UNSUPPORTED_VIEWER,
+                    viewer=requested_viewer,
+                    supported_viewers=", ".join(self.trace_viewers),
+                )
+                self.trace_viewer = "default"
             else:
-                self.cell_output("Vampir will be launched after next "
-                                 "instrumented execution.")
+                if requested_viewer == "vampir" and shutil.which("vampir") is None:
+                    self.log_error(KernelErrorCode.VAMPIR_NOT_FOUND)
+                    # Fallback to default viewer
+                    self.trace_viewer = "default"
+                else:
+                    self.trace_viewer = requested_viewer
+
+            self.cell_output(
+                f"Score-P trace viewer set to: {self.trace_viewer}"
+            )
             return self.standard_reply()
-        elif code.startswith("%%disable_vampir_launch"):
-            self.launch_vampir_requested = False
-            self.cell_output("Vampir launching disabled.")
+        elif code.startswith("%%disable_scorep_trace_viewer"):
+            self.visualize_traces_requested = False
+            self.cell_output("Score-P trace viewer disabled.")
             return self.standard_reply()
         elif code.startswith("%%execute_with_scorep"):
             scorep_missing = self.scorep_not_available()

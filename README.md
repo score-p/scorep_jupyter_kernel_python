@@ -137,14 +137,14 @@ Executes a cell with Score-P, i.e. it calls `python -m scorep <cell code>`
 To automatically launch **Vampir** after a cell with Score-P instrumentation, use:
 
 ```
-%%enable_vampir_launch_on_scorep_instrumented
+%%enable_scorep_trace_viewer
 ```
 
 This will cause the kernel to open `traces.otf2` in Vampir (if found) after the next instrumented cell.  
 To disable this behavior again:
 
 ```
-%%disable_vampir_launch
+%%disable_scorep_trace_viewer
 ```
 
 By default, Vampir launching is disabled. You must enable it explicitly when needed.
